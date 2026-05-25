@@ -1,0 +1,375 @@
+// ─── Workforce — Prisma Schema v2.0 ───────────────────────────────────────────
+// Source of truth: specs/003-mvp-data-model/data-model.md (APROBADO v2.0)
+// Target package:  packages/database (name: @workforce/database)
+//
+// v2.0 amendments applied:
+//   spec 005/009 — RolUsuario enum (4 roles), usuario_roles table, debe_cambiar_password
+//   spec 007     — EstadoLiquidacion += PAGADO; pagado_por, pagada_en on liquidaciones
+//   spec 011     — evento_referencia_id, EstadoResolucion += POTENCIAL_DUPLICADO/DUPLICADO
+//                  tipo_evento on desglosados, TipoConfiguracion += DEDUP_WINDOW_MINUTES
+//   spec 006     — fecha_dia on bonos, TipoBono += GENERICO, dias_liquidacion table
+//                  EstadoDia + TipoDescuentoDia enums
+//
+// Append-only enforcement (application layer, not DB triggers):
+//   - eventos_biometricos          → no UPDATE / DELETE in service layer
+//   - eventos_biometricos_desglosados → no UPDATE / DELETE in service layer
+//   - registros_auditoria          → no UPDATE / DELETE in service layer
+// ─────────────────────────────────────────────────────────────────────────────
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+// v2.0: expanded from Rol{ADMINISTRADOR,SUPERVISOR} to 4 roles (spec 005/009)
+enum RolUsuario {
+  ADMINISTRADOR
+  SUPERVISOR
+  CAJERO
+  COLABORADOR
+}
+
+enum TipoDispositivo {
+  WEBHOOK
+  CSV
+}
+
+// v2.0: added POTENCIAL_DUPLICADO, DUPLICADO (spec 011)
+enum EstadoResolucion {
+  RESUELTO
+  SIN_RESOLVER
+  DISPOSITIVO_DESCONOCIDO
+  POTENCIAL_DUPLICADO
+  DUPLICADO
+}
+
+// v2.0: added ENTRADA, SALIDA, DESCONOCIDO (spec 011)
+enum TipoEvento {
+  ENTRADA
+  SALIDA
+  DESCONOCIDO
+}
+
+enum EstadoSemana {
+  ABIERTA
+  CERRADA
+}
+
+// v2.0: added DEDUP_WINDOW_MINUTES (spec 011), ASISTENCIA_MINIMA (spec 006)
+enum TipoConfiguracion {
+  TARIFA_HORA
+  TARIFA_HORA_EXTRA
+  UMBRAL_HORA_EXTRA
+  BONO_TRANSPORTE_CRITERIO
+  BONO_ALIMENTACION_CRITERIO
+  DESCUENTO
+  DEDUP_WINDOW_MINUTES
+  ASISTENCIA_MINIMA
+}
+
+enum AplicaA {
+  GLOBAL
+  COLABORADOR
+}
+
+// v2.0: added GENERICO (spec 006)
+enum TipoBono {
+  TRANSPORTE
+  ALIMENTACION
+  GENERICO
+}
+
+// v2.0: added PAGADO (spec 007)
+enum EstadoLiquidacion {
+  BORRADOR
+  APROBADO
+  PAGADO
+}
+
+// v2.0: new enum for DiaLiquidacion.estado_dia (spec 006)
+enum EstadoDia {
+  SIN_REVISION
+  APROBADO
+  CON_AJUSTE_HORAS
+  CON_DESCUENTO
+}
+
+// v2.0: new enum for DiaLiquidacion.descuento_tipo (spec 006)
+enum TipoDescuentoDia {
+  TARIFA_DIA
+  MONTO_FIJO
+}
+
+// ─── Models ───────────────────────────────────────────────────────────────────
+
+// v2.0: removed rol field; added debe_cambiar_password; roles via usuario_roles (spec 005/009)
+model Usuario {
+  id                     String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email                  String    @unique
+  password_hash          String
+  nombre                 String
+  apellido               String
+  debe_cambiar_password  Boolean   @default(false)
+  activo                 Boolean   @default(true)
+  email_verificado       Boolean   @default(false)
+  ultimo_acceso          DateTime? @db.Timestamptz
+  creado_en              DateTime  @default(now()) @db.Timestamptz
+  actualizado_en         DateTime  @updatedAt @db.Timestamptz
+
+  roles                          UsuarioRol[]
+  colaboradores_supervisados     Colaborador[]        @relation("SupervisorColaborador")
+  semanas_cerradas               SemanaLaboral[]      @relation("SemanaCerradaPor")
+  bonos_aprobados                Bono[]               @relation("BonoAprobadoPor")
+  liquidaciones_aprobadas        LiquidacionSemanal[] @relation("LiquidacionAprobadaPor")
+  liquidaciones_pagadas          LiquidacionSemanal[] @relation("LiquidacionPagadaPor")
+  configuraciones_creadas        ConfiguracionRegla[] @relation("ConfiguracionCreadaPor")
+  registros_auditoria            RegistroAuditoria[]
+
+  @@map("usuarios")
+}
+
+// v2.0: new — M:N usuarios ↔ roles (spec 005/009)
+model UsuarioRol {
+  usuario_id String     @db.Uuid
+  rol        RolUsuario
+
+  usuario Usuario @relation(fields: [usuario_id], references: [id], onDelete: Cascade)
+
+  @@id([usuario_id, rol])
+  @@map("usuario_roles")
+}
+
+model Colaborador {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  nombre         String
+  apellido       String
+  cedula         String   @unique
+  activo         Boolean  @default(true)
+  supervisor_id  String?  @db.Uuid
+  creado_en      DateTime @default(now()) @db.Timestamptz
+  actualizado_en DateTime @updatedAt @db.Timestamptz
+
+  supervisor             Usuario?             @relation("SupervisorColaborador", fields: [supervisor_id], references: [id])
+  codigos                CodigoColaborador[]
+  eventos_biometricos    EventoBiometrico[]
+  bonos                  Bono[]
+  liquidaciones          LiquidacionSemanal[]
+  configuraciones_reglas ConfiguracionRegla[] @relation("ConfiguracionAplicaA")
+
+  @@map("colaboradores")
+}
+
+model CodigoColaborador {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  colaborador_id    String   @db.Uuid
+  dispositivo_id    String   @db.Uuid
+  codigo_biometrico String
+  activo            Boolean  @default(true)
+  creado_en         DateTime @default(now()) @db.Timestamptz
+
+  colaborador Colaborador           @relation(fields: [colaborador_id], references: [id])
+  dispositivo DispositivoBiometrico @relation(fields: [dispositivo_id], references: [id])
+
+  @@unique([dispositivo_id, codigo_biometrico])
+  @@map("codigos_colaborador")
+}
+
+model DispositivoBiometrico {
+  id              String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  nombre          String
+  numero_serie    String?         @unique
+  tipo            TipoDispositivo
+  activo          Boolean         @default(true)
+  webhook_secreto String?
+  creado_en       DateTime        @default(now()) @db.Timestamptz
+  actualizado_en  DateTime        @updatedAt @db.Timestamptz
+
+  codigos             CodigoColaborador[]
+  eventos_biometricos EventoBiometrico[]
+
+  @@map("dispositivos_biometricos")
+}
+
+// APPEND-ONLY — no UPDATE/DELETE in EventoBiometricoService
+// v2.0: added evento_referencia_id (self-ref for duplicates), EstadoResolucion expanded (spec 011)
+model EventoBiometrico {
+  id                   String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  request_id           String           @unique
+  dispositivo_id       String?          @db.Uuid
+  codigo_biometrico    String
+  colaborador_id       String?          @db.Uuid
+  evento_referencia_id String?          @db.Uuid
+  estado_resolucion    EstadoResolucion @default(SIN_RESOLVER)
+  payload_completo     Json             @db.JsonB
+  recibido_en          DateTime         @default(now()) @db.Timestamptz
+
+  dispositivo      DispositivoBiometrico?      @relation(fields: [dispositivo_id], references: [id])
+  colaborador      Colaborador?               @relation(fields: [colaborador_id], references: [id])
+  evento_referencia EventoBiometrico?          @relation("DuplicadoDe", fields: [evento_referencia_id], references: [id])
+  duplicados        EventoBiometrico[]         @relation("DuplicadoDe")
+  desglose         EventoBiometricoDesglosado?
+
+  @@index([colaborador_id, recibido_en])
+  @@index([estado_resolucion])
+  @@index([evento_referencia_id])
+  @@map("eventos_biometricos")
+}
+
+// APPEND-ONLY — 1:1 optional with EventoBiometrico; created on successful parse
+// v2.0: added tipo_evento (spec 011)
+model EventoBiometricoDesglosado {
+  id                   String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  evento_id            String     @unique @db.Uuid
+  checktime            DateTime   @db.Timestamptz
+  checktype            Int
+  tipo_evento          TipoEvento @default(DESCONOCIDO)
+  device_serial_number String
+  device_name          String
+  employee_workno      String
+  employee_first_name  String?
+  employee_last_name   String?
+  procesado_en         DateTime   @default(now()) @db.Timestamptz
+
+  evento EventoBiometrico @relation(fields: [evento_id], references: [id])
+
+  @@index([checktime])
+  @@index([employee_workno])
+  @@map("eventos_biometricos_desglosados")
+}
+
+model SemanaLaboral {
+  id           String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  fecha_inicio DateTime     @unique @db.Date
+  fecha_fin    DateTime     @db.Date
+  estado       EstadoSemana @default(ABIERTA)
+  cerrada_por  String?      @db.Uuid
+  cerrada_en   DateTime?    @db.Timestamptz
+  creado_en    DateTime     @default(now()) @db.Timestamptz
+
+  cerrado_por_usuario Usuario?             @relation("SemanaCerradaPor", fields: [cerrada_por], references: [id])
+  bonos               Bono[]
+  liquidaciones       LiquidacionSemanal[]
+
+  @@index([estado])
+  @@map("semanas_laborales")
+}
+
+// Effective Dating pattern — query: tipo AND vigente_desde <= date AND (vigente_hasta IS NULL OR vigente_hasta >= date)
+// v2.0: TipoConfiguracion expanded with DEDUP_WINDOW_MINUTES, ASISTENCIA_MINIMA
+model ConfiguracionRegla {
+  id             String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tipo           TipoConfiguracion
+  clave          String
+  valor          Decimal           @db.Decimal(15, 4)
+  unidad         String
+  aplica_a       AplicaA           @default(GLOBAL)
+  colaborador_id String?           @db.Uuid
+  vigente_desde  DateTime          @db.Date
+  vigente_hasta  DateTime?         @db.Date
+  creado_por     String            @db.Uuid
+  creado_en      DateTime          @default(now()) @db.Timestamptz
+
+  colaborador        Colaborador? @relation("ConfiguracionAplicaA", fields: [colaborador_id], references: [id])
+  creado_por_usuario Usuario      @relation("ConfiguracionCreadaPor", fields: [creado_por], references: [id])
+
+  @@index([tipo, vigente_desde, vigente_hasta])
+  @@map("configuraciones_reglas")
+}
+
+// v2.0: added fecha_dia (spec 006); unique constraint updated to (colaborador_id, fecha_dia, tipo)
+// v2.0: TipoBono += GENERICO (spec 006)
+model Bono {
+  id                    String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  colaborador_id        String   @db.Uuid
+  semana_id             String   @db.Uuid
+  fecha_dia             DateTime @db.Date
+  tipo                  TipoBono
+  monto                 Decimal  @db.Decimal(15, 2)
+  aplicado_por_criterio Boolean  @default(false)
+  justificacion         String?
+  aprobado_por          String   @db.Uuid
+  creado_en             DateTime @default(now()) @db.Timestamptz
+
+  colaborador Colaborador   @relation(fields: [colaborador_id], references: [id])
+  semana      SemanaLaboral @relation(fields: [semana_id], references: [id])
+  aprobador   Usuario       @relation("BonoAprobadoPor", fields: [aprobado_por], references: [id])
+
+  @@unique([colaborador_id, fecha_dia, tipo])
+  @@map("bonos")
+}
+
+// v2.0: added pagado_por, pagada_en (spec 007); EstadoLiquidacion += PAGADO
+model LiquidacionSemanal {
+  id                       String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  colaborador_id           String            @db.Uuid
+  semana_id                String            @db.Uuid
+  horas_ordinarias         Decimal           @default(0) @db.Decimal(8, 2)
+  horas_extra              Decimal           @default(0) @db.Decimal(8, 2)
+  valor_horas_ordinarias   Decimal           @default(0) @db.Decimal(15, 2)
+  valor_horas_extra        Decimal           @default(0) @db.Decimal(15, 2)
+  total_bonos              Decimal           @default(0) @db.Decimal(15, 2)
+  total_descuentos         Decimal           @default(0) @db.Decimal(15, 2)
+  total_pago               Decimal           @default(0) @db.Decimal(15, 2)
+  estado                   EstadoLiquidacion @default(BORRADOR)
+  aprobado_por             String?           @db.Uuid
+  aprobada_en              DateTime?         @db.Timestamptz
+  pagado_por               String?           @db.Uuid
+  pagada_en                DateTime?         @db.Timestamptz
+  configuracion_reglas_ids Json              @default("[]") @db.JsonB
+  calculado_en             DateTime          @default(now()) @db.Timestamptz
+
+  colaborador Colaborador      @relation(fields: [colaborador_id], references: [id])
+  semana      SemanaLaboral    @relation(fields: [semana_id], references: [id])
+  aprobador   Usuario?         @relation("LiquidacionAprobadaPor", fields: [aprobado_por], references: [id])
+  pagador     Usuario?         @relation("LiquidacionPagadaPor", fields: [pagado_por], references: [id])
+  dias        DiaLiquidacion[]
+
+  @@unique([colaborador_id, semana_id])
+  @@map("liquidaciones_semanales")
+}
+
+// v2.0: new table — one row per collaborator × day × week (spec 006)
+model DiaLiquidacion {
+  id                        String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  liquidacion_id            String           @db.Uuid
+  fecha                     DateTime         @db.Date
+  horas_calculadas          Decimal          @default(0) @db.Decimal(8, 2)
+  horas_ajustadas_supervisor Decimal?        @db.Decimal(8, 2)
+  atraso_detectado          Boolean          @default(false)
+  estado_dia                EstadoDia        @default(SIN_REVISION)
+  motivo_ajuste             String?
+  descuento_tipo            TipoDescuentoDia?
+  descuento_valor           Decimal?         @db.Decimal(15, 2)
+  descuento_motivo          String?
+
+  liquidacion LiquidacionSemanal @relation(fields: [liquidacion_id], references: [id], onDelete: Cascade)
+
+  @@unique([liquidacion_id, fecha])
+  @@map("dias_liquidacion")
+}
+
+// APPEND-ONLY — immutable audit log; no UPDATE/DELETE in RegistroAuditoriaService
+model RegistroAuditoria {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  usuario_id       String?   @db.Uuid
+  accion           String
+  entidad_tipo     String?
+  entidad_id       String?   @db.Uuid
+  descripcion      String?
+  ip_origen        String?
+  datos_anteriores Json?     @db.JsonB
+  datos_nuevos     Json?     @db.JsonB
+  creado_en        DateTime  @default(now()) @db.Timestamptz
+
+  usuario Usuario? @relation(fields: [usuario_id], references: [id])
+
+  @@index([entidad_tipo, entidad_id])
+  @@index([accion, creado_en])
+  @@map("registros_auditoria")
+}
