@@ -14,21 +14,34 @@
 - Q: ¿Cuántos intentos fallidos consecutivos activan el bloqueo temporal y cuánto dura? → A: 5 intentos fallidos consecutivos activan un bloqueo de 15 minutos para ese correo.
 - Q: ¿Esta feature incluye definir las reglas de acceso por rol (RBAC), o solo el mecanismo de autenticación? → A: Solo autenticación y redirección inicial. Las reglas de qué rutas/secciones accede cada rol se definen en cada feature específica o en una feature RBAC separada.
 
+### Session 2026-05-23
+
+- Q: ¿El login debe detectar y manejar el flujo de primer acceso con contraseña inicial (spec 009)? → A: Sí. Tras autenticarse con credenciales válidas, si el usuario tiene `debe_cambiar_password = true`, el sistema redirige al flujo de cambio de contraseña antes de dar acceso al dashboard. El acceso al dashboard solo se otorga tras completar el cambio.
+- Q: ¿La feature cubre solo ADMINISTRADOR y SUPERVISOR, o los 4 roles del sistema (constitución v1.1.0)? → A: Los 4 roles (ADMINISTRADOR, SUPERVISOR, CAJERO, COLABORADOR) se autentican con el mismo mecanismo. No hay distinción en el flujo de login por rol.
+- Q: ¿Cuál es el tiempo de inactividad por defecto para la expiración de sesión? → A: 2 horas.
+
+### Session 2026-05-25
+
+- Q: ¿Cómo se detecta que una cuenta fue desactivada durante una sesión JWT activa? → A: El `JwtStrategy` consulta `usuarios.activo` en DB en cada request autenticado. Si `activo = false`, retorna 401 inmediatamente (equivalente a jti revocado). Overhead aceptable para MVP (~10 usuarios).
+- Q: ¿Qué retorna `POST /auth/login` para guiar la redirección post-login por rol? → A: El response body es `{ nombre, roles, debeChangiarPassword }`. El backend no calcula ni retorna URLs de redirect. El frontend (con la lógica de spec 010) decide la URL destino basándose en el array `roles`. El token JWT viaja en la cookie HttpOnly, no en el body.
+
 ---
 
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Inicio de Sesión con Credenciales Válidas (Priority: P1)
 
-Como usuario del sistema (Administrador o Supervisor), quiero iniciar sesión con mi correo
-electrónico y contraseña para acceder a las funcionalidades que corresponden a mi rol.
+Como usuario del sistema (Administrador, Supervisor, Cajero o Colaborador), quiero iniciar
+sesión con mi correo electrónico y contraseña para acceder a las funcionalidades que
+corresponden a mi rol.
 
 **Why this priority**: La autenticación es el control de acceso fundamental. Ninguna
 funcionalidad operativa puede utilizarse sin identificar al usuario y validar sus permisos.
 
-**Independent Test**: Con credenciales válidas de cada uno de los dos roles, verificar que el
-login concede acceso y redirige al dashboard correspondiente. Con credenciales incorrectas,
-verificar que el acceso es denegado con mensaje claro.
+**Independent Test**: Con credenciales válidas de cada uno de los cuatro roles (ADMINISTRADOR,
+SUPERVISOR, CAJERO, COLABORADOR), verificar que el login concede acceso y redirige al dashboard
+correspondiente. Con credenciales incorrectas, verificar que el acceso es denegado con mensaje
+claro.
 
 **Acceptance Scenarios**:
 
@@ -48,6 +61,10 @@ verificar que el acceso es denegado con mensaje claro.
 4. **Given** un usuario autenticado que intenta acceder a una URL protegida,
    **When** su sesión está activa,
    **Then** accede directamente sin necesidad de re-autenticarse.
+
+5. **Given** un usuario cuya cuenta fue creada con una contraseña inicial (spec 009) y aún no la cambió (`debe_cambiar_password = true`),
+   **When** inicia sesión con sus credenciales válidas,
+   **Then** el sistema no da acceso al dashboard; en su lugar redirige al flujo de cambio de contraseña obligatorio. Solo tras completar el cambio se otorga acceso al dashboard correspondiente a su rol.
 
 ---
 
@@ -103,7 +120,8 @@ tras autenticarse, el usuario llega a la URL originalmente solicitada.
 - ¿Qué pasa si la sesión expira mientras el usuario está navegando? → Al intentar cualquier acción protegida, el sistema redirige al login con un mensaje de sesión expirada.
 - ¿Qué ocurre si el usuario deja el navegador abierto sin actividad por un período prolongado? → La sesión expira automáticamente tras un período de inactividad configurable.
 - ¿Puede el mismo usuario tener múltiples sesiones simultáneas (diferentes dispositivos o navegadores)? → Sí; para el MVP se permiten sesiones concurrentes sin restricción de dispositivo único.
-- ¿Qué pasa si el administrador desactiva una cuenta mientras el usuario tiene sesión activa? → La sesión activa no se interrumpe inmediatamente, pero la próxima verificación de sesión detecta el estado inactivo y cierra la sesión.
+- ¿Qué pasa si el administrador desactiva una cuenta mientras el usuario tiene sesión activa? → El `JwtStrategy` consulta `activo` en DB en cada request; el primer request posterior a la desactivación retorna 401 y el frontend redirige al login con mensaje "cuenta inactiva". La sesión se invalida de forma inmediata en el siguiente request del usuario.
+- ¿Qué pasa si el usuario cierra el navegador mientras está en el flujo de cambio de contraseña obligatorio? → La sesión expira normalmente (cookie de sesión). Al volver a autenticarse, el sistema detecta nuevamente `debe_cambiar_password = true` y repite la redirección al flujo de cambio.
 
 ## Requirements *(mandatory)*
 
@@ -111,12 +129,13 @@ tras autenticarse, el usuario llega a la URL originalmente solicitada.
 
 - **FR-001**: El sistema DEBE requerir correo electrónico y contraseña para autenticar a cualquier usuario.
 - **FR-002**: El sistema DEBE validar que el correo existe y que la contraseña corresponde al hash almacenado para ese usuario.
-- **FR-003**: El sistema DEBE rechazar el acceso a usuarios con cuenta desactivada (`activo = false`), incluso si la contraseña es correcta.
+- **FR-003**: El sistema DEBE rechazar el acceso a usuarios con cuenta desactivada (`activo = false`), incluso si la contraseña es correcta. Adicionalmente, el `JwtStrategy` DEBE verificar `activo` en DB en cada request autenticado: si `activo = false`, retorna 401 inmediatamente y la sesión queda invalidada de facto en el siguiente request del usuario afectado.
 - **FR-004**: El sistema DEBE mostrar un único mensaje de error genérico ante credenciales inválidas, sin revelar cuál de los dos campos es incorrecto (correo o contraseña).
-- **FR-005**: Tras un login exitoso, el sistema DEBE redirigir al usuario a la página de inicio correspondiente a su rol. La definición de qué rutas y secciones puede acceder cada rol es responsabilidad de las features individuales que implementen esas secciones, no de esta feature.
+- **FR-005**: Tras un login exitoso con `debe_cambiar_password = false`, el backend retorna `{ nombre, roles[], debeChangiarPassword: false }` en el response body (el JWT viaja en la cookie HttpOnly). El frontend usa el array `roles` para determinar la URL de destino según la lógica de spec 010. El backend no calcula ni retorna URLs de redirect.
+- **FR-012**: Si tras autenticarse el usuario tiene `debe_cambiar_password = true`, el sistema DEBE redirigir al flujo de cambio de contraseña obligatorio en lugar del dashboard. La sesión queda en estado restringido: solo el flujo de cambio de contraseña es accesible hasta que se complete. Tras el cambio exitoso, el sistema redirige al dashboard según rol y marca `debe_cambiar_password = false`.
 - **FR-006**: El sistema DEBE permitir al usuario cerrar sesión explícitamente desde cualquier página del sistema; tras el logout, la sesión queda invalidada de forma inmediata.
 - **FR-007**: El sistema DEBE redirigir automáticamente al login a cualquier usuario no autenticado que intente acceder a una URL protegida, y redirigirlo a esa URL tras autenticarse.
-- **FR-008**: La sesión activa es una cookie de sesión (no persistente): expira automáticamente al cerrar el navegador. Adicionalmente, expira por inactividad tras un período configurable mientras el navegador permanece abierto. En ambos casos, el usuario es redirigido al login con un mensaje indicando el motivo.
+- **FR-008**: La sesión activa es una cookie de sesión (no persistente): expira automáticamente al cerrar el navegador. Adicionalmente, expira por inactividad tras 2 horas sin actividad mientras el navegador permanece abierto (valor por defecto configurable). En ambos casos, el usuario es redirigido al login con un mensaje indicando el motivo (sesión cerrada / sesión expirada por inactividad).
 - **FR-009**: El sistema DEBE bloquear temporalmente el acceso de un correo tras 5 intentos de login fallidos consecutivos. El bloqueo dura 15 minutos, tras los cuales el contador se reinicia. Durante el bloqueo, el sistema informa al usuario del tiempo restante.
 - **FR-010**: Todo intento de login (exitoso o fallido) DEBE quedar registrado en el log de auditoría: correo intentado, resultado (éxito/fallo), timestamp e IP de origen.
 - **FR-011**: El sistema DEBE actualizar el campo `ultimo_acceso` del usuario al completar un login exitoso.
@@ -139,13 +158,12 @@ tras autenticarse, el usuario llega a la URL originalmente solicitada.
 
 ## Assumptions
 
-- El modelo de datos aprobado (spec 003) define dos roles de sistema: `ADMINISTRADOR` y `SUPERVISOR`. Esta feature cubre únicamente el login de usuarios con esos dos roles.
-- El rol **"Colaborador"** mencionado en el brief inicial se interpreta como fuera del alcance del MVP de autenticación: los colaboradores (trabajadores por hora) no tienen acceso al sistema en esta versión. Si se requiere un portal de autoservicio para colaboradores, es una feature posterior que requeriría una enmienda al modelo de datos.
-- Las contraseñas son gestionadas con hash seguro; la feature de creación de usuarios (con asignación de contraseña inicial o invitación por correo) es una feature separada.
+- La constitución v1.1.0 (spec 009) define cuatro roles de sistema: `ADMINISTRADOR`, `SUPERVISOR`, `CAJERO` y `COLABORADOR`. Esta feature cubre el login de usuarios con cualquiera de los cuatro roles; el mecanismo de autenticación es idéntico para todos. Las funcionalidades accesibles por cada rol se definen en sus features específicas.
+- Las contraseñas son gestionadas con hash seguro; la feature de creación de usuarios (con asignación de contraseña inicial) es una feature separada (spec 009). Spec 005 no crea contraseñas ni usuarios, pero sí detecta el estado `debe_cambiar_password = true` y gestiona la redirección obligatoria al cambio (FR-012). El formulario de cambio de contraseña en sí puede pertenecer a spec 009 o a una feature de perfil de usuario.
 - La recuperación de contraseña olvidada está fuera del alcance de esta feature; es una feature posterior.
 - La sesión es una cookie de sesión (no persistente): no sobrevive al cierre del navegador. No existe opción "Recordarme". Esta decisión se tomó por seguridad dado el entorno de equipos compartidos en la imprenta.
 - Se permiten múltiples sesiones simultáneas para un mismo usuario (diferentes dispositivos) en el MVP.
-- La duración del período de inactividad para expiración de sesión es un parámetro configurable; su valor por defecto se define en planificación técnica.
+- La duración del período de inactividad para expiración de sesión es un parámetro configurable. El valor por defecto es 2 horas, elegido para cubrir un turno de trabajo completo sin interrupciones innecesarias.
 - El umbral de bloqueo por intentos fallidos es 5 intentos / 15 minutos (fijo para el MVP).
 - Esta feature no incluye autenticación multifactor (MFA); es una mejora futura.
 - Las reglas de autorización por rol (qué rutas y secciones puede acceder ADMINISTRADOR vs SUPERVISOR) están fuera del alcance de esta feature; cada feature posterior define su propio control de acceso, o se unifica en una feature RBAC dedicada.
