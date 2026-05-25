@@ -1,21 +1,16 @@
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { LogoutButton } from '@/components/auth/LogoutButton';
-
-const API_URL = process.env.API_URL ?? 'http://localhost:3001';
+import { verifyToken, isBlacklisted } from '@/lib/auth-server';
 
 async function getSession() {
   const cookieStore = await cookies();
   const token = cookieStore.get('access_token')?.value;
   if (!token) return null;
-
   try {
-    const res = await fetch(`${API_URL}/auth/me`, {
-      headers: { Cookie: `access_token=${token}` },
-      cache: 'no-store',
-    });
-    if (!res.ok) return null;
-    return res.json();
+    const payload = await verifyToken(token);
+    if (isBlacklisted(payload.jti)) return null;
+    return payload;
   } catch {
     return null;
   }

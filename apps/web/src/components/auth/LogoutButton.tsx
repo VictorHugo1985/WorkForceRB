@@ -3,14 +3,12 @@
 import axios from 'axios';
 import { useRouter } from 'next/navigation';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
-
 export function LogoutButton() {
   const router = useRouter();
 
   const handleLogout = async () => {
     try {
-      await axios.post(`${API_URL}/auth/logout`, {}, { withCredentials: true });
+      await axios.post('/api/auth/logout', {});
     } finally {
       router.push('/login');
     }

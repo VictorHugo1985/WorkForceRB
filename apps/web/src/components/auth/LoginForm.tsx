@@ -15,8 +15,6 @@ const schema = z.object({
 
 type FormValues = z.infer<typeof schema>;
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
-
 export function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -40,7 +38,7 @@ export function LoginForm() {
         nombre: string;
         roles: string[];
         debeChangiarPassword: boolean;
-      }>(`${API_URL}/auth/login`, data, { withCredentials: true });
+      }>('/api/auth/login', data);
 
       if (res.data.debeChangiarPassword) {
         router.push('/auth/cambiar-contrasena');
