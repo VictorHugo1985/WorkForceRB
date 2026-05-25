@@ -18,11 +18,11 @@
 
 **Purpose**: Install dependencies and scaffold the AuthModule skeleton so all subsequent phases have a working base.
 
-- [ ] T001 Install backend auth dependencies in `apps/api`: `@nestjs/passport`, `passport`, `passport-local`, `@types/passport-local`, `passport-jwt`, `@types/passport-jwt`, `@nestjs/jwt`, `bcrypt`, `@types/bcrypt`, `cookie-parser`, `@types/cookie-parser`
-- [ ] T002 [P] Install frontend auth dependencies in `apps/web`: `react-hook-form`, `zod`, `@hookform/resolvers`, `axios` (if not present)
-- [ ] T003 [P] Create `AuthModule` skeleton with empty exports in `apps/api/src/auth/auth.module.ts` (import `PassportModule`, `JwtModule`, `PrismaModule`; export empty providers list)
-- [ ] T004 [P] Create empty barrel files for subdirectories: `apps/api/src/auth/strategies/index.ts`, `apps/api/src/auth/guards/index.ts`, `apps/api/src/auth/services/index.ts`, `apps/api/src/auth/dto/index.ts`
-- [ ] T005 Register `AuthModule` in `apps/api/src/app.module.ts` imports array
+- [X] T001 Install backend auth dependencies in `apps/api`: `@nestjs/passport`, `passport`, `passport-local`, `@types/passport-local`, `passport-jwt`, `@types/passport-jwt`, `@nestjs/jwt`, `bcrypt`, `@types/bcrypt`, `cookie-parser`, `@types/cookie-parser`
+- [X] T002 [P] Install frontend auth dependencies in `apps/web`: `react-hook-form`, `zod`, `@hookform/resolvers`, `axios` (if not present)
+- [X] T003 [P] Create `AuthModule` skeleton with empty exports in `apps/api/src/auth/auth.module.ts` (import `PassportModule`, `JwtModule`, `PrismaModule`; export empty providers list)
+- [X] T004 [P] Create empty barrel files for subdirectories: `apps/api/src/auth/strategies/index.ts`, `apps/api/src/auth/guards/index.ts`, `apps/api/src/auth/services/index.ts`, `apps/api/src/auth/dto/index.ts`
+- [X] T005 Register `AuthModule` in `apps/api/src/app.module.ts` imports array
 
 **Checkpoint**: `npm run build` in `apps/api` passes without errors — AuthModule compiles with empty stubs.
 
@@ -34,11 +34,11 @@
 
 **⚠️ CRITICAL**: No user story implementation can be tested end-to-end until this phase is complete.
 
-- [ ] T006 Write Prisma migration `add_debe_cambiar_password`: add column `debe_cambiar_password BOOLEAN NOT NULL DEFAULT false` to `usuarios` in `packages/database/prisma/schema.prisma`; run `prisma migrate dev --name add_debe_cambiar_password`
-- [ ] T007 Write Prisma migration `multi_rol_usuario`: create table `usuario_roles (usuario_id UUID, rol RolUsuario, PRIMARY KEY (usuario_id, rol))`; expand enum `RolUsuario` with `CAJERO` and `COLABORADOR`; remove column `rol` from `usuarios` in `packages/database/prisma/schema.prisma`; run `prisma migrate dev --name multi_rol_usuario`
-- [ ] T008 Regenerate Prisma client: run `prisma generate` in `packages/database`; verify `@workforce/database` exports updated types `UsuarioRol`, `RolUsuario`, `Usuario` (without `rol` field)
-- [ ] T009 Register `cookie-parser` middleware in `apps/api/src/main.ts`: `app.use(cookieParser())` before `app.listen()`
-- [ ] T010 [P] Configure `@nestjs/throttler` in `apps/api/src/app.module.ts`: `ThrottlerModule.forRoot([{ ttl: 60000, limit: 20 }])` as global rate limiter by IP
+- [X] T006 Write Prisma migration `add_debe_cambiar_password`: add column `debe_cambiar_password BOOLEAN NOT NULL DEFAULT false` to `usuarios` in `packages/database/prisma/schema.prisma`; run `prisma migrate dev --name add_debe_cambiar_password`
+- [X] T007 Write Prisma migration `multi_rol_usuario`: create table `usuario_roles (usuario_id UUID, rol RolUsuario, PRIMARY KEY (usuario_id, rol))`; expand enum `RolUsuario` with `CAJERO` and `COLABORADOR`; remove column `rol` from `usuarios` in `packages/database/prisma/schema.prisma`; run `prisma migrate dev --name multi_rol_usuario`
+- [X] T008 Regenerate Prisma client: run `prisma generate` in `packages/database`; verify `@workforce/database` exports updated types `UsuarioRol`, `RolUsuario`, `Usuario` (without `rol` field)
+- [X] T009 Register `cookie-parser` middleware in `apps/api/src/main.ts`: `app.use(cookieParser())` before `app.listen()`
+- [X] T010 [P] Configure `@nestjs/throttler` in `apps/api/src/app.module.ts`: `ThrottlerModule.forRoot([{ ttl: 60000, limit: 20 }])` as global rate limiter by IP
 
 **Checkpoint**: Run `prisma migrate status` — all migrations applied. Run API server — no startup errors. `GET /health` responds 200.
 
@@ -52,16 +52,16 @@
 
 ### Implementation for User Story 1
 
-- [ ] T011 [P] [US1] Create `LoginDto` with `email: string` (email, maxLength 254) and `password: string` (notEmpty, maxLength 128) using `class-validator` + `nestjs-zod` in `apps/api/src/auth/dto/login.dto.ts`
-- [ ] T012 [P] [US1] Create `LoginResponseDto` with `nombre: string`, `roles: RolUsuario[]`, `debeChangiarPassword: boolean` in `apps/api/src/auth/dto/login-response.dto.ts`
-- [ ] T013 [US1] Implement `BruteForceService` in `apps/api/src/auth/services/brute-force.service.ts`: `Map<email, {attempts: number, lockedUntil: Date|null}>`; methods: `checkLock(email)` throws `HttpException(429)` if locked and not expired; `recordFailure(email)` increments counter, sets `lockedUntil = now+15min` at attempt 5; `resetOnSuccess(email)` deletes map entry
-- [ ] T014 [US1] Implement `LocalStrategy` in `apps/api/src/auth/strategies/local.strategy.ts`: extend `PassportStrategy(Strategy, 'local')`; override `usernameField: 'email'`; in `validate(email, password)`: call `BruteForceService.checkLock(email)`; query `usuarios` + `usuario_roles` via Prisma; verify `activo === true` (→ throw 401); verify `bcrypt.compare(password, password_hash)` (→ `recordFailure` + throw 401); call `resetOnSuccess(email)`; return user object
-- [ ] T015 [US1] Implement `LocalAuthGuard` in `apps/api/src/auth/guards/local-auth.guard.ts`: extend `AuthGuard('local')`; override `handleRequest` to propagate `TooManyRequestsException` from `BruteForceService` (status 429) without swallowing it
-- [ ] T016 [US1] Implement `AuthService.login()` in `apps/api/src/auth/auth.service.ts`: build JWT payload `{sub, email, nombre, roles, debeChangiarPassword, jti: uuid(), iat: now, exp: now+7200}`; sign with `JwtService`; set cookie `access_token` (HttpOnly, Secure, SameSite=Strict, Path=/, no maxAge); call `updateUltimoAcceso(userId)`; return `LoginResponseDto`
-- [ ] T017 [US1] Implement `AuthService.updateUltimoAcceso(userId)` in `apps/api/src/auth/auth.service.ts`: `prisma.usuarios.update({ where: {id: userId}, data: {ultimo_acceso: new Date()} })`
-- [ ] T018 [US1] Implement `POST /auth/login` in `apps/api/src/auth/auth.controller.ts`: decorate with `@UseGuards(LocalAuthGuard)`; call `authService.login(req.user, res)`; insert audit row in `registros_auditoria` (`accion: LOGIN_EXITOSO|LOGIN_FALLIDO`, `usuario_id`, `ip` from `x-forwarded-for || req.ip`, `timestamp: NOW()`, `datos_nuevos: {email, motivo_fallo?}`) — use try/catch to log failures even when `LocalAuthGuard` throws; respond 200 with `LoginResponseDto`
-- [ ] T019 [P] [US1] Create `apps/web/src/components/auth/LoginForm.tsx`: MUI `TextField` for email and password, submit button; React Hook Form + Zod schema (`email` valid email, `password` notEmpty); on submit call `POST /auth/login` via Axios; on 200 read `debeChangiarPassword` — if true redirect to `/auth/cambiar-contrasena`, else redirect to `returnUrl` query param or role-based dashboard (per spec 010 logic placeholder); on 401 show "Credenciales inválidas"; on 429 show "Cuenta bloqueada temporalmente. Intente en {retryAfterSeconds/60} min."
-- [ ] T020 [US1] Create `apps/web/src/app/login/page.tsx`: render `LoginForm` inside MUI `Container`; read `?reason=expired` query param and show inline alert "Tu sesión expiró" when present; read `?reason=inactive` and show "Tu cuenta está inactiva"
+- [X] T011 [P] [US1] Create `LoginDto` with `email: string` (email, maxLength 254) and `password: string` (notEmpty, maxLength 128) using `class-validator` + `nestjs-zod` in `apps/api/src/auth/dto/login.dto.ts`
+- [X] T012 [P] [US1] Create `LoginResponseDto` with `nombre: string`, `roles: RolUsuario[]`, `debeChangiarPassword: boolean` in `apps/api/src/auth/dto/login-response.dto.ts`
+- [X] T013 [US1] Implement `BruteForceService` in `apps/api/src/auth/services/brute-force.service.ts`: `Map<email, {attempts: number, lockedUntil: Date|null}>`; methods: `checkLock(email)` throws `HttpException(429)` if locked and not expired; `recordFailure(email)` increments counter, sets `lockedUntil = now+15min` at attempt 5; `resetOnSuccess(email)` deletes map entry
+- [X] T014 [US1] Implement `LocalStrategy` in `apps/api/src/auth/strategies/local.strategy.ts`: extend `PassportStrategy(Strategy, 'local')`; override `usernameField: 'email'`; in `validate(email, password)`: call `BruteForceService.checkLock(email)`; query `usuarios` + `usuario_roles` via Prisma; verify `activo === true` (→ throw 401); verify `bcrypt.compare(password, password_hash)` (→ `recordFailure` + throw 401); call `resetOnSuccess(email)`; return user object
+- [X] T015 [US1] Implement `LocalAuthGuard` in `apps/api/src/auth/guards/local-auth.guard.ts`: extend `AuthGuard('local')`; override `handleRequest` to propagate `TooManyRequestsException` from `BruteForceService` (status 429) without swallowing it
+- [X] T016 [US1] Implement `AuthService.login()` in `apps/api/src/auth/auth.service.ts`: build JWT payload `{sub, email, nombre, roles, debeChangiarPassword, jti: uuid(), iat: now, exp: now+7200}`; sign with `JwtService`; set cookie `access_token` (HttpOnly, Secure, SameSite=Strict, Path=/, no maxAge); call `updateUltimoAcceso(userId)`; return `LoginResponseDto`
+- [X] T017 [US1] Implement `AuthService.updateUltimoAcceso(userId)` in `apps/api/src/auth/auth.service.ts`: `prisma.usuarios.update({ where: {id: userId}, data: {ultimo_acceso: new Date()} })`
+- [X] T018 [US1] Implement `POST /auth/login` in `apps/api/src/auth/auth.controller.ts`: decorate with `@UseGuards(LocalAuthGuard)`; call `authService.login(req.user, res)`; insert audit row in `registros_auditoria` (`accion: LOGIN_EXITOSO|LOGIN_FALLIDO`, `usuario_id`, `ip` from `x-forwarded-for || req.ip`, `timestamp: NOW()`, `datos_nuevos: {email, motivo_fallo?}`) — use try/catch to log failures even when `LocalAuthGuard` throws; respond 200 with `LoginResponseDto`
+- [X] T019 [P] [US1] Create `apps/web/src/components/auth/LoginForm.tsx`: MUI `TextField` for email and password, submit button; React Hook Form + Zod schema (`email` valid email, `password` notEmpty); on submit call `POST /auth/login` via Axios; on 200 read `debeChangiarPassword` — if true redirect to `/auth/cambiar-contrasena`, else redirect to `returnUrl` query param or role-based dashboard (per spec 010 logic placeholder); on 401 show "Credenciales inválidas"; on 429 show "Cuenta bloqueada temporalmente. Intente en {retryAfterSeconds/60} min."
+- [X] T020 [US1] Create `apps/web/src/app/login/page.tsx`: render `LoginForm` inside MUI `Container`; read `?reason=expired` query param and show inline alert "Tu sesión expiró" when present; read `?reason=inactive` and show "Tu cuenta está inactiva"
 
 **Checkpoint**: Boot API + web. Navigate to `/login`. Log in with a seed ADMINISTRADOR user → cookie set, redirected. Log in with wrong password → 401 toast. Fail 5× → 429 toast. Query `registros_auditoria` → rows present.
 
@@ -75,11 +75,11 @@
 
 ### Implementation for User Story 2
 
-- [ ] T021 [US2] Add `jti` blacklist to `AuthService` in `apps/api/src/auth/auth.service.ts`: `private readonly blacklist = new Set<string>()`; add `isBlacklisted(jti: string): boolean`; add `AuthService.logout(jti)` that calls `blacklist.add(jti)`
-- [ ] T022 [US2] Implement `JwtStrategy` in `apps/api/src/auth/strategies/jwt.strategy.ts`: extend `PassportStrategy(Strategy, 'jwt')`; extract token from cookie `access_token` via `cookieExtractor = (req) => req.cookies?.access_token`; in `validate(payload)`: verify `!authService.isBlacklisted(payload.jti)` (→ throw `UnauthorizedException`); query `prisma.usuarios.findUnique({where: {id: payload.sub}, select: {activo: true}})` (→ throw 401 if `activo === false`); return payload
-- [ ] T023 [US2] Implement `JwtAuthGuard` in `apps/api/src/auth/guards/jwt-auth.guard.ts`: extend `AuthGuard('jwt')`; override `handleRequest` to rethrow `UnauthorizedException` with status 401; used on all protected routes
-- [ ] T024 [US2] Implement `POST /auth/logout` in `apps/api/src/auth/auth.controller.ts`: decorate with `@UseGuards(JwtAuthGuard)`; call `authService.logout(req.user.jti)`; clear cookie `access_token` with `Max-Age=0`; respond 200 `{message: "Sesión cerrada correctamente"}`
-- [ ] T025 [US2] Add logout button to `apps/web/src/app/(app)/layout.tsx`: MUI `Button` that calls `POST /auth/logout` via Axios; on 200 redirect to `/login`; wrap in a client component `LogoutButton.tsx` in `apps/web/src/components/auth/LogoutButton.tsx`
+- [X] T021 [US2] Add `jti` blacklist to `AuthService` in `apps/api/src/auth/auth.service.ts`: `private readonly blacklist = new Set<string>()`; add `isBlacklisted(jti: string): boolean`; add `AuthService.logout(jti)` that calls `blacklist.add(jti)`
+- [X] T022 [US2] Implement `JwtStrategy` in `apps/api/src/auth/strategies/jwt.strategy.ts`: extend `PassportStrategy(Strategy, 'jwt')`; extract token from cookie `access_token` via `cookieExtractor = (req) => req.cookies?.access_token`; in `validate(payload)`: verify `!authService.isBlacklisted(payload.jti)` (→ throw `UnauthorizedException`); query `prisma.usuarios.findUnique({where: {id: payload.sub}, select: {activo: true}})` (→ throw 401 if `activo === false`); return payload
+- [X] T023 [US2] Implement `JwtAuthGuard` in `apps/api/src/auth/guards/jwt-auth.guard.ts`: extend `AuthGuard('jwt')`; override `handleRequest` to rethrow `UnauthorizedException` with status 401; used on all protected routes
+- [X] T024 [US2] Implement `POST /auth/logout` in `apps/api/src/auth/auth.controller.ts`: decorate with `@UseGuards(JwtAuthGuard)`; call `authService.logout(req.user.jti)`; clear cookie `access_token` with `Max-Age=0`; respond 200 `{message: "Sesión cerrada correctamente"}`
+- [X] T025 [US2] Add logout button to `apps/web/src/app/(app)/layout.tsx`: MUI `Button` that calls `POST /auth/logout` via Axios; on 200 redirect to `/login`; wrap in a client component `LogoutButton.tsx` in `apps/web/src/components/auth/LogoutButton.tsx`
 
 **Checkpoint**: Login → logout → attempt `GET /auth/me` with old cookie → 401. Refresh protected page after logout → redirect to `/login`.
 
@@ -93,12 +93,12 @@
 
 ### Implementation for User Story 3
 
-- [ ] T026 [US3] Implement Next.js Edge Middleware in `apps/web/middleware.ts`: match all paths except `/_next/`, `/static/`, `/login`, `/auth/cambiar-contrasena`; if request has no `access_token` cookie → `NextResponse.redirect(/login?returnUrl=<encoded-pathname>)`; if request to `/login` with valid cookie → redirect to `/dashboard`
-- [ ] T027 [US3] Implement server-side session check in `apps/web/src/app/(app)/layout.tsx`: call `GET /auth/me` from server (passing cookie header); if 401 → redirect to `/login?reason=expired`; if ok → provide user context to child components via React context or props
-- [ ] T028 [US3] Implement `GET /auth/me` in `apps/api/src/auth/auth.controller.ts`: decorate with `@UseGuards(JwtAuthGuard)`; return `{sub, email, nombre, roles, debeChangiarPassword}` from `req.user`; if `exp - now < 3600` → call `authService.renewToken(req.user, res)` to re-emit JWT cookie with fresh `exp = now + 7200` (sliding window)
-- [ ] T029 [US3] Implement `AuthService.renewToken(payload, res)` in `apps/api/src/auth/auth.service.ts`: build new payload with fresh `jti`, same `sub/email/nombre/roles/debeChangiarPassword`, `exp = now + 7200`; sign and set new `access_token` cookie (same attributes as login)
-- [ ] T030 [US3] Add `debeChangiarPassword` route restriction to `JwtAuthGuard` in `apps/api/src/auth/guards/jwt-auth.guard.ts`: in `canActivate`, after JWT validation, if `request.user.debeChangiarPassword === true` and the route is not `/auth/cambiar-contrasena` or `/auth/logout` → throw `ForbiddenException` (403)
-- [ ] T031 [P] [US3] Create `apps/web/src/components/auth/SessionExpiredBanner.tsx`: MUI `Alert severity="warning"` shown when `?reason=expired` or `?reason=inactive` present in the URL; auto-hides after 8 seconds; integrate into `apps/web/src/app/login/page.tsx`
+- [X] T026 [US3] Implement Next.js Edge Middleware in `apps/web/middleware.ts`: match all paths except `/_next/`, `/static/`, `/login`, `/auth/cambiar-contrasena`; if request has no `access_token` cookie → `NextResponse.redirect(/login?returnUrl=<encoded-pathname>)`; if request to `/login` with valid cookie → redirect to `/dashboard`
+- [X] T027 [US3] Implement server-side session check in `apps/web/src/app/(app)/layout.tsx`: call `GET /auth/me` from server (passing cookie header); if 401 → redirect to `/login?reason=expired`; if ok → provide user context to child components via React context or props
+- [X] T028 [US3] Implement `GET /auth/me` in `apps/api/src/auth/auth.controller.ts`: decorate with `@UseGuards(JwtAuthGuard)`; return `{sub, email, nombre, roles, debeChangiarPassword}` from `req.user`; if `exp - now < 3600` → call `authService.renewToken(req.user, res)` to re-emit JWT cookie with fresh `exp = now + 7200` (sliding window)
+- [X] T029 [US3] Implement `AuthService.renewToken(payload, res)` in `apps/api/src/auth/auth.service.ts`: build new payload with fresh `jti`, same `sub/email/nombre/roles/debeChangiarPassword`, `exp = now + 7200`; sign and set new `access_token` cookie (same attributes as login)
+- [X] T030 [US3] Add `debeChangiarPassword` route restriction to `JwtAuthGuard` in `apps/api/src/auth/guards/jwt-auth.guard.ts`: in `canActivate`, after JWT validation, if `request.user.debeChangiarPassword === true` and the route is not `/auth/cambiar-contrasena` or `/auth/logout` → throw `ForbiddenException` (403)
+- [X] T031 [P] [US3] Create `apps/web/src/components/auth/SessionExpiredBanner.tsx`: MUI `Alert severity="warning"` shown when `?reason=expired` or `?reason=inactive` present in the URL; auto-hides after 8 seconds; integrate into `apps/web/src/app/login/page.tsx`
 
 **Checkpoint**: All 5 acceptance scenarios from spec.md US3 pass: direct URL access → login redirect; post-login → original URL; session expires → login with banner; `debeChangiarPassword=true` user → only `/auth/cambiar-contrasena` accessible; back-button after logout → login page.
 
@@ -109,10 +109,10 @@
 **Purpose**: Swagger documentation, unit tests for core services, and throttler wiring.
 
 - [ ] T032 [P] Add `@ApiTags('auth')`, `@ApiOperation`, `@ApiResponse` decorators to all endpoints in `apps/api/src/auth/auth.controller.ts` using `@nestjs/swagger`
-- [ ] T033 [P] Write unit tests for `BruteForceService` in `apps/api/src/auth/services/brute-force.service.spec.ts`: test `checkLock` throws 429 when locked; `recordFailure` reaches lockout after 5 calls; `resetOnSuccess` clears counter; lock auto-expires after `lockedUntil` passes
-- [ ] T034 [P] Write unit tests for `AuthService` in `apps/api/src/auth/auth.service.spec.ts`: mock `JwtService` and `PrismaService`; test `login()` sets cookie and returns DTO; `logout()` adds jti to blacklist; `isBlacklisted()` returns true for blacklisted jti; `renewToken()` emits new cookie with fresh exp
-- [ ] T035 [P] Write unit tests for `LocalStrategy` in `apps/api/src/auth/strategies/local.strategy.spec.ts`: mock Prisma + bcrypt + BruteForceService; test valid credentials → returns user; wrong password → 401 + recordFailure called; inactive user → 401; locked email → 429 propagated
-- [ ] T036 [P] Write unit tests for `JwtStrategy` in `apps/api/src/auth/strategies/jwt.strategy.spec.ts`: test valid payload + active user → returns payload; blacklisted jti → 401; `activo = false` in DB → 401
+- [X] T033 [P] Write unit tests for `BruteForceService` in `apps/api/src/auth/services/brute-force.service.spec.ts`: test `checkLock` throws 429 when locked; `recordFailure` reaches lockout after 5 calls; `resetOnSuccess` clears counter; lock auto-expires after `lockedUntil` passes
+- [X] T034 [P] Write unit tests for `AuthService` in `apps/api/src/auth/auth.service.spec.ts`: mock `JwtService` and `PrismaService`; test `login()` sets cookie and returns DTO; `logout()` adds jti to blacklist; `isBlacklisted()` returns true for blacklisted jti; `renewToken()` emits new cookie with fresh exp
+- [X] T035 [P] Write unit tests for `LocalStrategy` in `apps/api/src/auth/strategies/local.strategy.spec.ts`: mock Prisma + bcrypt + BruteForceService; test valid credentials → returns user; wrong password → 401 + recordFailure called; inactive user → 401; locked email → 429 propagated
+- [X] T036 [P] Write unit tests for `JwtStrategy` in `apps/api/src/auth/strategies/jwt.strategy.spec.ts`: test valid payload + active user → returns payload; blacklisted jti → 401; `activo = false` in DB → 401
 - [ ] T037 Write supertest integration test: login flow end-to-end in `apps/api/src/auth/auth.controller.spec.ts` (integration): `POST /auth/login` with seeded user → 200 + cookie; wrong password → 401; 5× wrong → 429; `POST /auth/logout` → 200 + cookie cleared; old token on `GET /auth/me` → 401; sliding window: token with < 1h life → GET /auth/me response includes new cookie
 
 ---
