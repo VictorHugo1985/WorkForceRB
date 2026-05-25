@@ -4,6 +4,8 @@ import { Pool } from 'pg';
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const OK = { code: '200', msg: 'success' };
 
+const RANGE_24H_MS = 24 * 60 * 60 * 1000;
+
 type TipoEvento = 'ENTRADA' | 'SALIDA' | 'DESCONOCIDO';
 type EstadoResolucion = 'RESUELTO' | 'SIN_RESOLVER' | 'DISPOSITIVO_DESCONOCIDO';
 
@@ -41,6 +43,16 @@ async function processRecord(record: any, fallbackRequestId: string) {
   const firstName    = record?.employee?.first_name ?? record?.firstName ?? null;
   const lastName     = record?.employee?.last_name  ?? record?.lastName  ?? null;
   const tipoEvento   = derivarTipoEvento(record);
+
+  // T024: warn if check_time is more than 24h in the past or in the future
+  const checktimeMs = new Date(checktime).getTime();
+  if (Math.abs(Date.now() - checktimeMs) > RANGE_24H_MS) {
+    console.warn('[crosschex-webhook] timestamp fuera de rango', {
+      requestId,
+      checktime,
+      diffHours: ((Date.now() - checktimeMs) / 3600000).toFixed(1),
+    });
+  }
 
   const client = await pool.connect();
   try {
@@ -85,7 +97,13 @@ async function processRecord(record: any, fallbackRequestId: string) {
        serialNumber, deviceName, workno, firstName, lastName],
     );
   } catch (err) {
-    console.error('[crosschex-webhook] record', requestId, (err as Error).message);
+    // T025: structured error log with context for debugging
+    console.error('[crosschex-webhook] error procesando record', {
+      requestId,
+      serialNumber,
+      workno,
+      error: (err as Error).message,
+    });
   } finally {
     client.release();
   }
@@ -94,8 +112,20 @@ async function processRecord(record: any, fallbackRequestId: string) {
 export async function POST(req: NextRequest) {
   const secret = process.env.CROSSCHEX_WEBHOOK_SECRET ?? '';
   const sign   = req.headers.get('authorize-sign') ?? '';
+  const ip     = req.headers.get('x-forwarded-for') ?? null;
 
+  // T019: audit log for unauthorized access (FR-008)
   if (!secret || sign !== secret) {
+    const client = await pool.connect();
+    try {
+      await client.query(
+        `INSERT INTO registros_auditoria (accion, descripcion, ip_origen)
+         VALUES ('WEBHOOK_ACCESO_NO_AUTORIZADO', 'authorize-sign inválido o ausente', $1)`,
+        [ip],
+      );
+    } catch { /* audit failure must not block the 401 response */ } finally {
+      client.release();
+    }
     return NextResponse.json({ code: '401', msg: 'unauthorized' }, { status: 401 });
   }
 

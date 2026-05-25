@@ -67,7 +67,7 @@
 ### Implementación US2
 
 - [X] T018 [US2] Retornar HTTP 401 `{"code":"401","msg":"unauthorized"}` ante firma ausente o inválida en `route.ts`
-- [ ] T019 [US2] Agregar audit log en `registros_auditoria` al rechazar con 401 (FR-008) en `route.ts`
+- [X] T019 [US2] Agregar audit log en `registros_auditoria` al rechazar con 401 (FR-008) en `route.ts`
 
 **T019 — Detalle de implementación**:
 ```typescript
@@ -82,7 +82,7 @@ try {
 } catch { /* no bloquear la respuesta por fallo de audit */ } finally { client.release(); }
 ```
 
-**Checkpoint**: US2 completa cuando T019 esté implementado y verificado.
+**Checkpoint**: ✅ US2 completa — T018 y T019 implementados.
 
 ---
 
@@ -109,8 +109,8 @@ try {
 
 **Purpose**: Gaps menores de robustez y observabilidad
 
-- [ ] T024 [P] Agregar warning log cuando `check_time` está más de 24h en el pasado o en el futuro en `apps/web/src/app/api/webhooks/crosschex/route.ts`
-- [ ] T025 [P] Agregar log de error estructurado (incluir `requestId`, `serialNumber`, mensaje) en el `catch` de `processRecord` en `route.ts`
+- [X] T024 [P] Agregar warning log cuando `check_time` está más de 24h en el pasado o en el futuro en `apps/web/src/app/api/webhooks/crosschex/route.ts`
+- [X] T025 [P] Agregar log de error estructurado (incluir `requestId`, `serialNumber`, mensaje) en el `catch` de `processRecord` en `route.ts`
 - [X] T026 Verificar escenarios del `quickstart.md` contra el endpoint en producción `https://jornalero.vercel.app/api/webhooks/crosschex`
 
 **T024 — Detalle de implementación**:
