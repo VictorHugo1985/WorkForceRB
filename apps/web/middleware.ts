@@ -13,6 +13,7 @@ export function middleware(request: NextRequest) {
 
   const isPublic =
     PUBLIC_PATHS.some((p) => pathname.startsWith(p)) ||
+    pathname.startsWith('/api/') ||
     pathname.startsWith('/_next/') ||
     pathname.startsWith('/static/') ||
     pathname.includes('.');
