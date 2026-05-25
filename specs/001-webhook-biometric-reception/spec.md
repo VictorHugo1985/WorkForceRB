@@ -11,6 +11,16 @@ integración, quiero recibir y persistir inmediatamente los eventos de marcaje b
 por CrossChex Cloud vía webhook, para que el procesamiento posterior de asistencia disponga siempre
 de datos completos y confiables."
 
+## Clarifications
+
+### Session 2026-05-25
+
+- Q: ¿Cuál es la fuente correcta del ID único de idempotencia? → A: `records[].uuid` dentro del payload JSON (comportamiento real de CrossChex Cloud).
+- Q: ¿Cómo debe almacenarse `checktime` en la base de datos? → A: Hora local Venezuela GMT-4 (UTC − 4h).
+- Q: ¿Comportamiento ante falla de BD durante procesamiento del webhook? → A: Responder HTTP 200 de todas formas; el evento se pierde y se registra en log de error.
+- Q: ¿Cómo manejar un `check_time` fuera de rango (futuro o >24h pasado)? → A: Persistir el evento sin importar el timestamp; registrar advertencia en log si está fuera de rango.
+- Q: ¿El panel de administración para eventos "sin resolver" está en el alcance de esta feature? → A: No; esta spec cubre solo recepción y persistencia del webhook. El panel admin es una feature separada.
+
 ## User Scenarios & Testing
 
 <!--
@@ -97,15 +107,21 @@ almacena con estado "sin resolver" y es visible para el administrador.
 2. **Given** existen eventos con estado "sin resolver",
    **When** un administrador accede al panel de gestión de eventos,
    **Then** puede visualizar la lista de eventos pendientes de asociación con su detalle completo.
+   *(Nota: este escenario está fuera del alcance de esta feature. La visualización y gestión
+   de eventos "sin resolver" corresponde a una feature administrativa separada.)*
 
 ---
 
 ### Edge Cases
 
 - ¿Qué ocurre si CrossChex envía un payload con campos obligatorios faltantes o tipos incorrectos?
-- ¿Qué ocurre si la base de datos no está disponible en el momento de la recepción?
+- Si la base de datos no está disponible al momento de la recepción, el sistema responde
+  HTTP 200 a CrossChex para evitar reintentos en cascada; el evento se pierde y el error
+  queda registrado en el log de aplicación. Pérdida aceptada para el MVP.
 - ¿Qué sucede si llegan múltiples eventos idénticos en ráfaga (duplicados en milisegundos)?
-- ¿Qué pasa si el timestamp del evento está en el futuro o más de 24 horas en el pasado?
+- Eventos con `check_time` en el futuro o más de 24 horas en el pasado se persisten sin
+  rechazo; el sistema registra una advertencia en el log de aplicación para trazabilidad.
+  No se bloquea la recepción por timestamp sospechoso.
 - ¿Qué ocurre si el volumen de eventos supera la capacidad de procesamiento síncrono?
 
 ## Requirements
@@ -124,8 +140,9 @@ almacena con estado "sin resolver" y es visible para el administrador.
 - **FR-005**: El sistema DEBE responder a CrossChex en menos de 5 segundos para el 99% de las
   solicitudes, a fin de evitar reintentos innecesarios.
 - **FR-006**: El sistema DEBE detectar y manejar eventos duplicados de forma idempotente
-  usando el campo `requestId` (UUID único incluido en los headers de cada webhook), respondiendo
-  HTTP 200 sin crear registros extra.
+  usando el campo `uuid` incluido en cada elemento del array `records[]` del payload JSON,
+  respondiendo HTTP 200 sin crear registros extra. El header HTTP `requestid` no es utilizado
+  como clave de idempotencia (CrossChex Cloud no lo envía de forma consistente).
 - **FR-007**: El sistema DEBE almacenar eventos con código de empleado no registrado con estado
   "sin resolver", sin rechazarlos.
 - **FR-008**: El sistema DEBE registrar en el log de auditoría todo intento de acceso no
@@ -142,19 +159,25 @@ almacena con estado "sin resolver" y es visible para el administrador.
   válida (incluyendo payloads malformados), a fin de evitar que CrossChex realice reintentos
   innecesarios; los errores de payload se registran internamente sin afectar la respuesta.
 
+**Fuera del alcance de esta feature**: la visualización y gestión administrativa de eventos
+con estado "sin resolver" o "dispositivo desconocido" es una feature separada. Esta spec cubre
+exclusivamente la recepción, autenticación y persistencia del webhook.
+
 ### Key Entities
 
 - **EventoBiométrico**: Registro de marcaje recibido de CrossChex. Atributos clave:
-  `requestId` (UUID único del webhook, usado como clave de idempotencia),
-  `checktime` (timestamp ISO 8601 del marcaje en el dispositivo),
-  `checktype` (código numérico del método de verificación: huella, facial, tarjeta, contraseña
-  o combinaciones),
+  `uuid` (UUID único por evento dentro de `records[]`, usado como clave de idempotencia),
+  `check_time` (timestamp ISO 8601 del marcaje en el dispositivo, enviado en UTC por CrossChex
+  y convertido a hora local Venezuela GMT-4 antes de persistir),
+  `check_type` (entero: 0 = entrada, 1 = salida),
   `device.serial_number` (número de serie del reloj biométrico),
   `device.name` (nombre del dispositivo),
   `employee.workno` (código del empleado en CrossChex),
   `employee.first_name` y `employee.last_name` (nombre del empleado según CrossChex),
   estado de resolución (resuelto / sin resolver / dispositivo desconocido),
   timestamp de recepción por el sistema, payload original completo.
+  **Nota de estructura**: CrossChex Cloud envuelve los eventos en un array `records[]` dentro
+  del body JSON; cada petición puede contener uno o más eventos.
 - **DispositivoBiométrico**: Reloj CrossChex registrado en el sistema. Atributos: identificador,
   número de serie (`serial_number`), nombre descriptivo. El secreto de autenticación del webhook
   es una configuración global del canal webhook (no un atributo por dispositivo).
@@ -180,7 +203,10 @@ almacena con estado "sin resolver" y es visible para el administrador.
 
 ## Assumptions
 
-- CrossChex Cloud envía eventos mediante HTTP POST con payload JSON.
+- CrossChex Cloud envía eventos mediante HTTP POST con payload JSON envuelto en `records[]`.
+- CrossChex Cloud envía `check_time` en UTC. El sistema lo convierte a hora local Venezuela
+  (GMT-4, UTC − 4h) antes de persistirlo. Todos los timestamps almacenados en
+  `eventos_biometricos_desglosados.checktime` reflejan hora local venezolana.
 - CrossChex incluye el token secreto en una cabecera HTTP de cada solicitud para autenticación.
 - CrossChex reintenta la entrega exactamente **2 veces en 1 minuto** si recibe respuesta no-2xx;
   por ello el sistema responde siempre HTTP 200 ante cualquier evento firmado válidamente
@@ -191,8 +217,9 @@ almacena con estado "sin resolver" y es visible para el administrador.
 - El formato del payload de CrossChex Cloud sigue la especificación oficial de su API de webhooks;
   los campos exactos se documentarán en la fase de planificación tras revisar la documentación
   del fabricante.
-- Un "evento duplicado" se identifica por el campo `requestId` (UUID), que CrossChex incluye
-  siempre en los headers de cada webhook y es único por entrega.
+- Un "evento duplicado" se identifica por el campo `uuid` dentro de cada elemento de
+  `records[]` en el payload JSON. CrossChex Cloud no envía un `requestId` único en los headers
+  HTTP de forma consistente; el UUID de idempotencia está en el payload.
 - La integración vía webhooks requiere que Anviz active el **Developer Mode** en la cuenta de
   CrossChex Cloud; este proceso es manual y tarda 1-2 días hábiles (solicitado en
   community.anviz.com indicando el Company ID). Es un prerrequisito externo bloqueante.
