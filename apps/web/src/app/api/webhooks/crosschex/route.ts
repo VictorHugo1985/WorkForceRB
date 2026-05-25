@@ -25,6 +25,12 @@ function normalizeRecords(body: any): any[] {
   return [body];
 }
 
+// CrossChex sends UTC; convert to Venezuela local time (GMT-4) for storage
+function toGMTMinus4(dateStr: string): Date {
+  const utc = new Date(dateStr);
+  return new Date(utc.getTime() - 4 * 60 * 60 * 1000);
+}
+
 async function processRecord(record: any, fallbackRequestId: string) {
   const requestId    = record?.uuid ?? fallbackRequestId;
   const serialNumber = String(record?.device?.serial_number ?? record?.deviceSn ?? '');
@@ -75,7 +81,7 @@ async function processRecord(record: any, fallbackRequestId: string) {
           device_name, employee_workno, employee_first_name, employee_last_name)
        VALUES ($1, $2, $3, $4::\"TipoEvento\", $5, $6, $7, $8, $9)
        ON CONFLICT (evento_id) DO NOTHING`,
-      [eventoId, new Date(checktime), checktype, tipoEvento,
+      [eventoId, toGMTMinus4(checktime), checktype, tipoEvento,
        serialNumber, deviceName, workno, firstName, lastName],
     );
   } catch (err) {
