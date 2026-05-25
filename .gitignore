@@ -39,3 +39,6 @@ Thumbs.db
 # Prisma
 *.db
 *.db-journal
+
+# Claude Code runtime lock
+.claude/scheduled_tasks.lock
