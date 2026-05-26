@@ -55,10 +55,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Insert colaborador
+    // Insert colaborador (actualizado_en has no DB default — Prisma sets it at app layer)
     const colRes = await client.query<{ id: string }>(
-      `INSERT INTO colaboradores (nombre, apellido, cedula, area_id, supervisor_id)
-       VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO colaboradores (nombre, apellido, cedula, area_id, supervisor_id, actualizado_en)
+       VALUES ($1, $2, $3, $4, $5, now())
        RETURNING id`,
       [nombre, apellido, cedula, area_id, supervisor_id ?? null],
     );
