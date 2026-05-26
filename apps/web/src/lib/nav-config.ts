@@ -1,0 +1,25 @@
+export interface NavItem {
+  label: string;
+  href: string;
+  roles: string[];
+}
+
+export const NAV_ITEMS: NavItem[] = [
+  { label: 'Inicio',               href: '/dashboard',     roles: ['ADMINISTRADOR', 'SUPERVISOR', 'CAJERO', 'COLABORADOR'] },
+  { label: 'Colaboradores',        href: '/colaboradores', roles: ['ADMINISTRADOR'] },
+  { label: 'Configuración',        href: '/configuracion', roles: ['ADMINISTRADOR'] },
+  { label: 'Liquidaciones',        href: '/liquidaciones', roles: ['ADMINISTRADOR', 'SUPERVISOR'] },
+  { label: 'Cola de Pagos',        href: '/pagos',         roles: ['ADMINISTRADOR', 'SUPERVISOR', 'CAJERO'] },
+  { label: 'Usuarios del Sistema', href: '/usuarios',      roles: ['ADMINISTRADOR'] },
+];
+
+export const ROUTE_ROLES: Record<string, string[]> = {
+  '/dashboard':     ['ADMINISTRADOR', 'SUPERVISOR', 'CAJERO', 'COLABORADOR'],
+  '/colaboradores': ['ADMINISTRADOR'],
+  '/configuracion': ['ADMINISTRADOR'],
+  '/liquidaciones': ['ADMINISTRADOR', 'SUPERVISOR'],
+  '/pagos':         ['ADMINISTRADOR', 'SUPERVISOR', 'CAJERO'],
+  '/usuarios':      ['ADMINISTRADOR'],
+};
+
+export const PUBLIC_ROUTES = ['/login', '/auth', '/api/auth/login', '/api/webhooks'];

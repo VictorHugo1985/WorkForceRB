@@ -13,6 +13,14 @@
 - Q: ¿Qué muestra la sección Inicio para cada rol? → A: Pantalla de bienvenida estática con accesos directos a las secciones del rol. Sin datos en vivo ni estadísticas. El contenido es el mismo para todos los roles, adaptado solo por los accesos disponibles.
 - Q: ¿Qué alcance tiene la cláusula "sin pérdida de datos no guardados si es posible" de FR-006? → A: La spec de navegación solo garantiza la redirección al login. La preservación de datos de formulario es responsabilidad de cada feature individual; la navegación no asume esa responsabilidad.
 
+### Session 2026-05-26
+
+- Q: ¿En qué capa de Next.js se implementa la protección de rutas (FR-004/FR-005)? → A: Next.js Middleware (`middleware.ts`) — intercepta cada request en el edge, verifica el JWT del cookie y redirige antes del render. Protección hermética sin flash de contenido.
+- Q: ¿Cómo detecta el cliente la expiración de sesión mientras el usuario navega (FR-006)? → A: Timer client-side: al cargar la sesión, calcula `exp - now` del JWT y programa un `setTimeout` que redirige al login cuando expira. Sin polling.
+- Q: ¿Qué alcance tiene la persistencia de estado de sección al volver a ella (US4)? → A: Sin persistencia de estado — US4 se limita al indicador visual de sección activa. Las secciones siempre cargan con su estado por defecto; preservar filtros/scroll es responsabilidad de cada feature individual.
+- Q: ¿La navegación debe ser responsive (mobile)? → A: Sí — responsive con menú colapsado: el mismo componente se adapta a pantallas pequeñas con patrón hamburger/drawer en mobile y menú completo en desktop.
+- Q: ¿Cómo define el Middleware la tabla de rutas → roles requeridos? → A: Tabla estática en `middleware.ts` — objeto de configuración que mapea prefijos de ruta a roles permitidos. Sin BD, evaluable en el edge sin latencia adicional.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Navegar con Acceso Filtrado por Rol (Priority: P1)
@@ -139,8 +147,9 @@ a Liquidaciones. El menú marca visualmente la sección activa en cada paso.
 
 2. **Given** el usuario navega a una sección distinta,
    **When** vuelve a una sección visitada anteriormente,
-   **Then** la sección se carga mostrando el estado en el que la dejó (por ejemplo,
-   el filtro de semana que tenía seleccionado).
+   **Then** la sección se carga con su estado por defecto. El indicador de sección
+   activa en el menú se actualiza correctamente. La preservación de filtros o scroll
+   es responsabilidad de cada feature individual, no de esta spec.
 
 ---
 
@@ -175,15 +184,15 @@ a Liquidaciones. El menú marca visualmente la sección activa en cada paso.
 
 **Protección de Rutas**
 
-- **FR-004**: Toda ruta de la aplicación DEBE estar protegida. El acceso a cualquier ruta sin sesión activa redirige al inicio de sesión, preservando la URL destino para redirigir tras el login exitoso.
-- **FR-005**: El acceso a una ruta de sección restringida por parte de un usuario autenticado sin el rol requerido DEBE redirigir al Inicio sin mostrar ningún contenido de la sección restringida y sin mensaje de error técnico.
-- **FR-006**: Al expirar la sesión mientras el usuario está navegando, el sistema DEBE redirigir al inicio de sesión con un mensaje que indique la expiración. La preservación de datos de formulario no guardados es responsabilidad de cada feature individual; esta spec no la garantiza.
+- **FR-004**: Toda ruta de la aplicación DEBE estar protegida mediante Next.js Middleware (`middleware.ts`) ejecutado en el edge, que verifica el JWT del cookie en cada request antes del render. El acceso sin sesión activa redirige al inicio de sesión, preservando la URL destino para redirigir tras el login exitoso.
+- **FR-005**: El Middleware DEBE contener una tabla estática que mapea prefijos de ruta a los roles permitidos (e.g., `{ '/colaboradores': ['ADMINISTRADOR'] }`). El Middleware verifica que el rol del usuario esté en esa tabla antes de permitir el render. El acceso a una ruta restringida redirige al Inicio sin renderizar ningún contenido y sin mensaje de error técnico.
+- **FR-006**: Al cargar la sesión, el cliente DEBE leer el campo `exp` del JWT, calcular `exp - now` y programar un `setTimeout` que redirige al inicio de sesión con un mensaje de sesión expirada cuando se cumpla el tiempo. La preservación de datos de formulario no guardados es responsabilidad de cada feature individual; esta spec no la garantiza.
 
 **Experiencia de Navegación**
 
 - **FR-007**: La sección mostrada por defecto tras un login exitoso DEBE ser siempre Inicio, independientemente del rol, a menos que exista una URL destino preservada del intento de acceso anterior.
 - **FR-007B**: La sección Inicio DEBE mostrar una pantalla de bienvenida estática con el nombre del usuario y accesos directos (enlaces o tarjetas) a cada sección accesible para su rol. No muestra datos en tiempo real ni estadísticas de operación. Para el rol COLABORADOR, la pantalla muestra únicamente el mensaje de bienvenida sin accesos directos a otras secciones.
-- **FR-008**: El menú de navegación DEBE ser accesible desde cualquier sección de la aplicación sin necesidad de volver a una página raíz.
+- **FR-008**: El menú de navegación DEBE ser accesible desde cualquier sección de la aplicación sin necesidad de volver a una página raíz. En pantallas pequeñas (mobile), el menú DEBE colapsar en un patrón hamburger/drawer; en desktop muestra el menú completo. El mismo componente sirve ambos formatos.
 - **FR-009**: El sistema DEBE mostrar en la interfaz el nombre del usuario autenticado y sus roles activos en algún lugar visible (por ejemplo, encabezado o menú de perfil).
 - **FR-010**: El usuario DEBE poder cerrar sesión desde cualquier sección de la aplicación (spec 005).
 
@@ -204,6 +213,6 @@ a Liquidaciones. El menú marca visualmente la sección activa en cada paso.
 - La URL destino preservada antes del login se almacena en la sesión del navegador (no en el servidor). Si el usuario cierra el navegador antes de hacer login, la URL destino se descarta.
 - La sección "Cola de Pagos" para el rol SUPERVISOR es la misma vista de spec 007 con restricción de solo lectura; no es una vista separada.
 - El rol COLABORADOR no tiene secciones de trabajo en el MVP. La pantalla de Inicio actúa como su destino final hasta que se definan funcionalidades específicas para ese rol en features futuras.
-- Esta feature no define el diseño visual ni los componentes de UI del menú (sidebar, topbar, etc.); eso es responsabilidad de la fase de diseño/implementación. La spec define el comportamiento y las reglas de acceso.
-- La preservación del estado de una sección al volver a ella (filtros activos, scroll, etc.) se refiere al estado de la sesión de navegación actual, no persistencia entre sesiones.
+- Esta feature no define el diseño visual exacto del menú (colores, tipografía, iconos); eso es responsabilidad de la fase de implementación. La spec define el comportamiento, las reglas de acceso y el requisito de responsividad (hamburger/drawer en mobile, menú completo en desktop).
+- La preservación del estado de una sección al volver a ella (filtros activos, scroll, etc.) está fuera del alcance de esta feature. Cada feature individual es responsable de gestionar su propio estado.
 - Esta feature depende de spec 005 (login/logout) para la gestión de sesión y de spec 009 (creación de usuarios) para la asignación de roles.
