@@ -1,3 +1,4 @@
+import { NextRequest, NextResponse } from 'next/server';
 import { Pool } from 'pg';
 import { SignJWT, jwtVerify } from 'jose';
 
@@ -80,4 +81,29 @@ export async function signToken(
 export async function verifyToken(token: string): Promise<AuthPayload> {
   const { payload } = await jwtVerify(token, secret);
   return payload as unknown as AuthPayload;
+}
+
+export async function checkAdminRole(
+  req: NextRequest,
+): Promise<{ userId: string } | NextResponse> {
+  const token = req.cookies.get(COOKIE_NAME)?.value;
+  if (!token) {
+    return NextResponse.json({ error: 'UNAUTHORIZED' }, { status: 401 });
+  }
+  let payload: AuthPayload;
+  try {
+    payload = await verifyToken(token);
+  } catch {
+    return NextResponse.json({ error: 'UNAUTHORIZED' }, { status: 401 });
+  }
+  if (isBlacklisted(payload.jti)) {
+    return NextResponse.json({ error: 'UNAUTHORIZED' }, { status: 401 });
+  }
+  if (!payload.roles.includes('ADMINISTRADOR')) {
+    return NextResponse.json(
+      { error: 'FORBIDDEN', required_role: 'ADMINISTRADOR' },
+      { status: 403 },
+    );
+  }
+  return { userId: payload.sub };
 }

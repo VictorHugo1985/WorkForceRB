@@ -1,5 +1,6 @@
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
+import Link from 'next/link';
 import { LogoutButton } from '@/components/auth/LogoutButton';
 import { verifyToken, isBlacklisted } from '@/lib/auth-server';
 
@@ -29,6 +30,13 @@ export default async function AppLayout({
       <header className="border-b border-gray-200 bg-white px-6 py-3">
         <div className="mx-auto flex max-w-7xl items-center justify-between">
           <span className="font-semibold text-gray-900">Workforce</span>
+          <nav className="flex items-center gap-4">
+            {user.roles.includes('ADMINISTRADOR') && (
+              <Link href="/colaboradores/nuevo" className="text-sm text-blue-600 hover:text-blue-800 hover:underline">
+                Registrar colaborador
+              </Link>
+            )}
+          </nav>
           <div className="flex items-center gap-3">
             <span className="text-sm text-gray-600">{user.nombre}</span>
             <LogoutButton />
