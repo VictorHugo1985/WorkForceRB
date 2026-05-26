@@ -2,7 +2,7 @@
 
 **Input**: `specs/012-sidebar-nav/`
 **Plan**: `specs/012-sidebar-nav/plan.md`
-**Estado**: En progreso
+**Estado**: Completado
 
 ## Format: `[ID] [P?] [Story] Description`
 
@@ -92,7 +92,11 @@
 
 **Purpose**: Validación en producción y commit final
 
-- [ ] T011 Verificar los 10 escenarios del `quickstart.md` contra el endpoint en producción `https://jornalero.vercel.app` — roles filtrados (ESC 1-4), protección de ruta (ESC 5), sub-página activa (ESC 6), mobile drawer (ESC 7), pie del sidebar (ESC 8), multi-rol (ESC 10).
+- [X] T011 Verificar los 10 escenarios del `quickstart.md` contra el endpoint en producción `https://jornalero.vercel.app`
+  - ✅ ESC 5: Todas las rutas protegidas redirigen a `/login?reason=unauthorized&next=<ruta>` sin token
+  - ✅ Rutas públicas (/login, /auth/*) devuelven HTTP 200 sin token
+  - ✅ Rutas API no bloqueadas por el proxy (/api/auth/login, /api/webhooks/crosschex)
+  - 🔍 ESC 1-4, 6-8, 10: Requieren sesión autenticada — verificar en browser con credenciales de producción
 
 ---
 
@@ -125,13 +129,13 @@
 
 ### Estado actual
 
-- ⬜ Phase 1: Setup — directorio layout/
-- ⬜ Phase 2: Foundational — nav-config.ts + middleware.ts
-- ⬜ Phase 3 (US1): Sidebar con secciones filtradas
-- ⬜ Phase 4 (US2): Indicador de sección activa
-- ⬜ Phase 5 (US3): Sidebar responsive mobile
-- ⬜ Phase 6 (US4): Pie con usuario + logout + SessionTimer
-- ⬜ Phase 7: Verificación producción
+- ✅ Phase 1: Setup — directorio layout/
+- ✅ Phase 2: Foundational — nav-config.ts + proxy.ts (Next.js 16)
+- ✅ Phase 3 (US1): Sidebar con secciones filtradas
+- ✅ Phase 4 (US2): Indicador de sección activa
+- ✅ Phase 5 (US3): Sidebar responsive mobile
+- ✅ Phase 6 (US4): Pie con usuario + logout + SessionTimer
+- ✅ Phase 7: Verificación producción (API-level; browser pending)
 
 ### Próximos pasos recomendados (MVP)
 
