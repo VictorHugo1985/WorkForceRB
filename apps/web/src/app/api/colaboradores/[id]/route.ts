@@ -8,6 +8,7 @@ const EditSchema = z.object({
   cedula: z.string().min(1),
   area_id: z.string().uuid(),
   supervisor_id: z.string().uuid().nullable().optional(),
+  codigos: z.array(z.object({ id: z.string().uuid(), workno: z.string().min(1) })).optional(),
 });
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -33,7 +34,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     return NextResponse.json({ error: 'VALIDATION_ERROR', fields }, { status: 400 });
   }
 
-  const { nombre, apellido, cedula, area_id, supervisor_id } = parsed.data;
+  const { nombre, apellido, cedula, area_id, supervisor_id, codigos } = parsed.data;
 
   const client = await pool.connect();
   try {
@@ -63,6 +64,15 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
        WHERE id = $6`,
       [nombre, apellido, cedula, area_id, supervisor_id ?? null, id],
     );
+
+    if (codigos && codigos.length > 0) {
+      for (const codigo of codigos) {
+        await client.query(
+          `UPDATE codigos_colaborador SET codigo_biometrico = $1 WHERE id = $2 AND colaborador_id = $3`,
+          [codigo.workno, codigo.id, id],
+        );
+      }
+    }
 
     try {
       const ip = req.headers.get('x-forwarded-for') ?? null;

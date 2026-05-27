@@ -21,7 +21,7 @@ export default function Step3Tarifa() {
         control={control}
         render={({ field }) => (
           <TextField
-            label="Tarifa por hora (COP)"
+            label="Tarifa por hora (Bs.)"
             type="number"
             value={field.value ?? ''}
             onChange={(e) => field.onChange(e.target.value === '' ? null : Number(e.target.value))}

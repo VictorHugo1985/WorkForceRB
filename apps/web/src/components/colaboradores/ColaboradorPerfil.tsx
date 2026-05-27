@@ -22,6 +22,13 @@ import Select from '@mui/material/Select';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 
+interface CodigoBiometrico {
+  id: string;
+  workno: string;
+  activo: boolean;
+  dispositivo: { id: string; nombre: string; numero_serie: string };
+}
+
 interface PerfilData {
   id: string;
   nombre: string;
@@ -33,12 +40,7 @@ interface PerfilData {
   supervisor: { id: string; nombre: string; apellido: string } | null;
   tarifa_vigente: { id: string; valor: number; unidad: string; vigente_desde: string } | null;
   horario_vigente: { id: string; umbral_horas_extra: number; vigente_desde: string } | null;
-  codigos_biometricos: Array<{
-    id: string;
-    workno: string;
-    activo: boolean;
-    dispositivo: { id: string; nombre: string; numero_serie: string };
-  }>;
+  codigos_biometricos: CodigoBiometrico[];
 }
 
 interface ColaboradorPerfilProps {
@@ -63,6 +65,11 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
+function formatDate(dateStr: string): string {
+  const [y, m, d] = dateStr.split('-');
+  return `${d}/${m}/${y}`;
+}
+
 export default function ColaboradorPerfil({ perfil }: ColaboradorPerfilProps) {
   const [data, setData] = useState({
     nombre: perfil.nombre,
@@ -72,6 +79,10 @@ export default function ColaboradorPerfil({ perfil }: ColaboradorPerfilProps) {
     area: perfil.area,
     supervisor: perfil.supervisor,
   });
+  const [localCodigos, setLocalCodigos] = useState<CodigoBiometrico[]>(perfil.codigos_biometricos);
+  const [worknos, setWorknos] = useState<Record<string, string>>(
+    Object.fromEntries(perfil.codigos_biometricos.map((c) => [c.id, c.workno])),
+  );
 
   const [isEditing, setIsEditing] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
@@ -105,6 +116,7 @@ export default function ColaboradorPerfil({ perfil }: ColaboradorPerfilProps) {
       area_id: data.area?.id ?? '',
       supervisor_id: data.supervisor?.id ?? null,
     });
+    setWorknos(Object.fromEntries(localCodigos.map((c) => [c.id, c.workno])));
     setEditError(null);
     setEditSuccess(false);
     setIsEditing(true);
@@ -117,10 +129,11 @@ export default function ColaboradorPerfil({ perfil }: ColaboradorPerfilProps) {
 
   async function onEditSubmit(values: EditFormValues) {
     setEditError(null);
+    const codigos = localCodigos.map((c) => ({ id: c.id, workno: worknos[c.id] ?? c.workno }));
     const res = await fetch(`/api/colaboradores/${perfil.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(values),
+      body: JSON.stringify({ ...values, codigos }),
     });
     const json = await res.json();
     if (res.status === 409) {
@@ -141,6 +154,7 @@ export default function ColaboradorPerfil({ perfil }: ColaboradorPerfilProps) {
       area: areaObj ? { id: areaObj.id, nombre: areaObj.nombre } : null,
       supervisor: supObj ? { id: supObj.id, nombre: supObj.nombre, apellido: supObj.apellido } : null,
     }));
+    setLocalCodigos((prev) => prev.map((c) => ({ ...c, workno: worknos[c.id] ?? c.workno })));
     setIsEditing(false);
     setEditSuccess(true);
   }
@@ -180,7 +194,6 @@ export default function ColaboradorPerfil({ perfil }: ColaboradorPerfilProps) {
           Este colaborador está inactivo y no resolverá nuevos eventos biométricos.
         </Alert>
       )}
-
       {editSuccess && (
         <Alert severity="success" sx={{ mb: 2 }} onClose={() => setEditSuccess(false)}>
           Datos actualizados correctamente.
@@ -203,12 +216,7 @@ export default function ColaboradorPerfil({ perfil }: ColaboradorPerfilProps) {
                 Editar
               </Button>
               {data.activo ? (
-                <Button
-                  size="small"
-                  variant="outlined"
-                  color="error"
-                  onClick={() => setBajaDialogOpen(true)}
-                >
+                <Button size="small" variant="outlined" color="error" onClick={() => setBajaDialogOpen(true)}>
                   Dar de baja
                 </Button>
               ) : (
@@ -221,6 +229,7 @@ export default function ColaboradorPerfil({ perfil }: ColaboradorPerfilProps) {
         </Box>
       </Box>
 
+      {/* ── Datos personales ── */}
       <Typography variant="subtitle1" sx={{ fontWeight: 500, mt: 2, mb: 1 }}>Datos personales</Typography>
       <Divider sx={{ mb: 1 }} />
 
@@ -286,7 +295,27 @@ export default function ColaboradorPerfil({ perfil }: ColaboradorPerfilProps) {
               </FormControl>
             )}
           />
-          <Box sx={{ display: 'flex', gap: 1 }}>
+
+          {/* Códigos biométricos editables */}
+          {localCodigos.length > 0 && (
+            <>
+              <Typography variant="subtitle2" sx={{ fontWeight: 600, mt: 1 }}>
+                Códigos biométricos
+              </Typography>
+              {localCodigos.map((c) => (
+                <TextField
+                  key={c.id}
+                  label={`Workno — ${c.dispositivo.nombre}`}
+                  size="small"
+                  value={worknos[c.id] ?? ''}
+                  onChange={(e) => setWorknos((prev) => ({ ...prev, [c.id]: e.target.value }))}
+                  helperText={`Dispositivo: ${c.dispositivo.nombre} (S/N: ${c.dispositivo.numero_serie})`}
+                />
+              ))}
+            </>
+          )}
+
+          <Box sx={{ display: 'flex', gap: 1, pt: 1 }}>
             <Button
               type="submit"
               variant="contained"
@@ -313,14 +342,18 @@ export default function ColaboradorPerfil({ perfil }: ColaboradorPerfilProps) {
         </>
       )}
 
+      {/* ── Tarifa salarial ── (siempre visible) */}
       {!isEditing && (
         <>
           <Typography variant="subtitle1" sx={{ fontWeight: 500, mt: 3, mb: 1 }}>Tarifa salarial</Typography>
           <Divider sx={{ mb: 1 }} />
           {perfil.tarifa_vigente ? (
             <>
-              <Row label="Tarifa por hora" value={`${Number(perfil.tarifa_vigente.valor).toLocaleString()} ${perfil.tarifa_vigente.unidad}`} />
-              <Row label="Vigente desde" value={perfil.tarifa_vigente.vigente_desde} />
+              <Row
+                label="Tarifa por hora"
+                value={`${Number(perfil.tarifa_vigente.valor).toLocaleString('es-VE')} Bs.`}
+              />
+              <Row label="Vigente desde" value={formatDate(perfil.tarifa_vigente.vigente_desde)} />
             </>
           ) : (
             <Alert severity="warning" sx={{ mt: 1 }}>Sin tarifa propia — se usará la tarifa global al liquidar.</Alert>
@@ -331,7 +364,7 @@ export default function ColaboradorPerfil({ perfil }: ColaboradorPerfilProps) {
           {perfil.horario_vigente ? (
             <>
               <Row label="Umbral horas extra / día" value={`${perfil.horario_vigente.umbral_horas_extra} h`} />
-              <Row label="Vigente desde" value={perfil.horario_vigente.vigente_desde} />
+              <Row label="Vigente desde" value={formatDate(perfil.horario_vigente.vigente_desde)} />
             </>
           ) : (
             <Alert severity="info" sx={{ mt: 1 }}>Sin horario propio — hereda la configuración global.</Alert>
@@ -339,10 +372,10 @@ export default function ColaboradorPerfil({ perfil }: ColaboradorPerfilProps) {
 
           <Typography variant="subtitle1" sx={{ fontWeight: 500, mt: 3, mb: 1 }}>Códigos biométricos</Typography>
           <Divider sx={{ mb: 1 }} />
-          {perfil.codigos_biometricos.length === 0 ? (
+          {localCodigos.length === 0 ? (
             <Alert severity="warning">Sin código biométrico asignado. El colaborador no puede resolver marcajes.</Alert>
           ) : (
-            perfil.codigos_biometricos.map((c) => (
+            localCodigos.map((c) => (
               <Box key={c.id} sx={{ display: 'flex', justifyContent: 'space-between', py: 1 }}>
                 <Typography variant="body2" color="text.secondary">
                   {c.dispositivo.nombre} (S/N: {c.dispositivo.numero_serie})

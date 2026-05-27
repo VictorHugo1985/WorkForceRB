@@ -100,7 +100,7 @@ export async function POST(req: NextRequest) {
       try {
         await client.query(
           `INSERT INTO configuraciones_reglas (tipo, clave, valor, unidad, aplica_a, colaborador_id, vigente_desde, creado_por)
-           VALUES ('TARIFA_HORA', 'Tarifa hora ordinaria', $1, 'COP', 'COLABORADOR', $2, $3, $4)`,
+           VALUES ('TARIFA_HORA', 'Tarifa hora ordinaria', $1, 'Bs.', 'COLABORADOR', $2, $3, $4)`,
           [tarifa_hora, colaboradorId, today, userId],
         );
         configuracionesCreadas.push('TARIFA_HORA');
