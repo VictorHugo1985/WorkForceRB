@@ -122,11 +122,8 @@ export default function RegistroWizard() {
         return;
       }
 
-      if (json.warnings?.length) {
-        setWarnings(json.warnings);
-      } else {
-        router.push(`/colaboradores/${json.colaborador.id}`);
-      }
+      setWarnings(json.warnings ?? []);
+      router.push(`/colaboradores/${json.colaborador.id}`);
     } catch {
       setGlobalError('Error de red. Intente nuevamente.');
     } finally {

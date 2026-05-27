@@ -8,6 +8,7 @@ import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
 import Alert from '@mui/material/Alert';
 import Link from 'next/link';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import ColaboradorPerfil from '@/components/colaboradores/ColaboradorPerfil';
 
 export default function ColaboradorPage() {
@@ -46,11 +47,18 @@ export default function ColaboradorPage() {
 
   return (
     <Box sx={{ p: 3 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h5" sx={{ fontWeight: 600 }}>Perfil del colaborador</Typography>
-        <Button component={Link} href="/colaboradores/nuevo" variant="outlined" size="small">
-          Registrar otro
+      <Box sx={{ mb: 3 }}>
+        <Button
+          component={Link}
+          href="/colaboradores"
+          variant="text"
+          size="small"
+          startIcon={<ArrowBackIcon />}
+          sx={{ mb: 1 }}
+        >
+          Volver a la lista
         </Button>
+        <Typography variant="h5" sx={{ fontWeight: 600 }}>Perfil del colaborador</Typography>
       </Box>
       {perfil && <ColaboradorPerfil perfil={perfil} />}
     </Box>

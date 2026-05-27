@@ -2,6 +2,33 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { pool, checkAdminRole } from '@/lib/auth-server';
 
+export async function GET(req: NextRequest) {
+  const auth = await checkAdminRole(req);
+  if (auth instanceof NextResponse) return auth;
+
+  const client = await pool.connect();
+  try {
+    const result = await client.query(
+      `SELECT c.id, c.nombre, c.apellido, c.cedula, c.activo,
+              a.id AS area_id, a.nombre AS area_nombre
+       FROM colaboradores c
+       LEFT JOIN areas a ON a.id = c.area_id
+       ORDER BY c.apellido, c.nombre`,
+    );
+    const colaboradores = result.rows.map((r) => ({
+      id: r.id,
+      nombre: r.nombre,
+      apellido: r.apellido,
+      cedula: r.cedula,
+      activo: r.activo,
+      area: r.area_id ? { id: r.area_id, nombre: r.area_nombre } : null,
+    }));
+    return NextResponse.json({ colaboradores });
+  } finally {
+    client.release();
+  }
+}
+
 const CodigoBiometricoSchema = z.object({
   dispositivo_id: z.string().uuid(),
   workno: z.string().min(1),
