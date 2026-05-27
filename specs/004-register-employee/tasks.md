@@ -2,7 +2,7 @@
 
 **Input**: `specs/004-register-employee/`
 **Plan**: `specs/004-register-employee/plan.md`
-**Estado**: Pendiente de implementación.
+**Estado**: Implementación completa (2026-05-26). Desplegada en Vercel.
 
 ## Format: `[ID] [P?] [Story] Description`
 
@@ -16,10 +16,10 @@
 
 **Purpose**: Migración de BD y creación de estructura de directorios
 
-- [ ] T001 Ejecutar migración SQL en Supabase: `CREATE TABLE areas (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), nombre TEXT NOT NULL UNIQUE, activo BOOLEAN NOT NULL DEFAULT true, creado_en TIMESTAMPTZ NOT NULL DEFAULT now())` y `ALTER TABLE colaboradores ADD COLUMN area_id UUID REFERENCES areas(id) ON DELETE SET NULL`
-- [ ] T002 Insertar seed de áreas iniciales en Supabase: 'Producción', 'Bodega', 'Administración', 'Seguridad', 'Mantenimiento'
-- [ ] T003 Crear estructura de directorios para Route Handlers: `apps/web/src/app/api/colaboradores/`, `apps/web/src/app/api/colaboradores/[id]/`, `apps/web/src/app/api/areas/`, `apps/web/src/app/api/dispositivos/`, `apps/web/src/app/api/usuarios/supervisores/`
-- [ ] T004 Crear estructura de directorios para UI: `apps/web/src/app/(app)/colaboradores/nuevo/` y `apps/web/src/components/colaboradores/steps/`
+- [X] T00- [ ] T001 Ejecutar migración SQL en Supabase: `CREATE TABLE areas (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), nombre TEXT NOT NULL UNIQUE, activo BOOLEAN NOT NULL DEFAULT true, creado_en TIMESTAMPTZ NOT NULL DEFAULT now())` y `ALTER TABLE colaboradores ADD COLUMN area_id UUID REFERENCES areas(id) ON DELETE SET NULL`
+- [X] T00- [ ] T002 Insertar seed de áreas iniciales en Supabase: 'Producción', 'Bodega', 'Administración', 'Seguridad', 'Mantenimiento'
+- [X] T00- [ ] T003 Crear estructura de directorios para Route Handlers: `apps/web/src/app/api/colaboradores/`, `apps/web/src/app/api/colaboradores/[id]/`, `apps/web/src/app/api/areas/`, `apps/web/src/app/api/dispositivos/`, `apps/web/src/app/api/usuarios/supervisores/`
+- [X] T00- [ ] T004 Crear estructura de directorios para UI: `apps/web/src/app/(app)/colaboradores/nuevo/` y `apps/web/src/components/colaboradores/steps/`
 
 ---
 
@@ -27,10 +27,10 @@
 
 **Purpose**: Helper de autorización compartido y endpoints de catálogo usados por el wizard
 
-- [ ] T005 Agregar función `checkAdminRole(req: NextRequest): Promise<{ userId: string } | NextResponse>` en `apps/web/src/lib/auth-server.ts` — verifica JWT via `verifyToken()`, comprueba que `payload.roles` incluya `'ADMINISTRADOR'`, retorna userId o NextResponse 401/403
-- [ ] T006 [P] Implementar `GET /api/areas` en `apps/web/src/app/api/areas/route.ts` — retorna `{ areas: [{id, nombre}] }` de la tabla `areas` WHERE activo = true, requiere JWT válido (checkAdminRole)
-- [ ] T007 [P] Implementar `GET /api/dispositivos` en `apps/web/src/app/api/dispositivos/route.ts` — retorna `{ dispositivos: [{id, nombre, numero_serie}] }` de `dispositivos_biometricos` WHERE activo = true, requiere JWT válido
-- [ ] T008 [P] Implementar `GET /api/usuarios/supervisores` en `apps/web/src/app/api/usuarios/supervisores/route.ts` — retorna `{ supervisores: [{id, nombre, apellido}] }` de `usuarios` JOIN `usuario_roles` WHERE rol IN ('ADMINISTRADOR','SUPERVISOR') AND activo = true, requiere JWT
+- [X] T00- [ ] T005 Agregar función `checkAdminRole(req: NextRequest): Promise<{ userId: string } | NextResponse>` en `apps/web/src/lib/auth-server.ts` — verifica JWT via `verifyToken()`, comprueba que `payload.roles` incluya `'ADMINISTRADOR'`, retorna userId o NextResponse 401/403
+- [X] T00- [ ] T006 [P] Implementar `GET /api/areas` en `apps/web/src/app/api/areas/route.ts` — retorna `{ areas: [{id, nombre}] }` de la tabla `areas` WHERE activo = true, requiere JWT válido (checkAdminRole)
+- [X] T00- [ ] T007 [P] Implementar `GET /api/dispositivos` en `apps/web/src/app/api/dispositivos/route.ts` — retorna `{ dispositivos: [{id, nombre, numero_serie}] }` de `dispositivos_biometricos` WHERE activo = true, requiere JWT válido
+- [X] T00- [ ] T008 [P] Implementar `GET /api/usuarios/supervisores` en `apps/web/src/app/api/usuarios/supervisores/route.ts` — retorna `{ supervisores: [{id, nombre, apellido}] }` de `usuarios` JOIN `usuario_roles` WHERE rol IN ('ADMINISTRADOR','SUPERVISOR') AND activo = true, requiere JWT
 
 **Checkpoint**: ✅ Foundation lista — las tres historias de usuario pueden implementarse.
 
@@ -46,26 +46,26 @@
 
 #### Backend
 
-- [ ] T009 [US1] Implementar `POST /api/colaboradores` en `apps/web/src/app/api/colaboradores/route.ts` — validación Zod de campos obligatorios (nombre, apellido, cedula, area_id): retornar 400 con `{ error: "VALIDATION_ERROR", fields: {...} }` si fallan
-- [ ] T010 [US1] Implementar lógica de inserción en `POST /api/colaboradores/route.ts`:
+- [X] T00- [ ] T009 [US1] Implementar `POST /api/colaboradores` en `apps/web/src/app/api/colaboradores/route.ts` — validación Zod de campos obligatorios (nombre, apellido, cedula, area_id): retornar 400 con `{ error: "VALIDATION_ERROR", fields: {...} }` si fallan
+- [X] T010 [US1] Implementar lógica de inserción en `POST /api/colaboradores/route.ts`:
   - INSERT INTO colaboradores (nombre, apellido, cedula, area_id, supervisor_id) — si falla, retornar error
   - Si tarifa_hora: INSERT INTO configuraciones_reglas (tipo='TARIFA_HORA', aplica_a='COLABORADOR', colaborador_id, valor, unidad='COP', vigente_desde=hoy) — best-effort: errores a warnings[]
   - Si umbral_horas_extra: INSERT INTO configuraciones_reglas (tipo='UMBRAL_HORA_EXTRA', aplica_a='COLABORADOR', colaborador_id, valor, unidad='horas', vigente_desde=hoy) — best-effort
   - Si codigo_biometrico: INSERT INTO codigos_colaborador (colaborador_id, dispositivo_id, codigo_biometrico) — best-effort: PG 23505 → warning
   - Retornar HTTP 201 `{ colaborador, configuraciones_creadas, codigo_biometrico_creado, warnings }`
-- [ ] T011 [US1] Implementar audit log en `POST /api/colaboradores/route.ts` — tras crear colaborador: INSERT INTO registros_auditoria (accion='COLABORADOR_REGISTRADO', entidad_tipo='Colaborador', entidad_id, usuario_id, datos_nuevos=JSON del colaborador creado, descripcion) — best-effort
+- [X] T011 [US1] Implementar audit log en `POST /api/colaboradores/route.ts` — tras crear colaborador: INSERT INTO registros_auditoria (accion='COLABORADOR_REGISTRADO', entidad_tipo='Colaborador', entidad_id, usuario_id, datos_nuevos=JSON del colaborador creado, descripcion) — best-effort
 
 #### Frontend — Wizard
 
-- [ ] T012 [US1] Crear componente `RegistroWizard.tsx` en `apps/web/src/components/colaboradores/RegistroWizard.tsx` — MUI `<Stepper>` con 6 pasos, `useForm` de React Hook Form con `FormProvider`, estado `activeStep`, botones "Anterior"/"Siguiente"/"Confirmar", manejo de loading y errores globales
-- [ ] T013 [P] [US1] Implementar `Step1DatosPersonales.tsx` en `apps/web/src/components/colaboradores/steps/` — campos nombre (required), apellido (required), cedula (required), validación Zod inline, usa `useFormContext()`
-- [ ] T014 [P] [US1] Implementar `Step2AreaSupervisor.tsx` en `apps/web/src/components/colaboradores/steps/` — MUI `<Select>` para area_id (required, carga GET /api/areas al montar), MUI `<Select>` para supervisor_id (optional, carga GET /api/usuarios/supervisores), validación Zod
-- [ ] T015 [P] [US1] Implementar `Step3Tarifa.tsx` en `apps/web/src/components/colaboradores/steps/` — campo tarifa_hora opcional (número COP), texto aclaratorio "Si no se configura, se usará la tarifa global vigente al liquidar"
-- [ ] T016 [P] [US1] Implementar `Step4Horario.tsx` en `apps/web/src/components/colaboradores/steps/` — campo umbral_horas_extra opcional (horas decimales), texto "Si no se configura, se hereda la configuración global"
-- [ ] T017 [P] [US1] Implementar `Step5CodigoBiometrico.tsx` en `apps/web/src/components/colaboradores/steps/` — MUI `<Select>` para dispositivo_id (carga GET /api/dispositivos), campo workno (string), ambos opcionales; si no hay dispositivos registrados mostrar advertencia
-- [ ] T018 [US1] Implementar `Step6Confirmacion.tsx` en `apps/web/src/components/colaboradores/steps/` — tabla resumen de todos los campos capturados en los pasos 1-5; botón "Confirmar registro" que llama a POST /api/colaboradores con todos los datos; si 201 con warnings[] mostrar MUI `<Alert severity="warning">` por cada warning; si error mostrar `<Alert severity="error">`
-- [ ] T019 [US1] Crear página `apps/web/src/app/(app)/colaboradores/nuevo/page.tsx` — renderiza `<RegistroWizard />`, título "Registrar Nuevo Colaborador", breadcrumb de navegación
-- [ ] T020 [US1] Conectar `Step6Confirmacion.tsx` al resultado de la API — si HTTP 201 exitoso (sin warnings críticos): redirigir a `/colaboradores/<id>` (perfil del colaborador creado)
+- [X] T012 [US1] Crear componente `RegistroWizard.tsx` en `apps/web/src/components/colaboradores/RegistroWizard.tsx` — MUI `<Stepper>` con 6 pasos, `useForm` de React Hook Form con `FormProvider`, estado `activeStep`, botones "Anterior"/"Siguiente"/"Confirmar", manejo de loading y errores globales
+- [X] T013 [P] [US1] Implementar `Step1DatosPersonales.tsx` en `apps/web/src/components/colaboradores/steps/` — campos nombre (required), apellido (required), cedula (required), validación Zod inline, usa `useFormContext()`
+- [X] T014 [P] [US1] Implementar `Step2AreaSupervisor.tsx` en `apps/web/src/components/colaboradores/steps/` — MUI `<Select>` para area_id (required, carga GET /api/areas al montar), MUI `<Select>` para supervisor_id (optional, carga GET /api/usuarios/supervisores), validación Zod
+- [X] T015 [P] [US1] Implementar `Step3Tarifa.tsx` en `apps/web/src/components/colaboradores/steps/` — campo tarifa_hora opcional (número COP), texto aclaratorio "Si no se configura, se usará la tarifa global vigente al liquidar"
+- [X] T016 [P] [US1] Implementar `Step4Horario.tsx` en `apps/web/src/components/colaboradores/steps/` — campo umbral_horas_extra opcional (horas decimales), texto "Si no se configura, se hereda la configuración global"
+- [X] T017 [P] [US1] Implementar `Step5CodigoBiometrico.tsx` en `apps/web/src/components/colaboradores/steps/` — MUI `<Select>` para dispositivo_id (carga GET /api/dispositivos), campo workno (string), ambos opcionales; si no hay dispositivos registrados mostrar advertencia
+- [X] T018 [US1] Implementar `Step6Confirmacion.tsx` en `apps/web/src/components/colaboradores/steps/` — tabla resumen de todos los campos capturados en los pasos 1-5; botón "Confirmar registro" que llama a POST /api/colaboradores con todos los datos; si 201 con warnings[] mostrar MUI `<Alert severity="warning">` por cada warning; si error mostrar `<Alert severity="error">`
+- [X] T019 [US1] Crear página `apps/web/src/app/(app)/colaboradores/nuevo/page.tsx` — renderiza `<RegistroWizard />`, título "Registrar Nuevo Colaborador", breadcrumb de navegación
+- [X] T020 [US1] Conectar `Step6Confirmacion.tsx` al resultado de la API — si HTTP 201 exitoso (sin warnings críticos): redirigir a `/colaboradores/<id>` (perfil del colaborador creado)
 
 **Checkpoint**: ✅ US1 completa — el admin puede registrar un colaborador completo desde el wizard y el evento biométrico se resuelve inmediatamente.
 
@@ -79,9 +79,9 @@
 
 ### Implementación US2
 
-- [ ] T021 [US2] Implementar detección de cédula duplicada en `apps/web/src/app/api/colaboradores/route.ts` — antes del INSERT: `SELECT id FROM colaboradores WHERE cedula = $1` (sin filtro activo); si existe retornar HTTP 409 `{ error: "DUPLICATE_CEDULA", message: "Ya existe un colaborador con la cédula ingresada." }`
-- [ ] T022 [US2] Manejar error PG `23505` en la inserción de `codigos_colaborador` en `route.ts` — capturar `err.code === '23505'` y añadir a `warnings[]`: `"Código biométrico no asignado: workno '{workno}' ya está activo en el dispositivo seleccionado."` en lugar de propagar el error
-- [ ] T023 [US2] Mostrar error de cédula duplicada en el wizard — en `RegistroWizard.tsx` o `Step1DatosPersonales.tsx`: si la API retorna 409, volver al paso 1 y mostrar `<Alert severity="error">` con el mensaje de DUPLICATE_CEDULA
+- [X] T021 [US2] Implementar detección de cédula duplicada en `apps/web/src/app/api/colaboradores/route.ts` — antes del INSERT: `SELECT id FROM colaboradores WHERE cedula = $1` (sin filtro activo); si existe retornar HTTP 409 `{ error: "DUPLICATE_CEDULA", message: "Ya existe un colaborador con la cédula ingresada." }`
+- [X] T022 [US2] Manejar error PG `23505` en la inserción de `codigos_colaborador` en `route.ts` — capturar `err.code === '23505'` y añadir a `warnings[]`: `"Código biométrico no asignado: workno '{workno}' ya está activo en el dispositivo seleccionado."` en lugar de propagar el error
+- [X] T023 [US2] Mostrar error de cédula duplicada en el wizard — en `RegistroWizard.tsx` o `Step1DatosPersonales.tsx`: si la API retorna 409, volver al paso 1 y mostrar `<Alert severity="error">` con el mensaje de DUPLICATE_CEDULA
 
 **Checkpoint**: ✅ US2 completa — intentos duplicados son rechazados con mensajes comprensibles.
 
@@ -95,9 +95,9 @@
 
 ### Implementación US3
 
-- [ ] T024 [US3] Implementar `GET /api/colaboradores/[id]` en `apps/web/src/app/api/colaboradores/[id]/route.ts` — query con JOINs: colaboradores + areas + (supervisor via usuarios) + configuraciones_reglas vigentes (TARIFA_HORA + UMBRAL_HORA_EXTRA, aplica_a=COLABORADOR, vigente_hasta IS NULL ORDER BY vigente_desde DESC LIMIT 1) + codigos_colaborador activos JOIN dispositivos_biometricos; retornar perfil completo según contrato
-- [ ] T025 [US3] Crear componente `ColaboradorPerfil.tsx` en `apps/web/src/components/colaboradores/ColaboradorPerfil.tsx` — muestra: nombre completo, cédula, área, supervisor (si aplica), tarifa vigente (con fecha inicio o "Hereda global"), horario vigente (o "Hereda global"), códigos biométricos activos (tabla con dispositivo y workno)
-- [ ] T026 [US3] Crear página `apps/web/src/app/(app)/colaboradores/[id]/page.tsx` — carga `GET /api/colaboradores/[id]` y renderiza `<ColaboradorPerfil />`; mostrar skeleton MUI mientras carga
+- [X] T024 [US3] Implementar `GET /api/colaboradores/[id]` en `apps/web/src/app/api/colaboradores/[id]/route.ts` — query con JOINs: colaboradores + areas + (supervisor via usuarios) + configuraciones_reglas vigentes (TARIFA_HORA + UMBRAL_HORA_EXTRA, aplica_a=COLABORADOR, vigente_hasta IS NULL ORDER BY vigente_desde DESC LIMIT 1) + codigos_colaborador activos JOIN dispositivos_biometricos; retornar perfil completo según contrato
+- [X] T025 [US3] Crear componente `ColaboradorPerfil.tsx` en `apps/web/src/components/colaboradores/ColaboradorPerfil.tsx` — muestra: nombre completo, cédula, área, supervisor (si aplica), tarifa vigente (con fecha inicio o "Hereda global"), horario vigente (o "Hereda global"), códigos biométricos activos (tabla con dispositivo y workno)
+- [X] T026 [US3] Crear página `apps/web/src/app/(app)/colaboradores/[id]/page.tsx` — carga `GET /api/colaboradores/[id]` y renderiza `<ColaboradorPerfil />`; mostrar skeleton MUI mientras carga
 
 **Checkpoint**: ✅ US3 completa — el admin puede verificar el perfil completo inmediatamente tras el registro.
 
@@ -107,8 +107,8 @@
 
 **Purpose**: Navegación, experiencia de usuario y validación en producción
 
-- [ ] T027 [P] Agregar link "Registrar colaborador" en la navegación de administración (`apps/web/src/app/(app)/layout.tsx` o componente de navegación existente) — apunta a `/colaboradores/nuevo`
-- [ ] T028 Verificar los 6 escenarios del `quickstart.md` contra el endpoint en producción `https://jornalero.vercel.app`
+- [X] T027 [P] Agregar link "Registrar colaborador" en la navegación de administración (`apps/web/src/app/(app)/layout.tsx` o componente de navegación existente) — apunta a `/colaboradores/nuevo`
+- [X] T028 Verificar los 6 escenarios del `quickstart.md` contra el endpoint en producción `https://jornalero.vercel.app`
 
 ---
 

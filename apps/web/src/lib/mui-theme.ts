@@ -1,20 +1,52 @@
 import { createTheme } from '@mui/material/styles';
 
 export const theme = createTheme({
+  palette: {
+    mode: 'light',
+    primary: {
+      main: '#1a3a5c',
+      light: '#2d5986',
+      dark: '#0f2238',
+    },
+    secondary: {
+      main: '#c8a94e',
+      light: '#ddc06e',
+      dark: '#a08930',
+    },
+    background: {
+      default: '#f5f6fa',
+      paper: '#ffffff',
+    },
+  },
   typography: {
+    fontFamily: 'var(--font-geist-sans), "Inter", system-ui, sans-serif',
     fontSize: 13,
-    fontFamily: 'var(--font-geist-sans), system-ui, -apple-system, sans-serif',
+    h5: { fontWeight: 600 },
+    h6: { fontWeight: 600 },
+  },
+  shape: {
+    borderRadius: 8,
   },
   components: {
+    MuiButton: {
+      styleOverrides: {
+        root: { textTransform: 'none', fontWeight: 600 },
+      },
+      defaultProps: { size: 'small' },
+    },
     MuiTextField: { defaultProps: { size: 'small' } },
     MuiFormControl: { defaultProps: { size: 'small' } },
     MuiSelect: { defaultProps: { size: 'small' } },
-    MuiButton: { defaultProps: { size: 'small' } },
     MuiChip: { defaultProps: { size: 'small' } },
+    MuiCard: {
+      styleOverrides: {
+        root: { boxShadow: '0 1px 4px rgba(0,0,0,0.08)' },
+      },
+    },
     MuiTableCell: {
       styleOverrides: {
         root: { padding: '6px 12px', fontSize: 13 },
-        head: { fontWeight: 600, backgroundColor: '#f8f9fa' },
+        head: { fontWeight: 600, backgroundColor: '#f5f6fa' },
       },
     },
     MuiTablePagination: {
@@ -28,16 +60,20 @@ export const theme = createTheme({
     },
     MuiDrawer: {
       styleOverrides: {
-        paper: { borderRight: '1px solid rgba(0,0,0,0.08)', boxShadow: 'none' },
+        paper: { border: 'none' },
       },
     },
     MuiListItemButton: {
       styleOverrides: {
         root: {
-          borderRadius: 4,
-          marginInline: 4,
-          '&.Mui-selected': { fontWeight: 600 },
+          borderRadius: 6,
+          marginInline: 6,
         },
+      },
+    },
+    MuiPaper: {
+      styleOverrides: {
+        outlined: { borderColor: 'rgba(0,0,0,0.1)' },
       },
     },
   },
