@@ -159,114 +159,125 @@ export function EventosClient({ dispositivos }: { dispositivos: Dispositivo[] })
   }
 
   return (
-    <Box sx={{ p: 2 }}>
-      <Typography variant="h5" sx={{ mb: 3, fontWeight: 600 }}>
+    <>
+      <Typography variant="h5" sx={{ fontWeight: 600, mb: 3 }}>
         Eventos Biométricos
       </Typography>
 
       {/* Filtros */}
-      <Paper sx={{ p: 2, mb: 3 }}>
-        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, alignItems: 'flex-end' }}>
-          <TextField
-            label="Fecha desde"
-            type="date"
-            size="small"
-            value={pendingFiltros.fecha_desde}
-            onChange={(e) => setPendingFiltros((f) => ({ ...f, fecha_desde: e.target.value }))}
-            slotProps={{ inputLabel: { shrink: true } }}
-            sx={{ minWidth: 160 }}
-          />
-          <TextField
-            label="Fecha hasta"
-            type="date"
-            size="small"
-            value={pendingFiltros.fecha_hasta}
-            onChange={(e) => setPendingFiltros((f) => ({ ...f, fecha_hasta: e.target.value }))}
-            slotProps={{ inputLabel: { shrink: true } }}
-            sx={{ minWidth: 160 }}
-          />
-          <TextField
-            label="Colaborador"
-            size="small"
-            value={pendingFiltros.colaborador}
-            onChange={(e) => setPendingFiltros((f) => ({ ...f, colaborador: e.target.value }))}
-            placeholder="Nombre, cédula o código"
-            sx={{ minWidth: 200 }}
-          />
-          <FormControl size="small" sx={{ minWidth: 150 }}>
-            <InputLabel>Tipo de evento</InputLabel>
-            <Select
-              label="Tipo de evento"
-              value={pendingFiltros.tipo_evento}
-              onChange={(e: SelectChangeEvent) =>
-                setPendingFiltros((f) => ({
-                  ...f,
-                  tipo_evento: e.target.value as FiltrosState['tipo_evento'],
-                }))
-              }
-            >
-              <MenuItem value="">Todos</MenuItem>
-              <MenuItem value="ENTRADA">Entrada</MenuItem>
-              <MenuItem value="SALIDA">Salida</MenuItem>
-              <MenuItem value="DESCONOCIDO">Desconocido</MenuItem>
-            </Select>
-          </FormControl>
-          <FormControl size="small" sx={{ minWidth: 180 }} disabled={dispositivos.length === 0}>
-            <InputLabel>Dispositivo</InputLabel>
-            <Select
-              label="Dispositivo"
-              value={pendingFiltros.dispositivo}
-              onChange={(e: SelectChangeEvent) =>
-                setPendingFiltros((f) => ({ ...f, dispositivo: e.target.value }))
-              }
-            >
-              <MenuItem value="">Todos</MenuItem>
-              {dispositivos.map((d) => (
-                <MenuItem key={d.id} value={d.nombre}>
-                  {d.nombre}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-          <FormControl size="small" sx={{ minWidth: 180 }}>
-            <InputLabel>Estado</InputLabel>
-            <Select
-              label="Estado"
-              value={pendingFiltros.estado}
-              onChange={(e: SelectChangeEvent) =>
-                setPendingFiltros((f) => ({
-                  ...f,
-                  estado: e.target.value as FiltrosState['estado'],
-                }))
-              }
-            >
-              <MenuItem value="">Todos</MenuItem>
-              <MenuItem value="RESUELTO">Resuelto</MenuItem>
-              <MenuItem value="SIN_RESOLVER">Sin resolver</MenuItem>
-              <MenuItem value="DISPOSITIVO_DESCONOCIDO">Dispositivo desconocido</MenuItem>
-            </Select>
-          </FormControl>
-          <Button variant="contained" onClick={handleFiltrar} disabled={loading}>
-            Filtrar
-          </Button>
-        </Box>
-      </Paper>
+      <Box
+        sx={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: 1.5,
+          alignItems: 'flex-end',
+          mb: 2,
+          pb: 2,
+          borderBottom: 1,
+          borderColor: 'divider',
+        }}
+      >
+        <TextField
+          label="Desde"
+          type="date"
+          value={pendingFiltros.fecha_desde}
+          onChange={(e) => setPendingFiltros((f) => ({ ...f, fecha_desde: e.target.value }))}
+          slotProps={{ inputLabel: { shrink: true } }}
+          sx={{ width: 150 }}
+        />
+        <TextField
+          label="Hasta"
+          type="date"
+          value={pendingFiltros.fecha_hasta}
+          onChange={(e) => setPendingFiltros((f) => ({ ...f, fecha_hasta: e.target.value }))}
+          slotProps={{ inputLabel: { shrink: true } }}
+          sx={{ width: 150 }}
+        />
+        <TextField
+          label="Colaborador"
+          value={pendingFiltros.colaborador}
+          onChange={(e) => setPendingFiltros((f) => ({ ...f, colaborador: e.target.value }))}
+          placeholder="Nombre, cédula o código"
+          sx={{ width: 200 }}
+        />
+        <FormControl sx={{ width: 140 }}>
+          <InputLabel>Tipo</InputLabel>
+          <Select
+            label="Tipo"
+            value={pendingFiltros.tipo_evento}
+            onChange={(e: SelectChangeEvent) =>
+              setPendingFiltros((f) => ({
+                ...f,
+                tipo_evento: e.target.value as FiltrosState['tipo_evento'],
+              }))
+            }
+          >
+            <MenuItem value="">Todos</MenuItem>
+            <MenuItem value="ENTRADA">Entrada</MenuItem>
+            <MenuItem value="SALIDA">Salida</MenuItem>
+            <MenuItem value="DESCONOCIDO">Desconocido</MenuItem>
+          </Select>
+        </FormControl>
+        <FormControl sx={{ width: 160 }} disabled={dispositivos.length === 0}>
+          <InputLabel>Dispositivo</InputLabel>
+          <Select
+            label="Dispositivo"
+            value={pendingFiltros.dispositivo}
+            onChange={(e: SelectChangeEvent) =>
+              setPendingFiltros((f) => ({ ...f, dispositivo: e.target.value }))
+            }
+          >
+            <MenuItem value="">Todos</MenuItem>
+            {dispositivos.map((d) => (
+              <MenuItem key={d.id} value={d.nombre}>
+                {d.nombre}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+        <FormControl sx={{ width: 160 }}>
+          <InputLabel>Estado</InputLabel>
+          <Select
+            label="Estado"
+            value={pendingFiltros.estado}
+            onChange={(e: SelectChangeEvent) =>
+              setPendingFiltros((f) => ({
+                ...f,
+                estado: e.target.value as FiltrosState['estado'],
+              }))
+            }
+          >
+            <MenuItem value="">Todos</MenuItem>
+            <MenuItem value="RESUELTO">Resuelto</MenuItem>
+            <MenuItem value="SIN_RESOLVER">Sin resolver</MenuItem>
+            <MenuItem value="DISPOSITIVO_DESCONOCIDO">Disp. desconocido</MenuItem>
+          </Select>
+        </FormControl>
+        <Button variant="contained" onClick={handleFiltrar} disabled={loading}>
+          Filtrar
+        </Button>
+      </Box>
 
-      {/* Resultados */}
+      {/* Estados */}
       {loading && (
-        <Typography color="text.secondary">Cargando...</Typography>
+        <Typography variant="body2" color="text.secondary">
+          Cargando...
+        </Typography>
       )}
 
       {!loading && error && (
-        <Alert severity="error">Error al cargar los eventos: {error}</Alert>
+        <Alert severity="error" sx={{ mb: 2 }}>
+          Error al cargar los eventos: {error}
+        </Alert>
       )}
 
       {!loading && !error && result && result.eventos.length === 0 && (
         <Alert severity="info">No se encontraron eventos con los filtros seleccionados.</Alert>
       )}
 
+      {/* Tabla */}
       {!loading && !error && result && result.eventos.length > 0 && (
-        <Paper>
+        <Paper variant="outlined">
           <TableContainer>
             <Table size="small">
               <TableHead>
@@ -299,7 +310,6 @@ export function EventosClient({ dispositivos }: { dispositivos: Dispositivo[] })
                       <Chip
                         label={TIPO_LABELS[ev.tipo_evento] ?? ev.tipo_evento}
                         color={TIPO_COLORS[ev.tipo_evento] ?? 'default'}
-                        size="small"
                       />
                     </TableCell>
                     <TableCell>{ev.device_name}</TableCell>
@@ -307,7 +317,6 @@ export function EventosClient({ dispositivos }: { dispositivos: Dispositivo[] })
                       <Chip
                         label={ESTADO_LABELS[ev.estado_resolucion] ?? ev.estado_resolucion}
                         color={ESTADO_COLORS[ev.estado_resolucion] ?? 'default'}
-                        size="small"
                       />
                     </TableCell>
                   </TableRow>
@@ -324,10 +333,10 @@ export function EventosClient({ dispositivos }: { dispositivos: Dispositivo[] })
             onRowsPerPageChange={handleRowsPerPageChange}
             rowsPerPageOptions={[25, 50, 100]}
             labelDisplayedRows={({ from, to, count }) => `${from}–${to} de ${count}`}
-            labelRowsPerPage="Registros por página:"
+            labelRowsPerPage="Por página:"
           />
         </Paper>
       )}
-    </Box>
+    </>
   );
 }
