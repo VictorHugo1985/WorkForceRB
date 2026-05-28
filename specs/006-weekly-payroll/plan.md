@@ -27,12 +27,12 @@ liquidaciones aprobadas son inmutables. Toda mutación queda registrada en `regi
 - Axios — HTTP desde frontend
 - Zustand — estado global de la liquidación activa en el frontend
 
-**Storage**: PostgreSQL vía Prisma. Sin migraciones nuevas — todas las entidades necesarias
-están en la enmienda v2.0 del modelo base (spec 003, commit `149e72e`):
-- `liquidaciones_semanales` (con `horas_ordinarias`, `horas_extra`, totales, `estado`, `configuracion_reglas_ids`)
-- `dias_liquidacion` (con `horas_ajustadas_supervisor`, `descuento_tipo/valor/motivo`, `estado_dia`)
-- `bonos` (con `fecha_dia`, `GENERICO` en `TipoBono`)
-- `configuraciones_reglas`, `semanas_laborales`, `registros_auditoria`
+**Storage**: PostgreSQL vía Prisma. Requiere migraciones adicionales sobre spec 003 v2.0 (commit `149e72e`):
+- `liquidaciones_semanales` (con `horas_ordinarias`, `horas_extra`, totales, `estado`, `configuracion_reglas_ids`) ← sin cambios
+- `dias_liquidacion` ← añadir `CON_AJUSTE_Y_DESCUENTO` al enum `EstadoDia`
+- `bonos` ← renombrar `justificacion` → `comentario` (NOT NULL para todos los tipos); `GENERICO` en `TipoBono` ya en v2.0
+- `configuraciones_reglas` ← nueva regla tipo `MULTIPLICADOR_HORA_EXTRA` (reemplaza `TARIFA_HORA_EXTRA`)
+- `semanas_laborales`, `registros_auditoria` ← sin cambios
 
 **Testing**: Jest (unit: `LiquidacionCalculatorService`, `LiquidacionesService`);
 supertest (integration: flujo completo revisar → ajustar → aprobar → intentar modificar)
@@ -105,15 +105,19 @@ apps/web/
 │   ├── app/
 │   │   └── (app)/
 │   │       └── liquidaciones/
+│   │           ├── page.tsx                          # Lista de colaboradores + estado semana activa
 │   │           └── [semanaId]/
 │   │               └── [colaboradorId]/
-│   │                   └── page.tsx              # Página principal de revisión de liquidación
+│   │                   └── page.tsx                  # Revisión detallada de la liquidación
 │   └── components/liquidaciones/
-│       ├── DiaLiquidacionTable.tsx               # MUI DataGrid de días del período
-│       ├── DiaAjusteDialog.tsx                   # Dialog para ajuste de horas + descuento
-│       ├── BonoSectionPanel.tsx                  # Panel de bonos con add/edit/delete
-│       ├── LiquidacionSummaryCard.tsx            # Card de totales con actualización optimista
-│       └── AprobarLiquidacionButton.tsx          # Botón de aprobación con confirmación
+│       ├── LiquidacionesListClient.tsx               # Client component: tabla + selector de semana
+│       ├── DiaLiquidacionTable.tsx                   # MUI DataGrid de días del período
+│       ├── DiaAjusteDialog.tsx                       # Dialog para ajuste de horas + descuento
+│       ├── BonoSectionPanel.tsx                      # Panel de bonos con add/edit/delete
+│       ├── LiquidacionSummaryCard.tsx                # Card de totales con actualización optimista
+│       └── AprobarLiquidacionButton.tsx              # Botón de aprobación con confirmación
+
+> **Sidebar**: La entrada "Liquidaciones" ya existe en `apps/web/src/lib/nav-config.ts` para roles ADMINISTRADOR y SUPERVISOR. No requiere cambios en el sidebar.
 ```
 
 **Structure Decision**: Monorepo (apps/api + apps/web). `LiquidacionesModule` en módulo propio en el backend, aislado del `AuthModule`. El cálculo vive en `LiquidacionCalculatorService` que es inyectable y testeable independientemente del controller. El frontend usa un Zustand store para el estado de la liquidación activa, con actualizaciones optimistas por acción.
@@ -166,7 +170,21 @@ apps/web/
    los códigos de acción definidos en `data-model.md` (`DIA_HORAS_AJUSTADAS`, `BONO_CREADO`, etc.).
 3. La integración con spec 001 (FR-010): exponer `LiquidacionesService.findOrCreateBorrador()` como método inyectable; documentar que spec 001 lo llama sin HTTP.
 
-### Fase D — Frontend: Página de Revisión de Liquidación
+### Fase D — Frontend: Lista de Liquidaciones + Selector de Semana
+
+1. Crear API route `GET /api/liquidaciones/resumen?semana_id=<uuid>` en `apps/web/src/app/api/liquidaciones/resumen/route.ts`:
+   - Server-side: llamar al backend NestJS y devolver lista de `{ colaboradorId, nombre, apellido, estado, totalPago }` para la semana dada.
+   - Si `semana_id` no se provee, usar la semana activa (`SemanaLaboral` con `estado = ABIERTA`).
+2. Crear `app/(app)/liquidaciones/page.tsx` (Server Component):
+   - Verificar auth, obtener semana activa, llamar `GET /api/liquidaciones/resumen`.
+   - Renderizar `<LiquidacionesListClient colaboradores={...} semanas={...} semanaActiva={...} />`.
+3. Crear `LiquidacionesListClient.tsx` (Client Component):
+   - Dropdown de semanas (`SemanaLaboral` disponibles desde `GET /api/semanas-laborales`).
+   - MUI Table: columnas Colaborador, Área, Estado (Chip: BORRADOR/APROBADO/SIN LIQUIDACIÓN), Total a pagar.
+   - Clic en fila → `router.push(\`/liquidaciones/${semanaId}/${colaboradorId}\`)`.
+   - Cambio de semana → refetch vía URL query param.
+
+### Fase E — Frontend: Página de Revisión de Liquidación
 
 1. Crear Zustand store `useLiquidacionStore`:
    - `liquidacion` (estado completo con dias + bonos + totales)
@@ -197,7 +215,7 @@ apps/web/
 6. Crear `AprobarLiquidacionButton`:
    - MUI Button con Dialog de confirmación.
    - On confirm: `POST /liquidaciones/:id/aprobar` → actualiza store → deshabilita todos los controles de edición.
-7. Crear `page.tsx` en `app/(app)/liquidaciones/[semanaId]/[colaboradorId]/page.tsx`:
+7. Crear `app/(app)/liquidaciones/[semanaId]/[colaboradorId]/page.tsx`:
    - Server component: llama `GET /liquidaciones` → pasa datos al cliente.
    - Renderiza `DiaLiquidacionTable`, `BonoSectionPanel`, `LiquidacionSummaryCard`, `AprobarLiquidacionButton`.
 

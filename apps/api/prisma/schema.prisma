@@ -62,9 +62,11 @@ enum EstadoSemana {
 }
 
 // v2.0: added DEDUP_WINDOW_MINUTES (spec 011), ASISTENCIA_MINIMA (spec 006)
+// spec 006 clarification 2026-05-27: MULTIPLICADOR_HORA_EXTRA replaces TARIFA_HORA_EXTRA for overtime
 enum TipoConfiguracion {
   TARIFA_HORA
   TARIFA_HORA_EXTRA
+  MULTIPLICADOR_HORA_EXTRA
   UMBRAL_HORA_EXTRA
   BONO_TRANSPORTE_CRITERIO
   BONO_ALIMENTACION_CRITERIO
@@ -93,11 +95,13 @@ enum EstadoLiquidacion {
 }
 
 // v2.0: new enum for DiaLiquidacion.estado_dia (spec 006)
+// spec 006 clarification 2026-05-27: CON_AJUSTE_Y_DESCUENTO for days with both adjustments
 enum EstadoDia {
   SIN_REVISION
   APROBADO
   CON_AJUSTE_HORAS
   CON_DESCUENTO
+  CON_AJUSTE_Y_DESCUENTO
 }
 
 // v2.0: new enum for DiaLiquidacion.descuento_tipo (spec 006)
@@ -284,6 +288,7 @@ model ConfiguracionRegla {
 
 // v2.0: added fecha_dia (spec 006); unique constraint updated to (colaborador_id, fecha_dia, tipo)
 // v2.0: TipoBono += GENERICO (spec 006)
+// spec 006 clarification 2026-05-27: justificacion renamed to comentario, required for all types
 model Bono {
   id                    String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   colaborador_id        String   @db.Uuid
@@ -292,7 +297,7 @@ model Bono {
   tipo                  TipoBono
   monto                 Decimal  @db.Decimal(15, 2)
   aplicado_por_criterio Boolean  @default(false)
-  justificacion         String?
+  comentario            String
   aprobado_por          String   @db.Uuid
   creado_en             DateTime @default(now()) @db.Timestamptz
 
