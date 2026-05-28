@@ -1,22 +1,7 @@
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
-import { verifyToken, isBlacklisted } from '@/lib/auth-server';
+import { verifyToken, isBlacklisted, pool } from '@/lib/auth-server';
 import { LiquidacionesListClient } from '@/components/liquidaciones/LiquidacionesListClient';
-
-const API_URL = process.env.API_URL ?? 'http://localhost:3001';
-
-async function fetchJson<T>(path: string, token: string): Promise<T | null> {
-  try {
-    const res = await fetch(`${API_URL}${path}`, {
-      headers: { Authorization: `Bearer ${token}` },
-      cache: 'no-store',
-    });
-    if (!res.ok) return null;
-    return res.json() as Promise<T>;
-  } catch {
-    return null;
-  }
-}
 
 export default async function LiquidacionesPage({
   searchParams,
@@ -27,38 +12,84 @@ export default async function LiquidacionesPage({
   const token = cookieStore.get('access_token')?.value;
   if (!token) redirect('/login?reason=expired');
 
+  let payload: { sub: string; roles: string[]; jti: string };
   try {
-    const payload = await verifyToken(token);
+    payload = await verifyToken(token) as typeof payload;
     if (isBlacklisted(payload.jti)) redirect('/login?reason=expired');
   } catch {
     redirect('/login?reason=expired');
   }
 
   const { semana_id } = await searchParams;
-  const resumenPath = `/liquidaciones/resumen${semana_id ? `?semana_id=${semana_id}` : ''}`;
+  const isSupervisorOnly = payload.roles.includes('SUPERVISOR') && !payload.roles.includes('ADMINISTRADOR');
 
-  const [resumenData, semanasData] = await Promise.all([
-    fetchJson<{ semana: { id: string; fecha_inicio: string; fecha_fin: string; estado: string } | null; liquidaciones: unknown[] }>(resumenPath, token),
-    fetchJson<{ id: string; fecha_inicio: string; fecha_fin: string; estado: string }[]>('/semanas-laborales', token),
-  ]);
+  const client = await pool.connect();
+  try {
+    let semanaId = semana_id ?? null;
 
-  const semanas = Array.isArray(semanasData) ? semanasData : [];
-  const semanaActiva = resumenData?.semana ?? null;
-  const liquidaciones = (resumenData?.liquidaciones ?? []) as {
-    colaboradorId: string;
-    colaboradorNombre: string;
-    colaboradorApellido: string;
-    area: string | null;
-    liquidacionId: string | null;
-    estado: string | null;
-    totalPago: number | null;
-  }[];
+    if (!semanaId) {
+      const r = await client.query(
+        `SELECT id FROM semanas_laborales WHERE estado = 'ABIERTA' ORDER BY fecha_inicio DESC LIMIT 1`,
+      );
+      semanaId = r.rows[0]?.id ?? null;
+    }
 
-  return (
-    <LiquidacionesListClient
-      semanaActiva={semanaActiva}
-      semanas={semanas}
-      liquidaciones={liquidaciones}
-    />
-  );
+    let semanaActiva: { id: string; fecha_inicio: string; fecha_fin: string; estado: string } | null = null;
+    let liquidaciones: {
+      colaboradorId: string; colaboradorNombre: string; colaboradorApellido: string;
+      area: string | null; liquidacionId: string | null; estado: string | null; totalPago: number | null;
+    }[] = [];
+
+    if (semanaId) {
+      const semanaRes = await client.query(
+        `SELECT id, fecha_inicio, fecha_fin, estado FROM semanas_laborales WHERE id = $1`,
+        [semanaId],
+      );
+      semanaActiva = semanaRes.rows[0] ?? null;
+
+      if (semanaActiva) {
+        const colabRes = await client.query(
+          `SELECT c.id, c.nombre, c.apellido, a.nombre AS area_nombre,
+                  ls.id AS liq_id, ls.estado AS liq_estado, ls.total_pago
+           FROM colaboradores c
+           LEFT JOIN areas a ON a.id = c.area_id
+           LEFT JOIN liquidaciones_semanales ls ON ls.colaborador_id = c.id AND ls.semana_id = $1
+           WHERE c.activo = true ${isSupervisorOnly ? 'AND c.supervisor_id = $2' : ''}
+           ORDER BY c.apellido, c.nombre`,
+          isSupervisorOnly ? [semanaId, payload.sub] : [semanaId],
+        );
+        liquidaciones = colabRes.rows.map((r) => ({
+          colaboradorId: r.id,
+          colaboradorNombre: r.nombre,
+          colaboradorApellido: r.apellido,
+          area: r.area_nombre ?? null,
+          liquidacionId: r.liq_id ?? null,
+          estado: r.liq_estado ?? null,
+          totalPago: r.total_pago !== null ? Number(r.total_pago) : null,
+        }));
+      }
+    }
+
+    const semanasRes = await client.query(
+      `SELECT id, fecha_inicio, fecha_fin, estado FROM semanas_laborales ORDER BY fecha_inicio DESC`,
+    );
+
+    return (
+      <LiquidacionesListClient
+        semanaActiva={semanaActiva}
+        semanas={semanasRes.rows}
+        liquidaciones={liquidaciones}
+      />
+    );
+  } catch {
+    return (
+      <LiquidacionesListClient
+        semanaActiva={null}
+        semanas={[]}
+        liquidaciones={[]}
+      />
+    );
+  } finally {
+    client.release();
+  }
 }

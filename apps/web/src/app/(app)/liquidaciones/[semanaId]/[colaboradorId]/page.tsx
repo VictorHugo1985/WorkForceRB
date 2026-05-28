@@ -1,10 +1,8 @@
 import { cookies } from 'next/headers';
 import { redirect, notFound } from 'next/navigation';
-import { verifyToken, isBlacklisted } from '@/lib/auth-server';
+import { verifyToken, isBlacklisted, pool } from '@/lib/auth-server';
 import { LiquidacionDetailClient } from '@/components/liquidaciones/LiquidacionDetailClient';
 import { LiquidacionData } from '@/stores/liquidacion.store';
-
-const API_URL = process.env.API_URL ?? 'http://localhost:3001';
 
 export default async function LiquidacionDetailPage({
   params,
@@ -15,96 +13,107 @@ export default async function LiquidacionDetailPage({
   const token = cookieStore.get('access_token')?.value;
   if (!token) redirect('/login?reason=expired');
 
+  let payload: { sub: string; roles: string[]; jti: string };
   try {
-    const payload = await verifyToken(token);
+    payload = await verifyToken(token) as typeof payload;
     if (isBlacklisted(payload.jti)) redirect('/login?reason=expired');
   } catch {
     redirect('/login?reason=expired');
   }
 
   const { semanaId, colaboradorId } = await params;
+  const isSupervisorOnly = payload.roles.includes('SUPERVISOR') && !payload.roles.includes('ADMINISTRADOR');
 
-  let data: LiquidacionData | null = null;
-  let semanaFechas = { fechaInicio: '', fechaFin: '' };
-
+  const client = await pool.connect();
   try {
-    const [liqRes, semanaRes] = await Promise.all([
-      fetch(`${API_URL}/liquidaciones?colaborador_id=${colaboradorId}&semana_id=${semanaId}`, {
-        headers: { Authorization: `Bearer ${token}` },
-        cache: 'no-store',
-      }),
-      fetch(`${API_URL}/semanas-laborales`, {
-        headers: { Authorization: `Bearer ${token}` },
-        cache: 'no-store',
-      }),
-    ]);
-
-    if (liqRes.ok) {
-      const raw = await liqRes.json();
-      data = mapToLiquidacionData(raw);
-    }
-    if (semanaRes.ok) {
-      const semanas = await semanaRes.json() as { id: string; fecha_inicio: string; fecha_fin: string }[];
-      const semana = semanas.find((s) => s.id === semanaId);
-      if (semana) {
-        semanaFechas = { fechaInicio: semana.fecha_inicio.slice(0, 10), fechaFin: semana.fecha_fin.slice(0, 10) };
+    if (isSupervisorOnly) {
+      const scopeRes = await client.query(
+        `SELECT supervisor_id FROM colaboradores WHERE id = $1`,
+        [colaboradorId],
+      );
+      if (scopeRes.rows.length === 0 || scopeRes.rows[0].supervisor_id !== payload.sub) {
+        redirect('/liquidaciones');
       }
     }
-  } catch {
-    // handled below
+
+    const liqRes = await client.query(
+      `SELECT id, colaborador_id, semana_id, estado,
+              horas_ordinarias, horas_extra, valor_horas_ordinarias, valor_horas_extra,
+              total_bonos, total_descuentos, total_pago, calculado_en, aprobado_por, aprobada_en
+       FROM liquidaciones_semanales WHERE colaborador_id = $1 AND semana_id = $2`,
+      [colaboradorId, semanaId],
+    );
+
+    if (liqRes.rows.length === 0) notFound();
+    const liq = liqRes.rows[0];
+
+    const [diasRes, bonosRes, semanaRes] = await Promise.all([
+      client.query(
+        `SELECT id, fecha, horas_calculadas, horas_ajustadas_supervisor, atraso_detectado,
+                estado_dia, motivo_ajuste, descuento_tipo, descuento_valor, descuento_motivo
+         FROM dias_liquidacion WHERE liquidacion_id = $1 ORDER BY fecha`,
+        [liq.id],
+      ),
+      client.query(
+        `SELECT id, colaborador_id, semana_id, fecha_dia, tipo, monto, comentario, aprobado_por, creado_en
+         FROM bonos WHERE colaborador_id = $1 AND semana_id = $2 ORDER BY fecha_dia`,
+        [colaboradorId, semanaId],
+      ),
+      client.query(
+        `SELECT fecha_inicio, fecha_fin FROM semanas_laborales WHERE id = $1`,
+        [semanaId],
+      ),
+    ]);
+
+    const semana = semanaRes.rows[0];
+    const semanaFechas = semana
+      ? { fechaInicio: String(semana.fecha_inicio).slice(0, 10), fechaFin: String(semana.fecha_fin).slice(0, 10) }
+      : { fechaInicio: '', fechaFin: '' };
+
+    const data: LiquidacionData = {
+      id: liq.id,
+      colaboradorId: liq.colaborador_id,
+      semanaId: liq.semana_id,
+      estado: liq.estado,
+      horasOrdinarias: Number(liq.horas_ordinarias),
+      horasExtra: Number(liq.horas_extra),
+      valorHorasOrdinarias: Number(liq.valor_horas_ordinarias),
+      valorHorasExtra: Number(liq.valor_horas_extra),
+      totalBonos: Number(liq.total_bonos),
+      totalDescuentos: Number(liq.total_descuentos),
+      totalPago: Number(liq.total_pago),
+      calculadoEn: liq.calculado_en,
+      aprobadoPor: liq.aprobado_por ?? null,
+      aprobadaEn: liq.aprobada_en ?? null,
+      dias: diasRes.rows.map((d) => ({
+        id: d.id,
+        fecha: String(d.fecha).slice(0, 10),
+        horasCalculadas: Number(d.horas_calculadas),
+        horasAjustadasSupervisor: d.horas_ajustadas_supervisor != null ? Number(d.horas_ajustadas_supervisor) : null,
+        atrasoDetectado: Boolean(d.atraso_detectado),
+        estadoDia: d.estado_dia,
+        motivoAjuste: d.motivo_ajuste ?? null,
+        descuentoTipo: d.descuento_tipo ?? null,
+        descuentoValor: d.descuento_valor != null ? Number(d.descuento_valor) : null,
+        descuentoMotivo: d.descuento_motivo ?? null,
+      })),
+      bonos: bonosRes.rows.map((b) => ({
+        id: b.id,
+        fechaDia: String(b.fecha_dia).slice(0, 10),
+        tipo: b.tipo,
+        monto: Number(b.monto),
+        comentario: b.comentario,
+        aprobadoPor: b.aprobado_por,
+        creadoEn: b.creado_en,
+      })),
+    };
+
+    return <LiquidacionDetailClient initialData={data} semanaFechas={semanaFechas} />;
+  } catch (err) {
+    const e = err as { digest?: string };
+    if (e.digest?.startsWith('NEXT_REDIRECT') || e.digest?.startsWith('NEXT_NOT_FOUND')) throw err;
+    notFound();
+  } finally {
+    client.release();
   }
-
-  if (!data) notFound();
-
-  return <LiquidacionDetailClient initialData={data} semanaFechas={semanaFechas} />;
-}
-
-function mapToLiquidacionData(raw: Record<string, unknown>): LiquidacionData {
-  const dias = ((raw.dias as unknown[]) ?? []).map((d: unknown) => {
-    const dia = d as Record<string, unknown>;
-    return {
-      id: dia.id as string,
-      fecha: String(dia.fecha).slice(0, 10),
-      horasCalculadas: Number(dia.horas_calculadas),
-      horasAjustadasSupervisor: dia.horas_ajustadas_supervisor != null ? Number(dia.horas_ajustadas_supervisor) : null,
-      atrasoDetectado: Boolean(dia.atraso_detectado),
-      estadoDia: dia.estado_dia as string,
-      motivoAjuste: (dia.motivo_ajuste as string) ?? null,
-      descuentoTipo: (dia.descuento_tipo as string) ?? null,
-      descuentoValor: dia.descuento_valor != null ? Number(dia.descuento_valor) : null,
-      descuentoMotivo: (dia.descuento_motivo as string) ?? null,
-    };
-  });
-
-  const bonos = ((raw.bonos as unknown[]) ?? []).map((b: unknown) => {
-    const bono = b as Record<string, unknown>;
-    return {
-      id: bono.id as string,
-      fechaDia: String(bono.fecha_dia).slice(0, 10),
-      tipo: bono.tipo as string,
-      monto: Number(bono.monto),
-      comentario: bono.comentario as string,
-      aprobadoPor: bono.aprobado_por as string,
-      creadoEn: bono.creado_en as string,
-    };
-  });
-
-  return {
-    id: raw.id as string,
-    colaboradorId: raw.colaborador_id as string,
-    semanaId: raw.semana_id as string,
-    estado: raw.estado as string,
-    horasOrdinarias: Number(raw.horas_ordinarias),
-    horasExtra: Number(raw.horas_extra),
-    valorHorasOrdinarias: Number(raw.valor_horas_ordinarias),
-    valorHorasExtra: Number(raw.valor_horas_extra),
-    totalBonos: Number(raw.total_bonos),
-    totalDescuentos: Number(raw.total_descuentos),
-    totalPago: Number(raw.total_pago),
-    calculadoEn: raw.calculado_en as string,
-    aprobadoPor: (raw.aprobado_por as string) ?? null,
-    aprobadaEn: (raw.aprobada_en as string) ?? null,
-    dias,
-    bonos,
-  };
 }
