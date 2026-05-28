@@ -5,5 +5,5 @@ const ADMIN_ONLY = ['ADMINISTRADOR'];
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  return proxyToNestJS(req, `/semanas-laborales/${id}/cerrar`, ADMIN_ONLY, { method: 'PATCH' });
+  return proxyToNestJS(req, `/semanas-laborales/${id}/cerrar`, ADMIN_ONLY, { method: 'PATCH', body: {} });
 }

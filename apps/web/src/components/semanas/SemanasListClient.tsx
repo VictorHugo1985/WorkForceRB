@@ -10,8 +10,12 @@ import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
+import FormControl from '@mui/material/FormControl';
 import IconButton from '@mui/material/IconButton';
+import InputLabel from '@mui/material/InputLabel';
+import MenuItem from '@mui/material/MenuItem';
 import Paper from '@mui/material/Paper';
+import Select from '@mui/material/Select';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
@@ -43,6 +47,13 @@ function formatDate(iso: string) {
   return `${d}/${m}/${y}`;
 }
 
+const PERIODOS = [
+  { label: 'Semanal (7 días)',    days: 6  },
+  { label: 'Bisemanal (14 días)', days: 13 },
+  { label: 'Mensual (30 días)',   days: 29 },
+  { label: 'Personalizado',       days: -1 },
+] as const;
+
 function addDays(dateStr: string, days: number): string {
   const d = new Date(dateStr + 'T00:00:00');
   d.setDate(d.getDate() + days);
@@ -53,15 +64,24 @@ export function SemanasListClient({ semanas: initial, isAdmin }: Props) {
   const router = useRouter();
   const [semanas, setSemanas] = useState<SemanaLaboral[]>(initial);
   const [createOpen, setCreateOpen] = useState(false);
+  const [periodo, setPeriodo] = useState<number>(6);
   const [fechaInicio, setFechaInicio] = useState('');
   const [fechaFin, setFechaFin] = useState('');
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [closingId, setClosingId] = useState<string | null>(null);
 
+  const isCustom = periodo === -1;
+
   const handleFechaInicioChange = (val: string) => {
     setFechaInicio(val);
-    if (val) setFechaFin(addDays(val, 6));
+    if (val && !isCustom) setFechaFin(addDays(val, periodo));
+  };
+
+  const handlePeriodoChange = (days: number) => {
+    setPeriodo(days);
+    if (fechaInicio && days !== -1) setFechaFin(addDays(fechaInicio, days));
+    if (days === -1) setFechaFin('');
   };
 
   const handleCreate = async () => {
@@ -86,6 +106,7 @@ export function SemanasListClient({ semanas: initial, isAdmin }: Props) {
       setCreateOpen(false);
       setFechaInicio('');
       setFechaFin('');
+      setPeriodo(6);
     } catch {
       setCreateError('Error de red. Intente de nuevo.');
     } finally {
@@ -178,11 +199,35 @@ export function SemanasListClient({ semanas: initial, isAdmin }: Props) {
       )}
 
       {/* Create dialog */}
-      <Dialog open={createOpen} onClose={() => { setCreateOpen(false); setCreateError(null); }} maxWidth="xs" fullWidth>
-        <DialogTitle>Nueva Semana Laboral</DialogTitle>
+      <Dialog
+        open={createOpen}
+        onClose={() => {
+          setCreateOpen(false);
+          setCreateError(null);
+          setFechaInicio('');
+          setFechaFin('');
+          setPeriodo(6);
+        }}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>Nuevo Período Laboral</DialogTitle>
         <DialogContent>
           {createError && <Alert severity="error" sx={{ mb: 2 }}>{createError}</Alert>}
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
+            <FormControl size="small" fullWidth>
+              <InputLabel>Tipo de período</InputLabel>
+              <Select
+                label="Tipo de período"
+                value={periodo}
+                onChange={(e) => handlePeriodoChange(Number(e.target.value))}
+              >
+                {PERIODOS.map((p) => (
+                  <MenuItem key={p.days} value={p.days}>{p.label}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+
             <TextField
               label="Fecha inicio"
               type="date"
@@ -198,14 +243,25 @@ export function SemanasListClient({ semanas: initial, isAdmin }: Props) {
               slotProps={{ inputLabel: { shrink: true } }}
               value={fechaFin}
               onChange={(e) => setFechaFin(e.target.value)}
+              disabled={!isCustom && !fechaInicio}
+              helperText={!isCustom && fechaInicio ? 'Calculada automáticamente' : undefined}
             />
           </Box>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => { setCreateOpen(false); setCreateError(null); }} disabled={creating}>
+          <Button
+            onClick={() => {
+              setCreateOpen(false);
+              setCreateError(null);
+              setFechaInicio('');
+              setFechaFin('');
+              setPeriodo(6);
+            }}
+            disabled={creating}
+          >
             Cancelar
           </Button>
-          <Button variant="contained" onClick={handleCreate} disabled={creating}>
+          <Button variant="contained" onClick={handleCreate} disabled={creating || !fechaInicio || !fechaFin}>
             Crear
           </Button>
         </DialogActions>

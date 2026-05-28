@@ -45,9 +45,12 @@ export async function proxyToNestJS(
 
   try {
     const res = await fetch(url, fetchInit);
-    const data = await res.json();
+    const text = await res.text();
+    let data: unknown;
+    try { data = JSON.parse(text); } catch { data = { error: text || 'EMPTY_RESPONSE' }; }
     return NextResponse.json(data, { status: res.status });
-  } catch {
+  } catch (err) {
+    console.error('[api-proxy] fetch failed:', err);
     return NextResponse.json({ error: 'SERVICE_UNAVAILABLE' }, { status: 503 });
   }
 }

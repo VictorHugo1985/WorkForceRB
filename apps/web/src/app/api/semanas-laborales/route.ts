@@ -9,5 +9,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  return proxyToNestJS(req, '/semanas-laborales', ADMIN_ONLY, { method: 'POST' });
+  let body: unknown;
+  try { body = await req.json(); } catch { body = {}; }
+  return proxyToNestJS(req, '/semanas-laborales', ADMIN_ONLY, { method: 'POST', body });
 }
