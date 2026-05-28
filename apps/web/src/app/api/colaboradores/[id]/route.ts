@@ -6,6 +6,8 @@ const EditSchema = z.object({
   nombre: z.string().min(1).max(100),
   apellido: z.string().min(1).max(100),
   cedula: z.string().min(1),
+  telefono: z.string().max(30).nullable().optional(),
+  fecha_nacimiento: z.string().nullable().optional(),
   area_id: z.string().uuid(),
   supervisor_id: z.string().uuid().nullable().optional(),
   codigos: z.array(z.object({ id: z.string().uuid(), workno: z.string().min(1) })).optional(),
@@ -34,7 +36,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     return NextResponse.json({ error: 'VALIDATION_ERROR', fields }, { status: 400 });
   }
 
-  const { nombre, apellido, cedula, area_id, supervisor_id, codigos } = parsed.data;
+  const { nombre, apellido, cedula, telefono, fecha_nacimiento, area_id, supervisor_id, codigos } = parsed.data;
 
   const client = await pool.connect();
   try {
@@ -60,9 +62,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
     await client.query(
       `UPDATE colaboradores
-       SET nombre = $1, apellido = $2, cedula = $3, area_id = $4, supervisor_id = $5, actualizado_en = now()
-       WHERE id = $6`,
-      [nombre, apellido, cedula, area_id, supervisor_id ?? null, id],
+       SET nombre = $1, apellido = $2, cedula = $3, telefono = $4, fecha_nacimiento = $5,
+           area_id = $6, supervisor_id = $7, actualizado_en = now()
+       WHERE id = $8`,
+      [nombre, apellido, cedula, telefono ?? null, fecha_nacimiento ?? null, area_id, supervisor_id ?? null, id],
     );
 
     if (codigos && codigos.length > 0) {
@@ -106,7 +109,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const client = await pool.connect();
   try {
     const colRes = await client.query(
-      `SELECT c.id, c.nombre, c.apellido, c.cedula, c.activo, c.creado_en,
+      `SELECT c.id, c.nombre, c.apellido, c.cedula, c.telefono, c.fecha_nacimiento, c.activo, c.creado_en,
               a.id AS area_id, a.nombre AS area_nombre,
               u.id AS supervisor_id, u.nombre AS supervisor_nombre, u.apellido AS supervisor_apellido
        FROM colaboradores c
@@ -151,6 +154,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       nombre: col.nombre,
       apellido: col.apellido,
       cedula: col.cedula,
+      telefono: col.telefono ?? null,
+      fecha_nacimiento: col.fecha_nacimiento ? col.fecha_nacimiento.toISOString().slice(0, 10) : null,
       activo: col.activo,
       creado_en: col.creado_en,
       area: col.area_id ? { id: col.area_id, nombre: col.area_nombre } : null,

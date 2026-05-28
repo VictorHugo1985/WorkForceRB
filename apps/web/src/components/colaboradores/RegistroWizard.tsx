@@ -33,6 +33,8 @@ export const WizardSchema = z.object({
   nombre: z.string().min(1, 'Requerido').max(100),
   apellido: z.string().min(1, 'Requerido').max(100),
   cedula: z.string().min(1, 'Requerido'),
+  telefono: z.string().max(30).optional().or(z.literal('')),
+  fecha_nacimiento: z.string().optional().or(z.literal('')),
   area_id: z.string().uuid('Seleccione un área'),
   supervisor_id: z.string().uuid().nullable().optional(),
   tarifa_hora: z.number().positive().nullable().optional(),

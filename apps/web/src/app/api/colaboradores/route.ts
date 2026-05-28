@@ -38,6 +38,8 @@ const ColaboradorSchema = z.object({
   nombre: z.string().min(1).max(100),
   apellido: z.string().min(1).max(100),
   cedula: z.string().min(1),
+  telefono: z.string().max(30).nullable().optional(),
+  fecha_nacimiento: z.string().nullable().optional(),
   area_id: z.string().uuid(),
   supervisor_id: z.string().uuid().nullable().optional(),
   tarifa_hora: z.number().positive().nullable().optional(),
@@ -66,7 +68,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'VALIDATION_ERROR', fields }, { status: 400 });
   }
 
-  const { nombre, apellido, cedula, area_id, supervisor_id, tarifa_hora, umbral_horas_extra, codigo_biometrico } = parsed.data;
+  const { nombre, apellido, cedula, telefono, fecha_nacimiento, area_id, supervisor_id, tarifa_hora, umbral_horas_extra, codigo_biometrico } = parsed.data;
 
   const client = await pool.connect();
   try {
@@ -84,10 +86,10 @@ export async function POST(req: NextRequest) {
 
     // Insert colaborador (actualizado_en has no DB default — Prisma sets it at app layer)
     const colRes = await client.query<{ id: string }>(
-      `INSERT INTO colaboradores (nombre, apellido, cedula, area_id, supervisor_id, actualizado_en)
-       VALUES ($1, $2, $3, $4, $5, now())
+      `INSERT INTO colaboradores (nombre, apellido, cedula, telefono, fecha_nacimiento, area_id, supervisor_id, actualizado_en)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, now())
        RETURNING id`,
-      [nombre, apellido, cedula, area_id, supervisor_id ?? null],
+      [nombre, apellido, cedula, telefono ?? null, fecha_nacimiento ?? null, area_id, supervisor_id ?? null],
     );
     const colaboradorId = colRes.rows[0].id;
 

@@ -8,6 +8,7 @@ import { EstadoLiquidacion, EstadoSemana, RolUsuario } from '@prisma/client';
 import { PatchDiaLiquidacionDto } from './dto/patch-dia-liquidacion.dto';
 import { CreateBonoDto } from './dto/create-bono.dto';
 import { PatchBonoDto } from './dto/patch-bono.dto';
+import { CreateSemanaLaboralDto } from './dto/create-semana-laboral.dto';
 import { PrismaService } from '../prisma/prisma.service';
 import { LiquidacionCalculatorService } from './services/liquidacion-calculator.service';
 import { AuditLiquidacionService } from './services/audit-liquidacion.service';
@@ -156,6 +157,37 @@ export class LiquidacionesService {
   async getSemanas() {
     return this.prisma.semanaLaboral.findMany({
       orderBy: { fecha_inicio: 'desc' },
+    });
+  }
+
+  async createSemana(dto: CreateSemanaLaboralDto) {
+    const existing = await this.prisma.semanaLaboral.findFirst({
+      where: { fecha_inicio: new Date(dto.fechaInicio) },
+    });
+    if (existing) throw new ConflictException('Ya existe una semana con esa fecha de inicio');
+
+    return this.prisma.semanaLaboral.create({
+      data: {
+        fecha_inicio: new Date(dto.fechaInicio),
+        fecha_fin: new Date(dto.fechaFin),
+        estado: EstadoSemana.ABIERTA,
+      },
+    });
+  }
+
+  async cerrarSemana(id: string, userId: string) {
+    const semana = await this.prisma.semanaLaboral.findUnique({ where: { id } });
+    if (!semana) throw new NotFoundException('Semana no encontrada');
+    if (semana.estado === EstadoSemana.CERRADA) {
+      throw new ConflictException('La semana ya está cerrada');
+    }
+    return this.prisma.semanaLaboral.update({
+      where: { id },
+      data: {
+        estado: EstadoSemana.CERRADA,
+        cerrada_por: userId,
+        cerrada_en: new Date(),
+      },
     });
   }
 

@@ -150,14 +150,16 @@ model UsuarioRol {
 }
 
 model Colaborador {
-  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  nombre         String
-  apellido       String
-  cedula         String   @unique
-  activo         Boolean  @default(true)
-  supervisor_id  String?  @db.Uuid
-  creado_en      DateTime @default(now()) @db.Timestamptz
-  actualizado_en DateTime @updatedAt @db.Timestamptz
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  nombre           String
+  apellido         String
+  cedula           String    @unique
+  telefono         String?   @db.VarChar(30)
+  fecha_nacimiento DateTime? @db.Date
+  activo           Boolean   @default(true)
+  supervisor_id    String?   @db.Uuid
+  creado_en        DateTime  @default(now()) @db.Timestamptz
+  actualizado_en   DateTime  @updatedAt @db.Timestamptz
 
   supervisor             Usuario?             @relation("SupervisorColaborador", fields: [supervisor_id], references: [id])
   codigos                CodigoColaborador[]

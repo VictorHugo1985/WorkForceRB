@@ -36,6 +36,22 @@ export default function Step1DatosPersonales() {
         fullWidth
         required
       />
+      <TextField
+        label="Teléfono"
+        {...register('telefono')}
+        error={!!errors.telefono}
+        helperText={errors.telefono?.message}
+        fullWidth
+      />
+      <TextField
+        label="Fecha de nacimiento"
+        type="date"
+        slotProps={{ inputLabel: { shrink: true } }}
+        {...register('fecha_nacimiento')}
+        error={!!errors.fecha_nacimiento}
+        helperText={errors.fecha_nacimiento?.message}
+        fullWidth
+      />
     </Box>
   );
 }

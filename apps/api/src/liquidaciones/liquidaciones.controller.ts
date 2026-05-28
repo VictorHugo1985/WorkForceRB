@@ -20,6 +20,7 @@ import { LiquidacionesService } from './liquidaciones.service';
 import { PatchDiaLiquidacionDto } from './dto/patch-dia-liquidacion.dto';
 import { CreateBonoDto } from './dto/create-bono.dto';
 import { PatchBonoDto } from './dto/patch-bono.dto';
+import { CreateSemanaLaboralDto } from './dto/create-semana-laboral.dto';
 
 @UseGuards(JwtAuthGuard)
 @Controller()
@@ -29,6 +30,20 @@ export class LiquidacionesController {
   @Get('semanas-laborales')
   async getSemanas() {
     return this.liquidacionesService.getSemanas();
+  }
+
+  @Post('semanas-laborales')
+  async createSemana(@Body() dto: CreateSemanaLaboralDto, @Req() req: Request) {
+    const user = req.user as JwtPayload;
+    this.assertAdminAccess(user.roles);
+    return this.liquidacionesService.createSemana(dto);
+  }
+
+  @Patch('semanas-laborales/:id/cerrar')
+  async cerrarSemana(@Param('id') id: string, @Req() req: Request) {
+    const user = req.user as JwtPayload;
+    this.assertAdminAccess(user.roles);
+    return this.liquidacionesService.cerrarSemana(id, user.sub);
   }
 
   @Get('liquidaciones/resumen')
@@ -106,6 +121,12 @@ export class LiquidacionesController {
   private assertLiquidacionesAccess(roles: RolUsuario[]): void {
     if (!roles.includes(RolUsuario.ADMINISTRADOR) && !roles.includes(RolUsuario.SUPERVISOR)) {
       throw new ForbiddenException('Acceso no autorizado');
+    }
+  }
+
+  private assertAdminAccess(roles: RolUsuario[]): void {
+    if (!roles.includes(RolUsuario.ADMINISTRADOR)) {
+      throw new ForbiddenException('Solo administradores pueden gestionar semanas');
     }
   }
 }

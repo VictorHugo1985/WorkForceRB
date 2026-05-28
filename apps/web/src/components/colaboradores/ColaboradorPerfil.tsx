@@ -34,6 +34,8 @@ interface PerfilData {
   nombre: string;
   apellido: string;
   cedula: string;
+  telefono: string | null;
+  fecha_nacimiento: string | null;
   activo: boolean;
   creado_en: string;
   area: { id: string; nombre: string } | null;
@@ -51,6 +53,8 @@ const EditSchema = z.object({
   nombre: z.string().min(1, 'Requerido').max(100),
   apellido: z.string().min(1, 'Requerido').max(100),
   cedula: z.string().min(1, 'Requerido'),
+  telefono: z.string().max(30).optional().or(z.literal('')),
+  fecha_nacimiento: z.string().optional().or(z.literal('')),
   area_id: z.string().uuid('Seleccione un área'),
   supervisor_id: z.string().uuid().nullable().optional(),
 });
@@ -75,6 +79,8 @@ export default function ColaboradorPerfil({ perfil }: ColaboradorPerfilProps) {
     nombre: perfil.nombre,
     apellido: perfil.apellido,
     cedula: perfil.cedula,
+    telefono: perfil.telefono,
+    fecha_nacimiento: perfil.fecha_nacimiento,
     activo: perfil.activo,
     area: perfil.area,
     supervisor: perfil.supervisor,
@@ -99,6 +105,8 @@ export default function ColaboradorPerfil({ perfil }: ColaboradorPerfilProps) {
       nombre: data.nombre,
       apellido: data.apellido,
       cedula: data.cedula,
+      telefono: data.telefono ?? '',
+      fecha_nacimiento: data.fecha_nacimiento ?? '',
       area_id: data.area?.id ?? '',
       supervisor_id: data.supervisor?.id ?? null,
     },
@@ -113,6 +121,8 @@ export default function ColaboradorPerfil({ perfil }: ColaboradorPerfilProps) {
       nombre: data.nombre,
       apellido: data.apellido,
       cedula: data.cedula,
+      telefono: data.telefono ?? '',
+      fecha_nacimiento: data.fecha_nacimiento ?? '',
       area_id: data.area?.id ?? '',
       supervisor_id: data.supervisor?.id ?? null,
     });
@@ -151,6 +161,8 @@ export default function ColaboradorPerfil({ perfil }: ColaboradorPerfilProps) {
       nombre: values.nombre,
       apellido: values.apellido,
       cedula: values.cedula,
+      telefono: values.telefono || null,
+      fecha_nacimiento: values.fecha_nacimiento || null,
       area: areaObj ? { id: areaObj.id, nombre: areaObj.nombre } : null,
       supervisor: supObj ? { id: supObj.id, nombre: supObj.nombre, apellido: supObj.apellido } : null,
     }));
@@ -265,6 +277,22 @@ export default function ColaboradorPerfil({ perfil }: ColaboradorPerfilProps) {
             helperText={errors.cedula?.message}
             required
           />
+          <TextField
+            label="Teléfono"
+            size="small"
+            {...register('telefono')}
+            error={!!errors.telefono}
+            helperText={errors.telefono?.message}
+          />
+          <TextField
+            label="Fecha de nacimiento"
+            type="date"
+            size="small"
+            slotProps={{ inputLabel: { shrink: true } }}
+            {...register('fecha_nacimiento')}
+            error={!!errors.fecha_nacimiento}
+            helperText={errors.fecha_nacimiento?.message}
+          />
           <Controller
             name="area_id"
             control={control}
@@ -333,6 +361,11 @@ export default function ColaboradorPerfil({ perfil }: ColaboradorPerfilProps) {
       ) : (
         <>
           <Row label="Cédula" value={data.cedula} />
+          <Row label="Teléfono" value={data.telefono ?? '—'} />
+          <Row
+            label="Fecha de nacimiento"
+            value={data.fecha_nacimiento ? formatDate(data.fecha_nacimiento) : '—'}
+          />
           <Row label="Área de trabajo" value={data.area?.nombre ?? '—'} />
           <Row
             label="Supervisor"
