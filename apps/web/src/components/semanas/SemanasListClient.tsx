@@ -28,6 +28,7 @@ import AddIcon from '@mui/icons-material/Add';
 import LockIcon from '@mui/icons-material/Lock';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import { PageHeader } from '@/components/ui/PageHeader';
+import { useSnackbar } from '@/lib/SnackbarContext';
 
 interface SemanaLaboral {
   id: string;
@@ -62,6 +63,7 @@ function addDays(dateStr: string, days: number): string {
 
 export function SemanasListClient({ semanas: initial, isAdmin }: Props) {
   const router = useRouter();
+  const { showSuccess, showError } = useSnackbar();
   const [semanas, setSemanas] = useState<SemanaLaboral[]>(initial);
   const [createOpen, setCreateOpen] = useState(false);
   const [periodo, setPeriodo] = useState<number>(6);
@@ -99,7 +101,9 @@ export function SemanasListClient({ semanas: initial, isAdmin }: Props) {
       });
       const json = await res.json();
       if (!res.ok) {
-        setCreateError(json?.message ?? `Error ${res.status}`);
+        const msg = json?.message ?? `Error ${res.status}`;
+        setCreateError(msg);
+        showError(`No se pudo crear el período: ${msg}`);
         return;
       }
       setSemanas((prev) => [json, ...prev]);
@@ -107,8 +111,11 @@ export function SemanasListClient({ semanas: initial, isAdmin }: Props) {
       setFechaInicio('');
       setFechaFin('');
       setPeriodo(6);
+      showSuccess('Período laboral creado.');
     } catch {
-      setCreateError('Error de red. Intente de nuevo.');
+      const msg = 'Error de red. Intente de nuevo.';
+      setCreateError(msg);
+      showError(msg);
     } finally {
       setCreating(false);
     }
@@ -122,7 +129,13 @@ export function SemanasListClient({ semanas: initial, isAdmin }: Props) {
       if (res.ok) {
         const json = await res.json();
         setSemanas((prev) => prev.map((s) => (s.id === semana.id ? { ...s, ...json } : s)));
+        showSuccess('Semana cerrada correctamente.');
+      } else {
+        const json = await res.json().catch(() => ({}));
+        showError(json?.message ?? 'No se pudo cerrar la semana.');
       }
+    } catch {
+      showError('Error de red. Intente de nuevo.');
     } finally {
       setClosingId(null);
     }

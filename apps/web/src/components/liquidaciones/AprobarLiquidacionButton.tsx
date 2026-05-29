@@ -10,6 +10,7 @@ import DialogContent from '@mui/material/DialogContent';
 import DialogContentText from '@mui/material/DialogContentText';
 import DialogTitle from '@mui/material/DialogTitle';
 import { useLiquidacionStore } from '@/stores/liquidacion.store';
+import { useSnackbar } from '@/lib/SnackbarContext';
 
 interface Props {
   semanaLabel: string;
@@ -17,6 +18,7 @@ interface Props {
 
 export function AprobarLiquidacionButton({ semanaLabel }: Props) {
   const { liquidacion, setAprobado } = useLiquidacionStore();
+  const { showSuccess, showError } = useSnackbar();
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -31,13 +33,18 @@ export function AprobarLiquidacionButton({ semanaLabel }: Props) {
       const res = await fetch(`/api/liquidaciones/${liquidacion.id}/aprobar`, { method: 'POST' });
       const json = await res.json();
       if (!res.ok) {
-        setError(json?.message ?? `Error ${res.status}`);
+        const msg = json?.message ?? `Error ${res.status}`;
+        setError(msg);
+        showError(`No se pudo aprobar: ${msg}`);
         return;
       }
       setAprobado(json.aprobadoPor, json.aprobadaEn);
       setOpen(false);
+      showSuccess('Liquidación aprobada correctamente.');
     } catch {
-      setError('Error de red. Intente de nuevo.');
+      const msg = 'Error de red. Intente de nuevo.';
+      setError(msg);
+      showError(msg);
     } finally {
       setLoading(false);
     }

@@ -21,6 +21,7 @@ import MenuItem from '@mui/material/MenuItem';
 import Select from '@mui/material/Select';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
+import { useSnackbar } from '@/lib/SnackbarContext';
 
 interface CodigoBiometrico {
   id: string;
@@ -49,14 +50,15 @@ interface ColaboradorPerfilProps {
   perfil: PerfilData;
 }
 
+// supervisor_id: accept '' (no supervisor) or a UUID; coerce '' → null before sending
 const EditSchema = z.object({
   nombre: z.string().min(1, 'Requerido').max(100),
   apellido: z.string().min(1, 'Requerido').max(100),
   cedula: z.string().min(1, 'Requerido'),
   telefono: z.string().max(30).optional().or(z.literal('')),
   fecha_nacimiento: z.string().optional().or(z.literal('')),
-  area_id: z.string().uuid('Seleccione un área'),
-  supervisor_id: z.string().uuid().nullable().optional(),
+  area_id: z.string().min(1, 'Seleccione un área'),
+  supervisor_id: z.union([z.string().uuid(), z.literal(''), z.null()]).optional(),
 });
 type EditFormValues = z.infer<typeof EditSchema>;
 
@@ -75,6 +77,8 @@ function formatDate(dateStr: string): string {
 }
 
 export default function ColaboradorPerfil({ perfil }: ColaboradorPerfilProps) {
+  const { showSuccess, showError } = useSnackbar();
+
   const [data, setData] = useState({
     nombre: perfil.nombre,
     apellido: perfil.apellido,
@@ -92,7 +96,6 @@ export default function ColaboradorPerfil({ perfil }: ColaboradorPerfilProps) {
 
   const [isEditing, setIsEditing] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
-  const [editSuccess, setEditSuccess] = useState(false);
   const [areas, setAreas] = useState<{ id: string; nombre: string }[]>([]);
   const [supervisores, setSupervisores] = useState<{ id: string; nombre: string; apellido: string }[]>([]);
 
@@ -108,7 +111,7 @@ export default function ColaboradorPerfil({ perfil }: ColaboradorPerfilProps) {
       telefono: data.telefono ?? '',
       fecha_nacimiento: data.fecha_nacimiento ?? '',
       area_id: data.area?.id ?? '',
-      supervisor_id: data.supervisor?.id ?? null,
+      supervisor_id: data.supervisor?.id ?? '',
     },
   });
 
@@ -124,11 +127,10 @@ export default function ColaboradorPerfil({ perfil }: ColaboradorPerfilProps) {
       telefono: data.telefono ?? '',
       fecha_nacimiento: data.fecha_nacimiento ?? '',
       area_id: data.area?.id ?? '',
-      supervisor_id: data.supervisor?.id ?? null,
+      supervisor_id: data.supervisor?.id ?? '',
     });
     setWorknos(Object.fromEntries(localCodigos.map((c) => [c.id, c.workno])));
     setEditError(null);
-    setEditSuccess(false);
     setIsEditing(true);
   }
 
@@ -139,36 +141,45 @@ export default function ColaboradorPerfil({ perfil }: ColaboradorPerfilProps) {
 
   async function onEditSubmit(values: EditFormValues) {
     setEditError(null);
+    const supervisor_id = values.supervisor_id || null;
     const codigos = localCodigos.map((c) => ({ id: c.id, workno: worknos[c.id] ?? c.workno }));
-    const res = await fetch(`/api/colaboradores/${perfil.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...values, codigos }),
-    });
-    const json = await res.json();
-    if (res.status === 409) {
-      setEditError('Ya existe un colaborador con la cédula ingresada.');
-      return;
+    try {
+      const res = await fetch(`/api/colaboradores/${perfil.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...values, supervisor_id, codigos }),
+      });
+      const json = await res.json();
+      if (res.status === 409) {
+        setEditError('Ya existe un colaborador con la cédula ingresada.');
+        return;
+      }
+      if (!res.ok) {
+        const msg = json?.message ?? json?.error ?? `Error ${res.status}`;
+        setEditError(msg);
+        showError(`No se pudo guardar: ${msg}`);
+        return;
+      }
+      const areaObj = areas.find((a) => a.id === values.area_id) ?? data.area;
+      const supObj = supervisores.find((s) => s.id === supervisor_id) ?? null;
+      setData((prev) => ({
+        ...prev,
+        nombre: values.nombre,
+        apellido: values.apellido,
+        cedula: values.cedula,
+        telefono: values.telefono || null,
+        fecha_nacimiento: values.fecha_nacimiento || null,
+        area: areaObj ? { id: areaObj.id, nombre: areaObj.nombre } : null,
+        supervisor: supObj ? { id: supObj.id, nombre: supObj.nombre, apellido: supObj.apellido } : null,
+      }));
+      setLocalCodigos((prev) => prev.map((c) => ({ ...c, workno: worknos[c.id] ?? c.workno })));
+      setIsEditing(false);
+      showSuccess('Datos actualizados correctamente.');
+    } catch {
+      const msg = 'Error de red. Intente de nuevo.';
+      setEditError(msg);
+      showError(msg);
     }
-    if (!res.ok) {
-      setEditError(json.error ?? 'Error al guardar los cambios.');
-      return;
-    }
-    const areaObj = areas.find((a) => a.id === values.area_id) ?? data.area;
-    const supObj = supervisores.find((s) => s.id === values.supervisor_id) ?? null;
-    setData((prev) => ({
-      ...prev,
-      nombre: values.nombre,
-      apellido: values.apellido,
-      cedula: values.cedula,
-      telefono: values.telefono || null,
-      fecha_nacimiento: values.fecha_nacimiento || null,
-      area: areaObj ? { id: areaObj.id, nombre: areaObj.nombre } : null,
-      supervisor: supObj ? { id: supObj.id, nombre: supObj.nombre, apellido: supObj.apellido } : null,
-    }));
-    setLocalCodigos((prev) => prev.map((c) => ({ ...c, workno: worknos[c.id] ?? c.workno })));
-    setIsEditing(false);
-    setEditSuccess(true);
   }
 
   async function handleBajaConfirm() {
@@ -182,20 +193,34 @@ export default function ColaboradorPerfil({ perfil }: ColaboradorPerfilProps) {
       if (res.ok) {
         setData((prev) => ({ ...prev, activo: false }));
         setBajaDialogOpen(false);
+        showSuccess('Colaborador dado de baja.');
+      } else {
+        const json = await res.json().catch(() => ({}));
+        showError(json?.message ?? 'No se pudo dar de baja. Intente de nuevo.');
       }
+    } catch {
+      showError('Error de red. Intente de nuevo.');
     } finally {
       setBajaLoading(false);
     }
   }
 
   async function handleReactivar() {
-    const res = await fetch(`/api/colaboradores/${perfil.id}/estado`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ activo: true }),
-    });
-    if (res.ok) {
-      setData((prev) => ({ ...prev, activo: true }));
+    try {
+      const res = await fetch(`/api/colaboradores/${perfil.id}/estado`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ activo: true }),
+      });
+      if (res.ok) {
+        setData((prev) => ({ ...prev, activo: true }));
+        showSuccess('Colaborador reactivado.');
+      } else {
+        const json = await res.json().catch(() => ({}));
+        showError(json?.message ?? 'No se pudo reactivar. Intente de nuevo.');
+      }
+    } catch {
+      showError('Error de red. Intente de nuevo.');
     }
   }
 
@@ -204,11 +229,6 @@ export default function ColaboradorPerfil({ perfil }: ColaboradorPerfilProps) {
       {!data.activo && (
         <Alert severity="warning" sx={{ mb: 2 }}>
           Este colaborador está inactivo y no resolverá nuevos eventos biométricos.
-        </Alert>
-      )}
-      {editSuccess && (
-        <Alert severity="success" sx={{ mb: 2 }} onClose={() => setEditSuccess(false)}>
-          Datos actualizados correctamente.
         </Alert>
       )}
 

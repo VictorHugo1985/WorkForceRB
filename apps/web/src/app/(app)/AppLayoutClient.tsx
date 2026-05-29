@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import Box from '@mui/material/Box';
 import { AppSidebar } from '@/components/layout/AppSidebar';
+import { SnackbarProvider } from '@/lib/SnackbarContext';
 
 const STORAGE_KEY = 'sidebar_open';
 
@@ -30,18 +31,20 @@ export function AppLayoutClient({ children, nombre, roles, exp }: AppLayoutClien
   }
 
   return (
-    <Box sx={{ display: 'flex', minHeight: '100vh' }}>
-      <AppSidebar nombre={nombre} roles={roles} exp={exp} open={open} onToggle={handleToggle} />
-      <Box
-        component="main"
-        sx={{
-          flexGrow: 1,
-          p: 3,
-          minWidth: 0,
-        }}
-      >
-        {children}
+    <SnackbarProvider>
+      <Box sx={{ display: 'flex', minHeight: '100vh' }}>
+        <AppSidebar nombre={nombre} roles={roles} exp={exp} open={open} onToggle={handleToggle} />
+        <Box
+          component="main"
+          sx={{
+            flexGrow: 1,
+            p: 3,
+            minWidth: 0,
+          }}
+        >
+          {children}
+        </Box>
       </Box>
-    </Box>
+    </SnackbarProvider>
   );
 }
