@@ -188,6 +188,8 @@ export async function getLiquidacionDetail(
   colaboradorId: string,
   semanaId: string,
 ): Promise<{ data: LiquidacionData; semanaFechas: { fechaInicio: string; fechaFin: string } } | null> {
+  await findOrCreateBorrador(client, colaboradorId, semanaId);
+
   const liqRes = await client.query(
     `SELECT id, colaborador_id, semana_id, estado,
             horas_ordinarias, horas_extra, valor_horas_ordinarias, valor_horas_extra,

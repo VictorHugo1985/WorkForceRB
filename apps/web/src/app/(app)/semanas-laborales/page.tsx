@@ -23,14 +23,15 @@ export default async function SemanasLaboralesPage() {
     const client = await pool.connect();
     try {
       const res = await client.query(
-        `SELECT id, fecha_inicio, fecha_fin, estado, creado_en FROM semanas_laborales ORDER BY fecha_inicio DESC`,
+        `SELECT id, fecha_inicio::text, fecha_fin::text, estado, creado_en::text
+         FROM semanas_laborales ORDER BY fecha_inicio DESC`,
       );
       semanas = res.rows.map((r) => ({
         id: r.id as string,
-        fecha_inicio: String(r.fecha_inicio).slice(0, 10),
-        fecha_fin: String(r.fecha_fin).slice(0, 10),
+        fecha_inicio: (r.fecha_inicio as string).slice(0, 10),
+        fecha_fin: (r.fecha_fin as string).slice(0, 10),
         estado: r.estado as string,
-        creado_en: r.creado_en instanceof Date ? r.creado_en.toISOString() : String(r.creado_en),
+        creado_en: r.creado_en as string,
       }));
     } finally {
       client.release();

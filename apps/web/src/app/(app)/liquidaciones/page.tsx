@@ -42,14 +42,14 @@ export default async function LiquidacionesPage({
 
       if (semanaId) {
         const semanaRes = await client.query(
-          `SELECT id, fecha_inicio, fecha_fin, estado FROM semanas_laborales WHERE id = $1`,
+          `SELECT id, fecha_inicio::text, fecha_fin::text, estado FROM semanas_laborales WHERE id = $1`,
           [semanaId],
         );
         const sr = semanaRes.rows[0];
         semanaActiva = sr ? {
           id: sr.id as string,
-          fecha_inicio: String(sr.fecha_inicio).slice(0, 10),
-          fecha_fin: String(sr.fecha_fin).slice(0, 10),
+          fecha_inicio: (sr.fecha_inicio as string).slice(0, 10),
+          fecha_fin: (sr.fecha_fin as string).slice(0, 10),
           estado: sr.estado as string,
         } : null;
 
@@ -77,12 +77,12 @@ export default async function LiquidacionesPage({
       }
 
       const semanasRes = await client.query(
-        `SELECT id, fecha_inicio, fecha_fin, estado FROM semanas_laborales ORDER BY fecha_inicio DESC`,
+        `SELECT id, fecha_inicio::text, fecha_fin::text, estado FROM semanas_laborales ORDER BY fecha_inicio DESC`,
       );
       semanas = semanasRes.rows.map((r) => ({
         id: r.id as string,
-        fecha_inicio: String(r.fecha_inicio).slice(0, 10),
-        fecha_fin: String(r.fecha_fin).slice(0, 10),
+        fecha_inicio: (r.fecha_inicio as string).slice(0, 10),
+        fecha_fin: (r.fecha_fin as string).slice(0, 10),
         estado: r.estado as string,
       }));
     } finally {
