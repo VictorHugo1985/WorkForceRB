@@ -181,6 +181,50 @@ export async function calcularTotales(client: PoolClient, liquidacionId: string)
     totalBonos, totalDescuentos, totalPago, calculadoEn };
 }
 
+// ─── Biometric hours calculator (single collaborator) ────────────────────────
+
+async function calcularDiasDesdeEventos(
+  client: PoolClient,
+  liquidacionId: string,
+  colaboradorId: string,
+  fechaInicio: string,
+  fechaFin: string,
+): Promise<void> {
+  const eventosRes = await client.query(
+    `SELECT
+       ebd.checktime::date AS fecha,
+       MIN(CASE WHEN ebd.tipo_evento = 'ENTRADA' THEN ebd.checktime END) AS primera_entrada,
+       MAX(CASE WHEN ebd.tipo_evento = 'SALIDA'  THEN ebd.checktime END) AS ultima_salida
+     FROM eventos_biometricos_desglosados ebd
+     JOIN eventos_biometricos eb ON eb.id = ebd.evento_id
+     WHERE eb.colaborador_id = $1
+       AND ebd.checktime::date BETWEEN $2 AND $3
+       AND ebd.tipo_evento IN ('ENTRADA', 'SALIDA')
+     GROUP BY ebd.checktime::date`,
+    [colaboradorId, fechaInicio, fechaFin],
+  );
+
+  for (const ev of eventosRes.rows) {
+    const entrada: Date | null = ev.primera_entrada ?? null;
+    const salida: Date | null = ev.ultima_salida ?? null;
+    let horas = 0;
+    if (entrada && salida && salida > entrada) {
+      horas = Math.round(((salida.getTime() - entrada.getTime()) / 3_600_000) * 100) / 100;
+    }
+    await client.query(
+      `INSERT INTO dias_liquidacion
+         (id, liquidacion_id, fecha, horas_calculadas, atraso_detectado, estado_dia)
+       VALUES (gen_random_uuid(), $1, $2, $3, false, 'SIN_REVISION')
+       ON CONFLICT (liquidacion_id, fecha) DO NOTHING`,
+      [liquidacionId, ev.fecha, horas],
+    );
+  }
+
+  if (eventosRes.rows.length > 0) {
+    try { await calcularTotales(client, liquidacionId); } catch { /* ignore */ }
+  }
+}
+
 // ─── Detail loader ────────────────────────────────────────────────────────────
 
 export async function getLiquidacionDetail(
@@ -190,57 +234,83 @@ export async function getLiquidacionDetail(
 ): Promise<{ data: LiquidacionData; semanaFechas: { fechaInicio: string; fechaFin: string } } | null> {
   await findOrCreateBorrador(client, colaboradorId, semanaId);
 
-  const liqRes = await client.query(
-    `SELECT id, colaborador_id, semana_id, estado,
-            horas_ordinarias, horas_extra, valor_horas_ordinarias, valor_horas_extra,
-            total_bonos, total_descuentos, total_pago, calculado_en, aprobado_por, aprobada_en
-     FROM liquidaciones_semanales WHERE colaborador_id = $1 AND semana_id = $2`,
-    [colaboradorId, semanaId],
-  );
+  // Fetch liquidacion + semana dates together
+  const [liqRes, semanaRes] = await Promise.all([
+    client.query(
+      `SELECT id, colaborador_id, semana_id, estado,
+              horas_ordinarias, horas_extra, valor_horas_ordinarias, valor_horas_extra,
+              total_bonos, total_descuentos, total_pago, calculado_en, aprobado_por, aprobada_en
+       FROM liquidaciones_semanales WHERE colaborador_id = $1 AND semana_id = $2`,
+      [colaboradorId, semanaId],
+    ),
+    client.query(
+      `SELECT fecha_inicio::text, fecha_fin::text FROM semanas_laborales WHERE id = $1`,
+      [semanaId],
+    ),
+  ]);
+
   if (liqRes.rows.length === 0) return null;
   const liq = liqRes.rows[0];
 
-  const [diasRes, bonosRes, semanaRes] = await Promise.all([
+  const semana = semanaRes.rows[0];
+  const semanaFechas = semana
+    ? { fechaInicio: (semana.fecha_inicio as string).slice(0, 10), fechaFin: (semana.fecha_fin as string).slice(0, 10) }
+    : { fechaInicio: '', fechaFin: '' };
+
+  // If no dias yet, calculate them from biometric events
+  const diasCount = await client.query(
+    `SELECT COUNT(*) AS n FROM dias_liquidacion WHERE liquidacion_id = $1`,
+    [liq.id],
+  );
+  if (Number(diasCount.rows[0].n) === 0 && semanaFechas.fechaInicio) {
+    await calcularDiasDesdeEventos(
+      client, liq.id as string, colaboradorId,
+      semanaFechas.fechaInicio, semanaFechas.fechaFin,
+    );
+  }
+
+  // Re-fetch dias + bonos (dias may have been just created above)
+  const [diasRes, bonosRes] = await Promise.all([
     client.query(
-      `SELECT id, fecha, horas_calculadas, horas_ajustadas_supervisor, atraso_detectado,
+      `SELECT id, fecha::text, horas_calculadas, horas_ajustadas_supervisor, atraso_detectado,
               estado_dia, motivo_ajuste, descuento_tipo, descuento_valor, descuento_motivo
        FROM dias_liquidacion WHERE liquidacion_id = $1 ORDER BY fecha`,
       [liq.id],
     ),
     client.query(
-      `SELECT id, colaborador_id, semana_id, fecha_dia, tipo, monto, comentario, aprobado_por, creado_en
+      `SELECT id, colaborador_id, semana_id, fecha_dia::text, tipo, monto, comentario, aprobado_por, creado_en
        FROM bonos WHERE colaborador_id = $1 AND semana_id = $2 ORDER BY fecha_dia`,
       [colaboradorId, semanaId],
     ),
-    client.query(
-      `SELECT fecha_inicio, fecha_fin FROM semanas_laborales WHERE id = $1`,
-      [semanaId],
-    ),
   ]);
 
-  const semana = semanaRes.rows[0];
-  const semanaFechas = semana
-    ? { fechaInicio: String(semana.fecha_inicio).slice(0, 10), fechaFin: String(semana.fecha_fin).slice(0, 10) }
-    : { fechaInicio: '', fechaFin: '' };
+  // Re-read updated totals after possible recalculation
+  const liqUpdated = await client.query(
+    `SELECT horas_ordinarias, horas_extra, valor_horas_ordinarias, valor_horas_extra,
+            total_bonos, total_descuentos, total_pago, calculado_en
+     FROM liquidaciones_semanales WHERE id = $1`,
+    [liq.id],
+  );
+  const totals = liqUpdated.rows[0] ?? liq;
 
   const data: LiquidacionData = {
     id: liq.id,
     colaboradorId: liq.colaborador_id,
     semanaId: liq.semana_id,
     estado: liq.estado,
-    horasOrdinarias: Number(liq.horas_ordinarias),
-    horasExtra: Number(liq.horas_extra),
-    valorHorasOrdinarias: Number(liq.valor_horas_ordinarias),
-    valorHorasExtra: Number(liq.valor_horas_extra),
-    totalBonos: Number(liq.total_bonos),
-    totalDescuentos: Number(liq.total_descuentos),
-    totalPago: Number(liq.total_pago),
-    calculadoEn: liq.calculado_en,
+    horasOrdinarias: Number(totals.horas_ordinarias),
+    horasExtra: Number(totals.horas_extra),
+    valorHorasOrdinarias: Number(totals.valor_horas_ordinarias),
+    valorHorasExtra: Number(totals.valor_horas_extra),
+    totalBonos: Number(totals.total_bonos),
+    totalDescuentos: Number(totals.total_descuentos),
+    totalPago: Number(totals.total_pago),
+    calculadoEn: totals.calculado_en,
     aprobadoPor: liq.aprobado_por ?? null,
     aprobadaEn: liq.aprobada_en ?? null,
     dias: diasRes.rows.map((d) => ({
       id: d.id,
-      fecha: String(d.fecha).slice(0, 10),
+      fecha: (d.fecha as string).slice(0, 10),
       horasCalculadas: Number(d.horas_calculadas),
       horasAjustadasSupervisor: d.horas_ajustadas_supervisor != null ? Number(d.horas_ajustadas_supervisor) : null,
       atrasoDetectado: Boolean(d.atraso_detectado),
@@ -252,7 +322,7 @@ export async function getLiquidacionDetail(
     })),
     bonos: bonosRes.rows.map((b) => ({
       id: b.id,
-      fechaDia: String(b.fecha_dia).slice(0, 10),
+      fechaDia: (b.fecha_dia as string).slice(0, 10),
       tipo: b.tipo,
       monto: Number(b.monto),
       comentario: b.comentario,
