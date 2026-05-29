@@ -7,7 +7,7 @@ async function getColaboradores() {
   const client = await pool.connect();
   try {
     const result = await client.query(
-      `SELECT c.id, c.nombre, c.apellido, c.cedula, c.activo,
+      `SELECT c.id, c.nombre, c.apellido, c.cedula, c.workno, c.telefono, c.activo,
               a.id AS area_id, a.nombre AS area_nombre
        FROM colaboradores c
        LEFT JOIN areas a ON a.id = c.area_id
@@ -18,6 +18,8 @@ async function getColaboradores() {
       nombre: r.nombre as string,
       apellido: r.apellido as string,
       cedula: r.cedula as string,
+      workno: (r.workno ?? '') as string,
+      telefono: (r.telefono ?? '') as string,
       activo: r.activo as boolean,
       area: r.area_id ? { id: r.area_id as string, nombre: r.area_nombre as string } : null,
     }));

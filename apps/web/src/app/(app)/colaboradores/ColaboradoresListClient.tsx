@@ -24,6 +24,8 @@ interface ColaboradorRow {
   nombre: string;
   apellido: string;
   cedula: string;
+  workno: string;
+  telefono: string;
   activo: boolean;
   area: { id: string; nombre: string } | null;
 }
@@ -45,7 +47,9 @@ export function ColaboradoresListClient({ colaboradores }: Props) {
       return (
         c.nombre.toLowerCase().includes(q) ||
         c.apellido.toLowerCase().includes(q) ||
-        c.cedula.toLowerCase().includes(q)
+        c.cedula.toLowerCase().includes(q) ||
+        c.workno.toLowerCase().includes(q) ||
+        c.telefono.toLowerCase().includes(q)
       );
     });
   }, [colaboradores, busqueda, mostrarInactivos]);
@@ -69,7 +73,7 @@ export function ColaboradoresListClient({ colaboradores }: Props) {
 
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
         <TextField
-          placeholder="Buscar por nombre, apellido o cédula..."
+          placeholder="Buscar por nombre, apellido, workno o teléfono..."
           value={busqueda}
           onChange={(e) => setBusqueda(e.target.value)}
           size="small"
@@ -97,7 +101,8 @@ export function ColaboradoresListClient({ colaboradores }: Props) {
             <TableHead>
               <TableRow>
                 <TableCell>Nombre completo</TableCell>
-                <TableCell>Cédula</TableCell>
+                <TableCell>Workno</TableCell>
+                <TableCell>Teléfono</TableCell>
                 <TableCell>Área</TableCell>
                 <TableCell>Estado</TableCell>
               </TableRow>
@@ -113,7 +118,8 @@ export function ColaboradoresListClient({ colaboradores }: Props) {
                   <TableCell sx={{ fontWeight: 500 }}>
                     {c.apellido}, {c.nombre}
                   </TableCell>
-                  <TableCell>{c.cedula}</TableCell>
+                  <TableCell>{c.workno || '—'}</TableCell>
+                  <TableCell>{c.telefono || '—'}</TableCell>
                   <TableCell>{c.area?.nombre ?? '—'}</TableCell>
                   <TableCell>
                     <Chip
