@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { pool, checkAdminRole, verifyToken, isBlacklisted, COOKIE_NAME } from '@/lib/auth-server';
+import { generarBorradoresSemana } from '@/lib/liquidacion-db';
 
 const CreateSchema = z.object({
   fechaInicio: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato YYYY-MM-DD requerido'),
@@ -64,7 +65,14 @@ export async function POST(req: NextRequest) {
        RETURNING id, fecha_inicio, fecha_fin, estado, creado_en`,
       [fechaInicio, fechaFin],
     );
-    return NextResponse.json(res.rows[0], { status: 201 });
+    const semana = res.rows[0];
+
+    // Auto-generate BORRADOR liquidaciones for all active collaborators
+    try {
+      await generarBorradoresSemana(client, semana.id as string, fechaInicio, fechaFin);
+    } catch { /* non-critical — semana is still created */ }
+
+    return NextResponse.json(semana, { status: 201 });
   } finally {
     client.release();
   }

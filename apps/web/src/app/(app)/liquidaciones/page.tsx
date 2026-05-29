@@ -12,19 +12,14 @@ export default async function LiquidacionesPage({
   const token = cookieStore.get('access_token')?.value;
   if (!token) redirect('/login?reason=expired');
 
-  let userId = '';
-  let roles: string[] = [];
   try {
     const payload = await verifyToken(token!);
     if (isBlacklisted(payload.jti)) redirect('/login?reason=expired');
-    userId = payload.sub;
-    roles = payload.roles;
   } catch {
     redirect('/login?reason=expired');
   }
 
   const { semana_id } = await searchParams;
-  const isSupervisorOnly = roles.includes('SUPERVISOR') && !roles.includes('ADMINISTRADOR');
 
   let semanaActiva: { id: string; fecha_inicio: string; fecha_fin: string; estado: string } | null = null;
   let liquidaciones: {
@@ -59,9 +54,9 @@ export default async function LiquidacionesPage({
              FROM colaboradores c
              LEFT JOIN areas a ON a.id = c.area_id
              LEFT JOIN liquidaciones_semanales ls ON ls.colaborador_id = c.id AND ls.semana_id = $1
-             WHERE c.activo = true ${isSupervisorOnly ? 'AND c.supervisor_id = $2' : ''}
+             WHERE c.activo = true
              ORDER BY c.apellido, c.nombre`,
-            isSupervisorOnly ? [semanaId, userId] : [semanaId],
+            [semanaId],
           );
           liquidaciones = colabRes.rows.map((r) => ({
             colaboradorId: r.id,

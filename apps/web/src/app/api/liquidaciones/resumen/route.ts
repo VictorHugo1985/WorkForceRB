@@ -5,9 +5,6 @@ import { checkLiquidacionRole } from '@/lib/liquidacion-db';
 export async function GET(req: NextRequest) {
   const auth = await checkLiquidacionRole(req);
   if (auth instanceof NextResponse) return auth;
-  const { userId, roles } = auth;
-
-  const isSupervisorOnly = roles.includes('SUPERVISOR') && !roles.includes('ADMINISTRADOR');
   const client = await pool.connect();
   try {
     let semanaId = req.nextUrl.searchParams.get('semana_id');
@@ -33,9 +30,9 @@ export async function GET(req: NextRequest) {
        FROM colaboradores c
        LEFT JOIN areas a ON a.id = c.area_id
        LEFT JOIN liquidaciones_semanales ls ON ls.colaborador_id = c.id AND ls.semana_id = $1
-       WHERE c.activo = true ${isSupervisorOnly ? 'AND c.supervisor_id = $2' : ''}
+       WHERE c.activo = true
        ORDER BY c.apellido, c.nombre`,
-      isSupervisorOnly ? [semanaId, userId] : [semanaId],
+      [semanaId],
     );
 
     const liquidaciones = colaboradoresRes.rows.map((r) => ({

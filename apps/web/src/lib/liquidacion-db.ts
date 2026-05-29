@@ -34,21 +34,13 @@ export async function assertEditable(client: PoolClient, liquidacionId: string) 
     throw { status: 409, message: 'La liquidación ya fue aprobada y no puede modificarse' };
 }
 
+// Scope restriction removed — all supervisors can access any collaborator.
 export async function assertScope(
-  client: PoolClient,
-  userId: string,
-  roles: string[],
-  colaboradorId: string,
-) {
-  const isSupervisorOnly = roles.includes('SUPERVISOR') && !roles.includes('ADMINISTRADOR');
-  if (!isSupervisorOnly) return;
-  const r = await client.query(
-    `SELECT supervisor_id FROM colaboradores WHERE id = $1`,
-    [colaboradorId],
-  );
-  if (r.rows.length === 0 || r.rows[0].supervisor_id !== userId)
-    throw { status: 403, message: 'No tiene acceso a este colaborador' };
-}
+  _client: PoolClient,
+  _userId: string,
+  _roles: string[],
+  _colaboradorId: string,
+): Promise<void> { /* no-op */ }
 
 // ─── Find or create borrador ──────────────────────────────────────────────────
 
@@ -186,4 +178,82 @@ export async function calcularTotales(client: PoolClient, liquidacionId: string)
 
   return { horasOrdinarias, horasExtra, valorHorasOrdinarias, valorHorasExtra,
     totalBonos, totalDescuentos, totalPago, calculadoEn };
+}
+
+// ─── Auto-generate borradores when a semana is created ────────────────────────
+
+export async function generarBorradoresSemana(
+  client: PoolClient,
+  semanaId: string,
+  fechaInicio: string,
+  fechaFin: string,
+): Promise<void> {
+  const colabsRes = await client.query(
+    `SELECT id FROM colaboradores WHERE activo = true`,
+  );
+  if (colabsRes.rows.length === 0) return;
+
+  const colaboradorIds: string[] = colabsRes.rows.map((r) => r.id as string);
+
+  // Batch-insert a BORRADOR liquidacion for every active collaborator
+  const insertVals = colaboradorIds
+    .map((_, i) => `(gen_random_uuid(), $${i * 2 + 1}, $${i * 2 + 2}, 'BORRADOR')`)
+    .join(', ');
+  await client.query(
+    `INSERT INTO liquidaciones_semanales (id, colaborador_id, semana_id, estado)
+     VALUES ${insertVals}
+     ON CONFLICT (colaborador_id, semana_id) DO NOTHING`,
+    colaboradorIds.flatMap((id) => [id, semanaId]),
+  );
+
+  // Fetch resulting liquidacion IDs
+  const liqRes = await client.query(
+    `SELECT id, colaborador_id FROM liquidaciones_semanales WHERE semana_id = $1`,
+    [semanaId],
+  );
+  const liqByColab = new Map<string, string>(
+    liqRes.rows.map((r) => [r.colaborador_id as string, r.id as string]),
+  );
+
+  // Query biometric events for the period grouped by collaborator + day
+  const eventosRes = await client.query(
+    `SELECT
+       eb.colaborador_id,
+       ebd.checktime::date AS fecha,
+       MIN(CASE WHEN ebd.tipo_evento = 'ENTRADA' THEN ebd.checktime END) AS primera_entrada,
+       MAX(CASE WHEN ebd.tipo_evento = 'SALIDA'  THEN ebd.checktime END) AS ultima_salida
+     FROM eventos_biometricos_desglosados ebd
+     JOIN eventos_biometricos eb ON eb.id = ebd.evento_id
+     WHERE eb.colaborador_id IS NOT NULL
+       AND ebd.checktime::date BETWEEN $1 AND $2
+       AND ebd.tipo_evento IN ('ENTRADA', 'SALIDA')
+     GROUP BY eb.colaborador_id, ebd.checktime::date`,
+    [fechaInicio, fechaFin],
+  );
+
+  // Insert one dia_liquidacion per (colaborador, date) with calculated hours
+  for (const ev of eventosRes.rows) {
+    const liquidacionId = liqByColab.get(ev.colaborador_id as string);
+    if (!liquidacionId) continue;
+
+    const entrada: Date | null = ev.primera_entrada ?? null;
+    const salida: Date | null = ev.ultima_salida ?? null;
+    let horas = 0;
+    if (entrada && salida && salida > entrada) {
+      horas = Math.round(((salida.getTime() - entrada.getTime()) / 3_600_000) * 100) / 100;
+    }
+
+    await client.query(
+      `INSERT INTO dias_liquidacion
+         (id, liquidacion_id, fecha, horas_calculadas, atraso_detectado, estado_dia)
+       VALUES (gen_random_uuid(), $1, $2, $3, false, 'SIN_REVISION')
+       ON CONFLICT (liquidacion_id, fecha) DO NOTHING`,
+      [liquidacionId, ev.fecha, horas],
+    );
+  }
+
+  // Recalculate totals for each liquidacion (ignore individual failures)
+  for (const liquidacionId of liqByColab.values()) {
+    try { await calcularTotales(client, liquidacionId); } catch { /* continue */ }
+  }
 }

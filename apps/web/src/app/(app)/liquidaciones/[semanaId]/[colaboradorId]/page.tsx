@@ -13,19 +13,14 @@ export default async function LiquidacionDetailPage({
   const token = cookieStore.get('access_token')?.value;
   if (!token) redirect('/login?reason=expired');
 
-  let userId = '';
-  let roles: string[] = [];
   try {
     const payload = await verifyToken(token!);
     if (isBlacklisted(payload.jti)) redirect('/login?reason=expired');
-    userId = payload.sub;
-    roles = payload.roles;
   } catch {
     redirect('/login?reason=expired');
   }
 
   const { semanaId, colaboradorId } = await params;
-  const isSupervisorOnly = roles.includes('SUPERVISOR') && !roles.includes('ADMINISTRADOR');
 
   let client;
   try {
@@ -35,16 +30,6 @@ export default async function LiquidacionDetailPage({
   }
 
   try {
-    if (isSupervisorOnly) {
-      const scopeRes = await client!.query(
-        `SELECT supervisor_id FROM colaboradores WHERE id = $1`,
-        [colaboradorId],
-      );
-      if (scopeRes.rows.length === 0 || scopeRes.rows[0].supervisor_id !== userId) {
-        redirect('/liquidaciones');
-      }
-    }
-
     const liqRes = await client!.query(
       `SELECT id, colaborador_id, semana_id, estado,
               horas_ordinarias, horas_extra, valor_horas_ordinarias, valor_horas_extra,
