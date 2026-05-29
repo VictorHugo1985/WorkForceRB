@@ -12,8 +12,11 @@ async function getColaboradores() {
   }
   try {
     const result = await client.query(
-      `SELECT c.id, c.nombre, c.apellido, c.cedula, c.workno, c.telefono, c.activo,
-              a.id AS area_id, a.nombre AS area_nombre
+      `SELECT c.id, c.nombre, c.apellido, c.cedula, c.telefono, c.activo,
+              a.id AS area_id, a.nombre AS area_nombre,
+              (SELECT cc.codigo_biometrico FROM codigos_colaborador cc
+               WHERE cc.colaborador_id = c.id AND cc.activo = true
+               ORDER BY cc.creado_en LIMIT 1) AS workno
        FROM colaboradores c
        LEFT JOIN areas a ON a.id = c.area_id
        ORDER BY c.apellido, c.nombre`,
@@ -28,7 +31,8 @@ async function getColaboradores() {
       activo: r.activo as boolean,
       area: r.area_id ? { id: r.area_id as string, nombre: r.area_nombre as string } : null,
     }));
-  } catch {
+  } catch (err) {
+    console.error('[colaboradores] query error:', err);
     return [];
   } finally {
     client.release();
