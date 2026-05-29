@@ -13,30 +13,39 @@ export default async function LiquidacionDetailPage({
   const token = cookieStore.get('access_token')?.value;
   if (!token) redirect('/login?reason=expired');
 
-  let payload: { sub: string; roles: string[]; jti: string };
+  let userId = '';
+  let roles: string[] = [];
   try {
-    payload = await verifyToken(token) as typeof payload;
+    const payload = await verifyToken(token!);
     if (isBlacklisted(payload.jti)) redirect('/login?reason=expired');
+    userId = payload.sub;
+    roles = payload.roles;
   } catch {
     redirect('/login?reason=expired');
   }
 
   const { semanaId, colaboradorId } = await params;
-  const isSupervisorOnly = payload.roles.includes('SUPERVISOR') && !payload.roles.includes('ADMINISTRADOR');
+  const isSupervisorOnly = roles.includes('SUPERVISOR') && !roles.includes('ADMINISTRADOR');
 
-  const client = await pool.connect();
+  let client;
+  try {
+    client = await pool.connect();
+  } catch {
+    notFound();
+  }
+
   try {
     if (isSupervisorOnly) {
-      const scopeRes = await client.query(
+      const scopeRes = await client!.query(
         `SELECT supervisor_id FROM colaboradores WHERE id = $1`,
         [colaboradorId],
       );
-      if (scopeRes.rows.length === 0 || scopeRes.rows[0].supervisor_id !== payload.sub) {
+      if (scopeRes.rows.length === 0 || scopeRes.rows[0].supervisor_id !== userId) {
         redirect('/liquidaciones');
       }
     }
 
-    const liqRes = await client.query(
+    const liqRes = await client!.query(
       `SELECT id, colaborador_id, semana_id, estado,
               horas_ordinarias, horas_extra, valor_horas_ordinarias, valor_horas_extra,
               total_bonos, total_descuentos, total_pago, calculado_en, aprobado_por, aprobada_en
@@ -48,18 +57,18 @@ export default async function LiquidacionDetailPage({
     const liq = liqRes.rows[0];
 
     const [diasRes, bonosRes, semanaRes] = await Promise.all([
-      client.query(
+      client!.query(
         `SELECT id, fecha, horas_calculadas, horas_ajustadas_supervisor, atraso_detectado,
                 estado_dia, motivo_ajuste, descuento_tipo, descuento_valor, descuento_motivo
          FROM dias_liquidacion WHERE liquidacion_id = $1 ORDER BY fecha`,
         [liq.id],
       ),
-      client.query(
+      client!.query(
         `SELECT id, colaborador_id, semana_id, fecha_dia, tipo, monto, comentario, aprobado_por, creado_en
          FROM bonos WHERE colaborador_id = $1 AND semana_id = $2 ORDER BY fecha_dia`,
         [colaboradorId, semanaId],
       ),
-      client.query(
+      client!.query(
         `SELECT fecha_inicio, fecha_fin FROM semanas_laborales WHERE id = $1`,
         [semanaId],
       ),
@@ -114,6 +123,6 @@ export default async function LiquidacionDetailPage({
     if (e.digest?.startsWith('NEXT_REDIRECT') || e.digest?.startsWith('NEXT_NOT_FOUND')) throw err;
     notFound();
   } finally {
-    client.release();
+    client?.release();
   }
 }

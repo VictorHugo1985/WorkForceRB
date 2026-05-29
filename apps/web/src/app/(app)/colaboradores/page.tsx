@@ -4,7 +4,12 @@ import { verifyToken, isBlacklisted, pool } from '@/lib/auth-server';
 import { ColaboradoresListClient } from './ColaboradoresListClient';
 
 async function getColaboradores() {
-  const client = await pool.connect();
+  let client;
+  try {
+    client = await pool.connect();
+  } catch {
+    return [];
+  }
   try {
     const result = await client.query(
       `SELECT c.id, c.nombre, c.apellido, c.cedula, c.workno, c.telefono, c.activo,
@@ -29,6 +34,7 @@ async function getColaboradores() {
     client.release();
   }
 }
+
 
 export default async function ColaboradoresPage() {
   const cookieStore = await cookies();

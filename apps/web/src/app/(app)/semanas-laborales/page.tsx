@@ -8,27 +8,32 @@ export default async function SemanasLaboralesPage() {
   const token = cookieStore.get('access_token')?.value;
   if (!token) redirect('/login?reason=expired');
 
-  let payload: { roles: string[]; jti: string };
+  let roles: string[] = [];
   try {
-    payload = await verifyToken(token) as { roles: string[]; jti: string };
+    const payload = await verifyToken(token!);
     if (isBlacklisted(payload.jti)) redirect('/login?reason=expired');
+    roles = payload.roles;
   } catch {
     redirect('/login?reason=expired');
   }
 
   let semanas: { id: string; fecha_inicio: string; fecha_fin: string; estado: string; creado_en: string }[] = [];
 
-  const client = await pool.connect();
   try {
-    const res = await client.query(
-      `SELECT id, fecha_inicio, fecha_fin, estado, creado_en FROM semanas_laborales ORDER BY fecha_inicio DESC`,
-    );
-    semanas = res.rows;
-  } catch { /* show empty state */ } finally {
-    client.release();
+    const client = await pool.connect();
+    try {
+      const res = await client.query(
+        `SELECT id, fecha_inicio, fecha_fin, estado, creado_en FROM semanas_laborales ORDER BY fecha_inicio DESC`,
+      );
+      semanas = res.rows;
+    } finally {
+      client.release();
+    }
+  } catch {
+    /* show empty state */
   }
 
-  const isAdmin = payload.roles.includes('ADMINISTRADOR');
+  const isAdmin = roles.includes('ADMINISTRADOR');
 
   return <SemanasListClient semanas={semanas} isAdmin={isAdmin} />;
 }
