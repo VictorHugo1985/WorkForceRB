@@ -64,13 +64,15 @@ When a day is flagged as inconsistent, the payroll reviewer can resolve it direc
 - What happens when all punches on a day are isolated (odd-count days)? All form as many complete pairs as possible and the remainder is flagged.
 - What if a punch is recorded on the boundary of two calendar days (e.g., 23:58 and 00:03 next day)? Each punch is attributed to its respective calendar date; the overnight gap is not counted as a shift unless both punches fall on the same day.
 - What if a collaborator has no biometric code assigned? The day shows no punches and no shift data.
-- What if a day has been manually adjusted previously? The manual adjustment value prevails for the accumulated hours column, and a note indicates it was manually set.
+- What if a day has been manually adjusted previously? The manual adjustment value prevails for the accumulated hours column, a note indicates it was manually set, and the original jornadas remain visible as reference.
+- What if all punches on a day are excluded? Accumulated hours = 0 h; no shifts formed; no inconsistency flag (exclusions are intentional reviewer decisions, not system errors).
+- What if excluding a punch turns an even-count day into an odd-count day? The remaining odd punches re-pair and the last one becomes isolated — the inconsistency flag appears and correction is needed.
 
 ## Requirements *(mandatory)*
 
 ### Functional Requirements
 
-- **FR-001**: The payroll day view MUST show each day's biometric punches grouped into chronological entry-exit pairs (shifts), displayed as time intervals (e.g., "08:00 – 12:30").
+- **FR-001**: The payroll day view MUST show each day's biometric punches grouped into chronological entry-exit pairs (shifts), displayed as time intervals (e.g., "08:00 – 12:30"). Shift rows are always visible inline under each day row — no expand/click action required.
 - **FR-002**: Shifts within a day MUST be listed in chronological order of start time.
 - **FR-003**: The payroll day view MUST include an "Horas acumuladas" column per day that sums the duration of all complete shifts for that day.
 - **FR-004**: When a day has an odd number of punches, the system MUST flag that day with a visible inconsistency indicator and identify which punch(es) are unpaired.
@@ -80,7 +82,11 @@ When a day is flagged as inconsistent, the payroll reviewer can resolve it direc
 - **FR-008**: The reviewer MUST be able to resolve an inconsistency by marking the isolated punch as excluded, causing the system to recalculate using only complete pairs.
 - **FR-009**: After a correction is saved, the inconsistency flag for that day MUST be cleared.
 - **FR-010**: Days with zero punches MUST display 0 accumulated hours with no shifts listed and no inconsistency flag.
-- **FR-011**: Days that were previously manually adjusted MUST display the manually set hours and indicate the override is active.
+- **FR-011**: Days that were previously manually adjusted MUST display the manually set hours and indicate the override is active. The original biometric jornadas MUST remain visible as read-only reference alongside the override indicator.
+- **FR-012**: The reviewer MUST be able to mark any individual biometric punch as excluded from the jornada calculation via an inline "Omitir" action directly on that punch's row. Clicking "Omitir" reveals an inline predefined motivo selector (options: "Duplicada", "Error de registro", "Otro") that the reviewer must confirm before the exclusion is applied. No separate dialog is opened.
+- **FR-013**: When one or more punches are excluded, the remaining non-excluded punches MUST be re-paired in strict chronological order to form shifts, and the accumulated hours recalculated from those pairs only. The recalculation MUST be visible immediately after the exclusion action.
+- **FR-014**: Excluded punches MUST remain visible in the shift detail with a distinct visual indicator (e.g., strikethrough or muted style) so the reviewer can see what was removed.
+- **FR-015**: A punch exclusion MUST be revocable via an inline "Restaurar" action on the excluded punch row; hours recalculate accordingly.
 
 ### Key Entities
 
@@ -88,6 +94,7 @@ When a day is flagged as inconsistent, the payroll reviewer can resolve it direc
 - **Isolated Punch**: A biometric punch that cannot be paired because the total punch count for that day is odd; always the last chronological punch in the sequence.
 - **Daily Inconsistency**: A state where a day has one or more isolated punches, requiring reviewer attention and correction.
 - **Day Override**: A manually set hours value for a day that replaces the automatically calculated total; applied by the reviewer when correcting inconsistencies.
+- **Excluded Punch**: An individual biometric punch that the reviewer has marked to not participate in shift pairing. Remains visible in the detail with a distinct visual treatment; does not contribute to accumulated hours. Exclusion is revocable.
 
 ## Success Criteria *(mandatory)*
 
@@ -99,6 +106,15 @@ When a day is flagged as inconsistent, the payroll reviewer can resolve it direc
 - **SC-004**: The accumulated hours column value matches the sum of displayed shift durations for every complete (non-flagged) day.
 - **SC-005**: After correcting an inconsistency and reloading the view, 100% of corrections are retained — no data loss on refresh.
 
+## Clarifications
+
+### Session 2026-05-29
+
+- Q: ¿Cómo debe mostrarse el detalle de jornadas por día en la tabla? → A: Siempre visible inline — las jornadas se muestran directamente debajo de cada fila de día sin necesidad de expandir.
+- Q: Cuando un día tiene horas ajustadas manualmente, ¿se siguen mostrando las jornadas originales? → A: Sí, siempre visibles como referencia con indicador "Horas ajustadas: X h" prevaleciendo para el cálculo. Adicionalmente, el usuario puede omitir marcaciones individuales (por repetidas u otro motivo) del cálculo de horas en la jornada.
+- Q: ¿Cómo el revisor excluye una marcación individual de una jornada? → A: Acción inline por fila de marcación — cada marcación tiene un botón "Omitir" directo en su fila; al hacer clic se marca como excluida y los pares se recalculan inmediatamente.
+- Q: ¿Al omitir una marcación individual, se requiere que el revisor ingrese un motivo? → A: Selector de motivo predefinido — al excluir una marcación se despliega un mini-selector inline con opciones predefinidas (ej: "Duplicada", "Error de registro", "Otro"); no se requiere texto libre.
+
 ## Assumptions
 
 - Pairing follows strict chronological order; the system does not attempt to infer entry/exit from the punch type (`tipo_evento`), since punch type may be incorrect. Time order is the sole authority.
@@ -106,4 +122,6 @@ When a day is flagged as inconsistent, the payroll reviewer can resolve it direc
 - The existing payroll detail view (`DiaLiquidacionTable`) is the surface where shift detail is added; this feature enhances that component rather than introducing a new page.
 - Correction of isolated punches leverages the existing manual override mechanism (`DiaAjusteDialog`) already present in the payroll view.
 - Excluded/ignored isolated punches are recorded as an override decision so the correction survives recalculation.
+- Predefined motivo options ("Duplicada", "Error de registro", "Otro") satisfy Constitution Principle IX audit-trail requirements without requiring free-text entry.
 - This feature covers the payroll review period only — it does not modify raw biometric event records.
+- An unresolved inconsistency flag does not block liquidación approval; it is advisory. A reviewer can approve a period that still contains flagged days at their discretion.

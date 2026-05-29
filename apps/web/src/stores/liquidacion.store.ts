@@ -1,5 +1,18 @@
 import { create } from 'zustand';
 
+export interface Jornada {
+  entrada: string;
+  salida: string;
+  horas: number;
+  entradaRaw: string;
+  salidaRaw: string;
+}
+
+export interface ExcludedPunch {
+  iso: string;
+  hhmm: string;
+}
+
 export interface DiaLiquidacionData {
   id: string;
   fecha: string;
@@ -11,6 +24,13 @@ export interface DiaLiquidacionData {
   descuentoTipo: string | null;
   descuentoValor: number | null;
   descuentoMotivo: string | null;
+  jornadas?: Jornada[];
+  horasParejadas?: number;
+  marcacionSuelta?: string | null;
+  marcacionSueltaRaw?: string | null;
+  tieneInconsistencia?: boolean;
+  marcacionesExcluidas?: string[];
+  excludedPunchDisplay?: ExcludedPunch[];
 }
 
 export interface BonoData {

@@ -8,6 +8,7 @@ import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Checkbox from '@mui/material/Checkbox';
+import Divider from '@mui/material/Divider';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
@@ -80,6 +81,7 @@ export function DiaAjusteDialog({ dia, open, onClose }: Props) {
     handleSubmit,
     register,
     watch,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -158,6 +160,31 @@ export function DiaAjusteDialog({ dia, open, onClose }: Props) {
             <Alert severity="error" sx={{ mb: 2 }}>
               {error}
             </Alert>
+          )}
+
+          {dia.tieneInconsistencia && dia.marcacionSuelta && (
+            <>
+              <Alert
+                severity="warning"
+                sx={{ mb: 2 }}
+                action={
+                  <Button
+                    size="small"
+                    color="warning"
+                    variant="outlined"
+                    onClick={() => {
+                      setValue('horasAjustadasSupervisor', dia.horasParejadas ?? 0);
+                      setValue('motivoAjuste', 'Marcación suelta excluida del cálculo');
+                    }}
+                  >
+                    Excluir marcación suelta
+                  </Button>
+                }
+              >
+                Marcación suelta detectada: {dia.marcacionSuelta} — completa las jornadas pareadas: {(dia.horasParejadas ?? 0).toFixed(2)} h
+              </Alert>
+              <Divider sx={{ mb: 2 }} />
+            </>
           )}
 
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>

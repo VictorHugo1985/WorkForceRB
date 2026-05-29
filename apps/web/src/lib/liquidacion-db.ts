@@ -1,7 +1,84 @@
 import { PoolClient } from 'pg';
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyToken, isBlacklisted, COOKIE_NAME } from './auth-server';
-import { LiquidacionData } from '@/stores/liquidacion.store';
+import { Jornada, ExcludedPunch, LiquidacionData } from '@/stores/liquidacion.store';
+
+// ─── GMT-4 time helper ────────────────────────────────────────────────────────
+
+function toHHMM(d: Date): string {
+  const gmt4 = new Date(d.getTime() - 4 * 3600000);
+  return `${String(gmt4.getUTCHours()).padStart(2, '0')}:${String(gmt4.getUTCMinutes()).padStart(2, '0')}`;
+}
+
+// ─── Shift pairing algorithm ──────────────────────────────────────────────────
+
+export function buildJornadas(
+  punches: Date[],
+  excludedIso: string[],
+): {
+  jornadas: Jornada[];
+  horasParejadas: number;
+  marcacionSuelta: string | null;
+  marcacionSueltaRaw: string | null;
+  tieneInconsistencia: boolean;
+  excludedPunchDisplay: ExcludedPunch[];
+} {
+  const excludedSet = new Set(excludedIso);
+  const excluded = punches.filter((p) => excludedSet.has(p.toISOString()));
+  const active = punches.filter((p) => !excludedSet.has(p.toISOString()));
+
+  const jornadas: Jornada[] = [];
+  for (let i = 0; i + 1 < active.length; i += 2) {
+    const e = active[i], s = active[i + 1];
+    jornadas.push({
+      entrada: toHHMM(e),
+      salida: toHHMM(s),
+      horas: Math.round(((s.getTime() - e.getTime()) / 3_600_000) * 100) / 100,
+      entradaRaw: e.toISOString(),
+      salidaRaw: s.toISOString(),
+    });
+  }
+
+  const horasParejadas = Math.round(jornadas.reduce((s, j) => s + j.horas, 0) * 100) / 100;
+  const tieneInconsistencia = active.length % 2 !== 0;
+  const lastActive = active.length > 0 ? active[active.length - 1] : null;
+
+  return {
+    jornadas,
+    horasParejadas,
+    marcacionSuelta: tieneInconsistencia && lastActive ? toHHMM(lastActive) : null,
+    marcacionSueltaRaw: tieneInconsistencia && lastActive ? lastActive.toISOString() : null,
+    tieneInconsistencia,
+    excludedPunchDisplay: excluded.map((p) => ({ iso: p.toISOString(), hhmm: toHHMM(p) })),
+  };
+}
+
+// ─── Batch punch query ────────────────────────────────────────────────────────
+
+export async function fetchPunchMap(
+  client: PoolClient,
+  colaboradorId: string,
+  fechaInicio: string,
+  fechaFin: string,
+): Promise<Map<string, Date[]>> {
+  const res = await client.query(
+    `SELECT ebd.checktime::date AS fecha,
+            array_agg(ebd.checktime ORDER BY ebd.checktime) AS marcaciones
+     FROM eventos_biometricos_desglosados ebd
+     JOIN codigos_colaborador cc
+          ON cc.codigo_biometrico = ebd.employee_workno AND cc.activo = true
+     WHERE cc.colaborador_id = $1
+       AND ebd.checktime::date BETWEEN $2 AND $3
+     GROUP BY ebd.checktime::date`,
+    [colaboradorId, fechaInicio, fechaFin],
+  );
+  const map = new Map<string, Date[]>();
+  for (const row of res.rows) {
+    const key = (row.fecha as Date).toISOString().slice(0, 10);
+    map.set(key, row.marcaciones as Date[]);
+  }
+  return map;
+}
 
 // ─── Auth helper ─────────────────────────────────────────────────────────────
 
@@ -183,11 +260,6 @@ export async function calcularTotales(client: PoolClient, liquidacionId: string)
 
 // ─── Biometric hours calculator (single collaborator) ────────────────────────
 
-function horasEntreMarcaciones(primera: Date | null, ultima: Date | null): number {
-  if (!primera || !ultima || ultima <= primera) return 0;
-  return Math.round(((ultima.getTime() - primera.getTime()) / 3_600_000) * 100) / 100;
-}
-
 async function calcularDiasDesdeEventos(
   client: PoolClient,
   liquidacionId: string,
@@ -195,37 +267,21 @@ async function calcularDiasDesdeEventos(
   fechaInicio: string,
   fechaFin: string,
 ): Promise<void> {
-  // All punches count regardless of tipo_evento — time prevails over type.
-  // 2+ punches: first = implicit entrada, last = implicit salida.
-  // 1 punch: day is recorded with 0 hours (incomplete data).
-  const eventosRes = await client.query(
-    `SELECT
-       ebd.checktime::date AS fecha,
-       MIN(ebd.checktime)  AS primera_marcacion,
-       MAX(ebd.checktime)  AS ultima_marcacion
-     FROM eventos_biometricos_desglosados ebd
-     JOIN codigos_colaborador cc
-          ON cc.codigo_biometrico = ebd.employee_workno AND cc.activo = true
-     WHERE cc.colaborador_id = $1
-       AND ebd.checktime::date BETWEEN $2 AND $3
-     GROUP BY ebd.checktime::date`,
-    [colaboradorId, fechaInicio, fechaFin],
-  );
+  const punchMap = await fetchPunchMap(client, colaboradorId, fechaInicio, fechaFin);
+  if (punchMap.size === 0) return;
 
-  for (const ev of eventosRes.rows) {
-    const horas = horasEntreMarcaciones(ev.primera_marcacion, ev.ultima_marcacion);
+  for (const [fecha, punches] of punchMap) {
+    const { horasParejadas } = buildJornadas(punches, []);
     await client.query(
       `INSERT INTO dias_liquidacion
          (id, liquidacion_id, fecha, horas_calculadas, atraso_detectado, estado_dia)
        VALUES (gen_random_uuid(), $1, $2, $3, false, 'SIN_REVISION')
        ON CONFLICT (liquidacion_id, fecha) DO NOTHING`,
-      [liquidacionId, ev.fecha, horas],
+      [liquidacionId, fecha, horasParejadas],
     );
   }
 
-  if (eventosRes.rows.length > 0) {
-    try { await calcularTotales(client, liquidacionId); } catch { /* ignore */ }
-  }
+  try { await calcularTotales(client, liquidacionId); } catch { /* ignore */ }
 }
 
 // ─── Detail loader ────────────────────────────────────────────────────────────
@@ -272,11 +328,12 @@ export async function getLiquidacionDetail(
     );
   }
 
-  // Re-fetch dias + bonos (dias may have been just created above)
-  const [diasRes, bonosRes] = await Promise.all([
+  // Re-fetch dias + bonos + punches (dias may have been just created above)
+  const [diasRes, bonosRes, punchMap] = await Promise.all([
     client.query(
       `SELECT id, fecha::text, horas_calculadas, horas_ajustadas_supervisor, atraso_detectado,
-              estado_dia, motivo_ajuste, descuento_tipo, descuento_valor, descuento_motivo
+              estado_dia, motivo_ajuste, descuento_tipo, descuento_valor, descuento_motivo,
+              marcaciones_excluidas
        FROM dias_liquidacion WHERE liquidacion_id = $1 ORDER BY fecha`,
       [liq.id],
     ),
@@ -285,7 +342,31 @@ export async function getLiquidacionDetail(
        FROM bonos WHERE colaborador_id = $1 AND semana_id = $2 ORDER BY fecha_dia`,
       [colaboradorId, semanaId],
     ),
+    semanaFechas.fechaInicio
+      ? fetchPunchMap(client, colaboradorId, semanaFechas.fechaInicio, semanaFechas.fechaFin)
+      : Promise.resolve(new Map<string, Date[]>()),
   ]);
+
+  // Self-correct SIN_REVISION days whose stored horas_calculadas differ from paired-shift sum
+  let needsTotalesRecalc = false;
+  for (const d of diasRes.rows) {
+    if (d.estado_dia !== 'SIN_REVISION') continue;
+    const fecha = (d.fecha as string).slice(0, 10);
+    const punches = punchMap.get(fecha) ?? [];
+    const excluded: string[] = Array.isArray(d.marcaciones_excluidas) ? d.marcaciones_excluidas : [];
+    const { horasParejadas } = buildJornadas(punches, excluded);
+    if (Math.abs(horasParejadas - Number(d.horas_calculadas)) > 0.009) {
+      await client.query(
+        `UPDATE dias_liquidacion SET horas_calculadas = $1 WHERE id = $2`,
+        [horasParejadas, d.id],
+      );
+      d.horas_calculadas = horasParejadas;
+      needsTotalesRecalc = true;
+    }
+  }
+  if (needsTotalesRecalc) {
+    try { await calcularTotales(client, liq.id as string); } catch { /* ignore */ }
+  }
 
   // Re-read updated totals after possible recalculation
   const liqUpdated = await client.query(
@@ -311,18 +392,31 @@ export async function getLiquidacionDetail(
     calculadoEn: totals.calculado_en,
     aprobadoPor: liq.aprobado_por ?? null,
     aprobadaEn: liq.aprobada_en ?? null,
-    dias: diasRes.rows.map((d) => ({
-      id: d.id,
-      fecha: (d.fecha as string).slice(0, 10),
-      horasCalculadas: Number(d.horas_calculadas),
-      horasAjustadasSupervisor: d.horas_ajustadas_supervisor != null ? Number(d.horas_ajustadas_supervisor) : null,
-      atrasoDetectado: Boolean(d.atraso_detectado),
-      estadoDia: d.estado_dia,
-      motivoAjuste: d.motivo_ajuste ?? null,
-      descuentoTipo: d.descuento_tipo ?? null,
-      descuentoValor: d.descuento_valor != null ? Number(d.descuento_valor) : null,
-      descuentoMotivo: d.descuento_motivo ?? null,
-    })),
+    dias: diasRes.rows.map((d) => {
+      const fecha = (d.fecha as string).slice(0, 10);
+      const punches = punchMap.get(fecha) ?? [];
+      const excluded: string[] = Array.isArray(d.marcaciones_excluidas) ? d.marcaciones_excluidas : [];
+      const jornadaData = buildJornadas(punches, excluded);
+      return {
+        id: d.id,
+        fecha,
+        horasCalculadas: Number(d.horas_calculadas),
+        horasAjustadasSupervisor: d.horas_ajustadas_supervisor != null ? Number(d.horas_ajustadas_supervisor) : null,
+        atrasoDetectado: Boolean(d.atraso_detectado),
+        estadoDia: d.estado_dia,
+        motivoAjuste: d.motivo_ajuste ?? null,
+        descuentoTipo: d.descuento_tipo ?? null,
+        descuentoValor: d.descuento_valor != null ? Number(d.descuento_valor) : null,
+        descuentoMotivo: d.descuento_motivo ?? null,
+        jornadas: jornadaData.jornadas,
+        horasParejadas: jornadaData.horasParejadas,
+        marcacionSuelta: jornadaData.marcacionSuelta,
+        marcacionSueltaRaw: jornadaData.marcacionSueltaRaw,
+        tieneInconsistencia: jornadaData.tieneInconsistencia,
+        marcacionesExcluidas: excluded,
+        excludedPunchDisplay: jornadaData.excludedPunchDisplay,
+      };
+    }),
     bonos: bonosRes.rows.map((b) => ({
       id: b.id,
       fechaDia: (b.fecha_dia as string).slice(0, 10),
@@ -372,14 +466,12 @@ export async function generarBorradoresSemana(
     liqRes.rows.map((r) => [r.colaborador_id as string, r.id as string]),
   );
 
-  // All punches count regardless of tipo_evento — time prevails over type.
-  // Colaborador resolved at calculation time via current codigos_colaborador mapping.
+  // Fetch all punches per collaborator per day using array_agg
   const eventosRes = await client.query(
     `SELECT
        cc.colaborador_id,
        ebd.checktime::date AS fecha,
-       MIN(ebd.checktime)  AS primera_marcacion,
-       MAX(ebd.checktime)  AS ultima_marcacion
+       array_agg(ebd.checktime ORDER BY ebd.checktime) AS marcaciones
      FROM eventos_biometricos_desglosados ebd
      JOIN codigos_colaborador cc
           ON cc.codigo_biometrico = ebd.employee_workno AND cc.activo = true
@@ -388,19 +480,19 @@ export async function generarBorradoresSemana(
     [fechaInicio, fechaFin],
   );
 
-  // Insert one dia_liquidacion per (colaborador, date) with calculated hours
+  // Insert one dia_liquidacion per (colaborador, date) with paired-shift hours
   for (const ev of eventosRes.rows) {
     const liquidacionId = liqByColab.get(ev.colaborador_id as string);
     if (!liquidacionId) continue;
 
-    const horas = horasEntreMarcaciones(ev.primera_marcacion, ev.ultima_marcacion);
+    const { horasParejadas } = buildJornadas(ev.marcaciones as Date[], []);
 
     await client.query(
       `INSERT INTO dias_liquidacion
          (id, liquidacion_id, fecha, horas_calculadas, atraso_detectado, estado_dia)
        VALUES (gen_random_uuid(), $1, $2, $3, false, 'SIN_REVISION')
        ON CONFLICT (liquidacion_id, fecha) DO NOTHING`,
-      [liquidacionId, ev.fecha, horas],
+      [liquidacionId, ev.fecha, horasParejadas],
     );
   }
 
