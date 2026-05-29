@@ -200,12 +200,13 @@ async function calcularDiasDesdeEventos(
   // 1 punch: day is recorded with 0 hours (incomplete data).
   const eventosRes = await client.query(
     `SELECT
-       ebd.checktime::date        AS fecha,
-       MIN(ebd.checktime)         AS primera_marcacion,
-       MAX(ebd.checktime)         AS ultima_marcacion
+       ebd.checktime::date AS fecha,
+       MIN(ebd.checktime)  AS primera_marcacion,
+       MAX(ebd.checktime)  AS ultima_marcacion
      FROM eventos_biometricos_desglosados ebd
-     JOIN eventos_biometricos eb ON eb.id = ebd.evento_id
-     WHERE eb.colaborador_id = $1
+     JOIN codigos_colaborador cc
+          ON cc.codigo_biometrico = ebd.employee_workno AND cc.activo = true
+     WHERE cc.colaborador_id = $1
        AND ebd.checktime::date BETWEEN $2 AND $3
      GROUP BY ebd.checktime::date`,
     [colaboradorId, fechaInicio, fechaFin],
@@ -372,17 +373,18 @@ export async function generarBorradoresSemana(
   );
 
   // All punches count regardless of tipo_evento — time prevails over type.
+  // Colaborador resolved at calculation time via current codigos_colaborador mapping.
   const eventosRes = await client.query(
     `SELECT
-       eb.colaborador_id,
+       cc.colaborador_id,
        ebd.checktime::date AS fecha,
        MIN(ebd.checktime)  AS primera_marcacion,
        MAX(ebd.checktime)  AS ultima_marcacion
      FROM eventos_biometricos_desglosados ebd
-     JOIN eventos_biometricos eb ON eb.id = ebd.evento_id
-     WHERE eb.colaborador_id IS NOT NULL
-       AND ebd.checktime::date BETWEEN $1 AND $2
-     GROUP BY eb.colaborador_id, ebd.checktime::date`,
+     JOIN codigos_colaborador cc
+          ON cc.codigo_biometrico = ebd.employee_workno AND cc.activo = true
+     WHERE ebd.checktime::date BETWEEN $1 AND $2
+     GROUP BY cc.colaborador_id, ebd.checktime::date`,
     [fechaInicio, fechaFin],
   );
 

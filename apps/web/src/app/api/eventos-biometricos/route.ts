@@ -42,55 +42,56 @@ export async function GET(req: NextRequest) {
   const { desde, hasta } = buildDateRange(fecha_desde, fecha_hasta);
   const offset = (page - 1) * page_size;
 
+  // Estado computed at query time by joining codigos_colaborador with the current workno mapping.
+  const estadoCase = `CASE
+    WHEN eb.dispositivo_id IS NULL THEN 'DISPOSITIVO_DESCONOCIDO'
+    WHEN cc.colaborador_id IS NOT NULL THEN 'RESUELTO'
+    ELSE 'SIN_RESOLVER'
+  END`;
+
+  const baseJoins = `
+    FROM eventos_biometricos_desglosados ebd
+    JOIN eventos_biometricos eb ON eb.id = ebd.evento_id
+    LEFT JOIN codigos_colaborador cc
+           ON cc.codigo_biometrico = ebd.employee_workno AND cc.activo = true
+    LEFT JOIN colaboradores c ON c.id = cc.colaborador_id
+  `;
+
+  const baseWhere = `
+    WHERE ebd.checktime >= $1
+      AND ebd.checktime < $2
+      AND ($3::text IS NULL OR
+           c.nombre ILIKE '%' || $3 || '%' OR
+           c.apellido ILIKE '%' || $3 || '%' OR
+           ebd.employee_workno ILIKE '%' || $3 || '%')
+      AND ($4::text IS NULL OR ebd.tipo_evento::text = $4)
+      AND ($5::text IS NULL OR ebd.device_name = $5)
+      AND ($6::text IS NULL OR (${estadoCase}) = $6)
+  `;
+
   const client = await pool.connect();
   try {
     const dataResult = await client.query(
       `SELECT
-         eb.id,
-         eb.estado_resolucion,
+         ebd.id,
          ebd.checktime,
          ebd.tipo_evento,
          ebd.device_name,
          ebd.employee_workno,
+         (${estadoCase}) AS estado_resolucion,
          CASE
-           WHEN eb.colaborador_id IS NOT NULL THEN c.nombre
+           WHEN cc.colaborador_id IS NOT NULL THEN c.nombre || ' ' || c.apellido
            ELSE TRIM(COALESCE(ebd.employee_first_name, '') || ' ' || COALESCE(ebd.employee_last_name, ''))
-         END AS display_nombre,
-         CASE
-           WHEN eb.colaborador_id IS NOT NULL THEN c.cedula
-           ELSE ebd.employee_workno
-         END AS display_identificador
-       FROM eventos_biometricos eb
-       LEFT JOIN eventos_biometricos_desglosados ebd ON eb.id = ebd.evento_id
-       LEFT JOIN colaboradores c ON eb.colaborador_id = c.id
-       WHERE ebd.checktime >= $1
-         AND ebd.checktime < $2
-         AND ($3::text IS NULL OR
-              c.nombre ILIKE '%' || $3 || '%' OR
-              c.cedula ILIKE '%' || $3 || '%' OR
-              ebd.employee_workno ILIKE '%' || $3 || '%')
-         AND ($4::text IS NULL OR ebd.tipo_evento::text = $4)
-         AND ($5::text IS NULL OR ebd.device_name = $5)
-         AND ($6::text IS NULL OR eb.estado_resolucion::text = $6)
+         END AS display_nombre
+       ${baseJoins}
+       ${baseWhere}
        ORDER BY ebd.checktime DESC
        LIMIT $7 OFFSET $8`,
       [desde, hasta, colaborador, tipo_evento, dispositivo, estado, page_size, offset],
     );
 
     const countResult = await client.query<{ count: string }>(
-      `SELECT COUNT(*) AS count
-       FROM eventos_biometricos eb
-       LEFT JOIN eventos_biometricos_desglosados ebd ON eb.id = ebd.evento_id
-       LEFT JOIN colaboradores c ON eb.colaborador_id = c.id
-       WHERE ebd.checktime >= $1
-         AND ebd.checktime < $2
-         AND ($3::text IS NULL OR
-              c.nombre ILIKE '%' || $3 || '%' OR
-              c.cedula ILIKE '%' || $3 || '%' OR
-              ebd.employee_workno ILIKE '%' || $3 || '%')
-         AND ($4::text IS NULL OR ebd.tipo_evento::text = $4)
-         AND ($5::text IS NULL OR ebd.device_name = $5)
-         AND ($6::text IS NULL OR eb.estado_resolucion::text = $6)`,
+      `SELECT COUNT(*) AS count ${baseJoins} ${baseWhere}`,
       [desde, hasta, colaborador, tipo_evento, dispositivo, estado],
     );
 

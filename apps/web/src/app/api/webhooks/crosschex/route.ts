@@ -56,6 +56,7 @@ async function processRecord(record: any, fallbackRequestId: string) {
 
   const client = await pool.connect();
   try {
+    // Only resolve the device — colaborador resolution happens at query time.
     const devRow = serialNumber
       ? await client.query(
           `SELECT id FROM dispositivos_biometricos WHERE numero_serie = $1 AND activo = true LIMIT 1`,
@@ -63,27 +64,16 @@ async function processRecord(record: any, fallbackRequestId: string) {
         )
       : { rows: [] };
 
-    const colRow = workno
-      ? await client.query(
-          `SELECT colaborador_id FROM codigos_colaborador WHERE codigo_biometrico = $1 AND activo = true LIMIT 1`,
-          [workno],
-        )
-      : { rows: [] };
-
     const dispositivoId: string | null = devRow.rows[0]?.id ?? null;
-    const colaboradorId: string | null = colRow.rows[0]?.colaborador_id ?? null;
-    const estado: EstadoResolucion =
-      !dispositivoId ? 'DISPOSITIVO_DESCONOCIDO'
-      : !colaboradorId ? 'SIN_RESOLVER'
-      : 'RESUELTO';
+    const estado: EstadoResolucion = dispositivoId ? 'SIN_RESOLVER' : 'DISPOSITIVO_DESCONOCIDO';
 
     const eventoRes = await client.query<{ id: string }>(
       `INSERT INTO eventos_biometricos
-         (request_id, dispositivo_id, codigo_biometrico, colaborador_id, estado_resolucion, payload_completo)
-       VALUES ($1, $2, $3, $4, $5::\"EstadoResolucion\", $6)
+         (request_id, dispositivo_id, codigo_biometrico, estado_resolucion, payload_completo)
+       VALUES ($1, $2, $3, $4::\"EstadoResolucion\", $5)
        ON CONFLICT (request_id) DO UPDATE SET request_id = EXCLUDED.request_id
        RETURNING id`,
-      [requestId, dispositivoId, workno, colaboradorId, estado, JSON.stringify(record)],
+      [requestId, dispositivoId, workno, estado, JSON.stringify(record)],
     );
     const eventoId = eventoRes.rows[0].id;
 

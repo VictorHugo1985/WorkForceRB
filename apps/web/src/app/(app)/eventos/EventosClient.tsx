@@ -35,7 +35,6 @@ interface Evento {
   device_name: string;
   employee_workno: string;
   display_nombre: string;
-  display_identificador: string;
   estado_resolucion: 'RESUELTO' | 'SIN_RESOLVER' | 'DISPOSITIVO_DESCONOCIDO';
 }
 
@@ -284,7 +283,7 @@ export function EventosClient({ dispositivos }: { dispositivos: Dispositivo[] })
                 <TableRow>
                   <TableCell>Fecha y Hora</TableCell>
                   <TableCell>Colaborador</TableCell>
-                  <TableCell>ID / Cédula</TableCell>
+                  <TableCell>Workno</TableCell>
                   <TableCell>Tipo</TableCell>
                   <TableCell>Dispositivo</TableCell>
                   <TableCell>Estado</TableCell>
@@ -305,7 +304,7 @@ export function EventosClient({ dispositivos }: { dispositivos: Dispositivo[] })
                     >
                       {ev.display_nombre || ev.employee_workno}
                     </TableCell>
-                    <TableCell>{ev.display_identificador}</TableCell>
+                    <TableCell>{ev.employee_workno}</TableCell>
                     <TableCell>
                       <Chip
                         label={TIPO_LABELS[ev.tipo_evento] ?? ev.tipo_evento}
