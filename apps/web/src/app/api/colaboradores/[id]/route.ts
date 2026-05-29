@@ -70,10 +70,21 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
     if (codigos && codigos.length > 0) {
       for (const codigo of codigos) {
-        await client.query(
-          `UPDATE codigos_colaborador SET codigo_biometrico = $1 WHERE id = $2 AND colaborador_id = $3`,
-          [codigo.workno, codigo.id, id],
-        );
+        try {
+          await client.query(
+            `UPDATE codigos_colaborador SET codigo_biometrico = $1 WHERE id = $2 AND colaborador_id = $3`,
+            [codigo.workno, codigo.id, id],
+          );
+        } catch (err: unknown) {
+          const pg = err as { code?: string };
+          if (pg.code === '23505') {
+            return NextResponse.json(
+              { error: 'DUPLICATE_WORKNO', message: `El workno "${codigo.workno}" ya está asignado a otro colaborador en este dispositivo.` },
+              { status: 409 },
+            );
+          }
+          throw err;
+        }
       }
     }
 
@@ -96,6 +107,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     return NextResponse.json({
       colaborador: { id, nombre, apellido, cedula, area_id, supervisor_id: supervisor_id ?? null },
     });
+  } catch (err: unknown) {
+    const e = err as { code?: string; message?: string };
+    if (e.code === '23505') {
+      return NextResponse.json({ error: 'CONFLICT', message: 'Conflicto de datos únicos. Verifique los valores ingresados.' }, { status: 409 });
+    }
+    console.error('[colaboradores PATCH] unexpected error:', e);
+    return NextResponse.json({ error: 'INTERNAL_ERROR', message: 'Error interno del servidor.' }, { status: 500 });
   } finally {
     client.release();
   }

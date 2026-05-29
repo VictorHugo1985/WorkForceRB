@@ -149,11 +149,7 @@ export default function ColaboradorPerfil({ perfil }: ColaboradorPerfilProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...values, supervisor_id, codigos }),
       });
-      const json = await res.json();
-      if (res.status === 409) {
-        setEditError('Ya existe un colaborador con la cédula ingresada.');
-        return;
-      }
+      const json = await res.json().catch(() => ({}));
       if (!res.ok) {
         const msg = json?.message ?? json?.error ?? `Error ${res.status}`;
         setEditError(msg);
