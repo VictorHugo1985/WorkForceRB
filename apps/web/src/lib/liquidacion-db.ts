@@ -183,6 +183,11 @@ export async function calcularTotales(client: PoolClient, liquidacionId: string)
 
 // ─── Biometric hours calculator (single collaborator) ────────────────────────
 
+function horasEntreMarcaciones(primera: Date | null, ultima: Date | null): number {
+  if (!primera || !ultima || ultima <= primera) return 0;
+  return Math.round(((ultima.getTime() - primera.getTime()) / 3_600_000) * 100) / 100;
+}
+
 async function calcularDiasDesdeEventos(
   client: PoolClient,
   liquidacionId: string,
@@ -190,27 +195,24 @@ async function calcularDiasDesdeEventos(
   fechaInicio: string,
   fechaFin: string,
 ): Promise<void> {
+  // All punches count regardless of tipo_evento — time prevails over type.
+  // 2+ punches: first = implicit entrada, last = implicit salida.
+  // 1 punch: day is recorded with 0 hours (incomplete data).
   const eventosRes = await client.query(
     `SELECT
-       ebd.checktime::date AS fecha,
-       MIN(CASE WHEN ebd.tipo_evento = 'ENTRADA' THEN ebd.checktime END) AS primera_entrada,
-       MAX(CASE WHEN ebd.tipo_evento = 'SALIDA'  THEN ebd.checktime END) AS ultima_salida
+       ebd.checktime::date        AS fecha,
+       MIN(ebd.checktime)         AS primera_marcacion,
+       MAX(ebd.checktime)         AS ultima_marcacion
      FROM eventos_biometricos_desglosados ebd
      JOIN eventos_biometricos eb ON eb.id = ebd.evento_id
      WHERE eb.colaborador_id = $1
        AND ebd.checktime::date BETWEEN $2 AND $3
-       AND ebd.tipo_evento IN ('ENTRADA', 'SALIDA')
      GROUP BY ebd.checktime::date`,
     [colaboradorId, fechaInicio, fechaFin],
   );
 
   for (const ev of eventosRes.rows) {
-    const entrada: Date | null = ev.primera_entrada ?? null;
-    const salida: Date | null = ev.ultima_salida ?? null;
-    let horas = 0;
-    if (entrada && salida && salida > entrada) {
-      horas = Math.round(((salida.getTime() - entrada.getTime()) / 3_600_000) * 100) / 100;
-    }
+    const horas = horasEntreMarcaciones(ev.primera_marcacion, ev.ultima_marcacion);
     await client.query(
       `INSERT INTO dias_liquidacion
          (id, liquidacion_id, fecha, horas_calculadas, atraso_detectado, estado_dia)
@@ -369,18 +371,17 @@ export async function generarBorradoresSemana(
     liqRes.rows.map((r) => [r.colaborador_id as string, r.id as string]),
   );
 
-  // Query biometric events for the period grouped by collaborator + day
+  // All punches count regardless of tipo_evento — time prevails over type.
   const eventosRes = await client.query(
     `SELECT
        eb.colaborador_id,
        ebd.checktime::date AS fecha,
-       MIN(CASE WHEN ebd.tipo_evento = 'ENTRADA' THEN ebd.checktime END) AS primera_entrada,
-       MAX(CASE WHEN ebd.tipo_evento = 'SALIDA'  THEN ebd.checktime END) AS ultima_salida
+       MIN(ebd.checktime)  AS primera_marcacion,
+       MAX(ebd.checktime)  AS ultima_marcacion
      FROM eventos_biometricos_desglosados ebd
      JOIN eventos_biometricos eb ON eb.id = ebd.evento_id
      WHERE eb.colaborador_id IS NOT NULL
        AND ebd.checktime::date BETWEEN $1 AND $2
-       AND ebd.tipo_evento IN ('ENTRADA', 'SALIDA')
      GROUP BY eb.colaborador_id, ebd.checktime::date`,
     [fechaInicio, fechaFin],
   );
@@ -390,12 +391,7 @@ export async function generarBorradoresSemana(
     const liquidacionId = liqByColab.get(ev.colaborador_id as string);
     if (!liquidacionId) continue;
 
-    const entrada: Date | null = ev.primera_entrada ?? null;
-    const salida: Date | null = ev.ultima_salida ?? null;
-    let horas = 0;
-    if (entrada && salida && salida > entrada) {
-      horas = Math.round(((salida.getTime() - entrada.getTime()) / 3_600_000) * 100) / 100;
-    }
+    const horas = horasEntreMarcaciones(ev.primera_marcacion, ev.ultima_marcacion);
 
     await client.query(
       `INSERT INTO dias_liquidacion
