@@ -67,7 +67,7 @@ const EditSchema = z.object({
 type EditFormValues = z.infer<typeof EditSchema>;
 
 const TarifaSchema = z.object({
-  valor: z.number({ invalid_type_error: 'Ingrese un número' }).positive('Debe ser mayor a 0'),
+  valor: z.number().positive('Debe ser mayor a 0'),
 });
 
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
