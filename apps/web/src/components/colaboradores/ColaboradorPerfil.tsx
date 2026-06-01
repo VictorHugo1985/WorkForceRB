@@ -528,7 +528,7 @@ export default function ColaboradorPerfil({ perfil }: ColaboradorPerfilProps) {
             fullWidth
             value={tarifaInput}
             onChange={(e) => setTarifaInput(e.target.value)}
-            inputProps={{ min: 0.01, step: 0.01 }}
+            slotProps={{ htmlInput: { min: 0.01, step: 0.01 } }}
             autoFocus
           />
         </DialogContent>
