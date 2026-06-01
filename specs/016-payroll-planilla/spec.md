@@ -87,7 +87,7 @@ After reviewing a collaborator's week in the planilla, the payroll manager click
 - **FR-010**: Each collaborator block MUST include a "Confirmar" button that approves the collaborator's entire week liquidación in one action.
 - **FR-011**: When confirming a collaborator block that has unresolved inconsistency flags, the system MUST warn the reviewer and require explicit acknowledgement before saving.
 - **FR-012**: After confirmation, the entire collaborator block MUST become read-only; all editable cells and the Confirmar button MUST be disabled.
-- **FR-013**: The planilla MUST include a week selector allowing navigation between available work weeks; selecting a week reloads the planilla data.
+- **FR-013**: The planilla MUST include a week selector showing all `semanas_laborales` ordered by date descending. The most recent ABIERTA week MUST be selected by default on first load. Selecting a different week reloads the planilla data. The collaborator name in each block MUST be a link that opens the collaborator's detail page (`/liquidaciones/[semanaId]/[colaboradorId]`) in a new tab.
 - **FR-014**: Collaborators with zero hours for the selected week MUST NOT appear in the planilla.
 - **FR-015**: The planilla MUST remain responsive with up to 30 collaborators and 7 days per week.
 
@@ -116,10 +116,13 @@ After reviewing a collaborator's week in the planilla, the payroll manager click
 
 - Q: ¿Cómo debe estructurarse el renderizado de la planilla? → A: Mediante un componente `LiquidacionColaborador` por usuario que se carga dinámicamente — la vista instancia un componente por cada colaborador activo y cada uno gestiona su propio ciclo de datos de forma independiente.
 - Q: ¿"Todos los usuarios activos" implica mostrar colaboradores con 0 horas en la planilla, o solo instanciar dinámicamente los que tienen horas en la semana? → A: Solo los colaboradores con al menos un punch en la semana seleccionada — la vista instancia un `LiquidacionColaborador` por cada uno encontrado; "activos" describe la arquitectura de carga dinámica, no un cambio al filtro de > 0 horas.
+- Q: ¿La planilla reemplaza la ruta `/liquidaciones` o va en una nueva ruta? → A: La planilla va en `/liquidaciones` — reemplaza la vista de lista actual; esa ruta pasa a ser directamente la planilla.
+- Q: ¿El nombre del colaborador en la planilla enlaza a su vista detalle? → A: Sí — el nombre del colaborador es un link que abre `/liquidaciones/[semanaId]/[colaboradorId]` en pestaña nueva.
+- Q: ¿Qué semanas muestra el selector y cuál es la selección por defecto? → A: Muestra todas las `semanas_laborales` ordenadas por fecha desc; la semana ABIERTA más reciente se selecciona por defecto al entrar.
 
 ## Assumptions
 
-- The planilla is a new page/route that complements but does not remove the existing per-collaborator detail page, which remains available for deep inspection.
+- The planilla lives at `/liquidaciones`, replacing the current collaborator-list view at that route. The existing per-collaborator detail page (`/liquidaciones/[semanaId]/[colaboradorId]`) remains available for deep inspection.
 - Week selection reuses the existing `semanas_laborales` data; no new period management logic is needed.
 - Shift pairing logic (ENT.1/SAL.1 derivation) is the same algorithm from feature 015; the planilla reads the same computed data.
 - A "worked day" is any calendar day within the week range where the collaborator has at least one biometric punch.
