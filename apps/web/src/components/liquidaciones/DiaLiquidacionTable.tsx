@@ -31,17 +31,17 @@ function estadoDiaChip(estado: string) {
     case 'CON_AJUSTE_HORAS':
       return <Chip label="H. ajustadas" size="small" color="info" />;
     case 'CON_DESCUENTO':
-      return <Chip label="Con descuento" size="small" color="warning" />;
+      return <Chip label="Con ajuste" size="small" color="warning" />;
     case 'CON_AJUSTE_Y_DESCUENTO':
-      return <Chip label="Ajuste + Desc." size="small" color="warning" />;
+      return <Chip label="Horas + ajuste" size="small" color="warning" />;
     default:
       return <Chip label="Sin rev." size="small" />;
   }
 }
 
-function descuentoLabel(tipo: string | null, valor: number | null) {
+function ajusteLabel(tipo: string | null, valor: number | null) {
   if (!tipo) return '—';
-  if (tipo === 'TARIFA_DIA') return `Tarifa fija${valor != null ? `: ${valor} Bs./h` : ''}`;
+  if (tipo === 'TARIFA_DIA') return `Tarifa ajustada${valor != null ? `: ${valor} Bs./h` : ''}`;
   if (tipo === 'MONTO_FIJO') return `Monto fijo${valor != null ? `: ${valor} Bs.` : ''}`;
   return tipo;
 }
@@ -114,7 +114,7 @@ export function DiaLiquidacionTable() {
             <TableCell>Horas Acumuladas</TableCell>
             <TableCell>Horas Ajust.</TableCell>
             <TableCell>Atraso</TableCell>
-            <TableCell>Descuento</TableCell>
+            <TableCell>Ajuste</TableCell>
             <TableCell>Estado</TableCell>
             <TableCell />
           </TableRow>
@@ -158,7 +158,7 @@ export function DiaLiquidacionTable() {
                       ) : null}
                     </TableCell>
                     <TableCell>
-                      {descuentoLabel(dia.descuentoTipo, dia.descuentoValor)}
+                      {ajusteLabel(dia.ajusteTipo, dia.ajusteValor)}
                     </TableCell>
                     <TableCell>
                       {estadoDiaChip(dia.estadoDia)}

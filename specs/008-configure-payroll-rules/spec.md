@@ -8,192 +8,139 @@
 
 ## User Scenarios & Testing *(mandatory)*
 
-### User Story 1 - Configurar Regla de Nómina (Priority: P1)
+### User Story 1 - Configurar Tarifa Horaria por Colaborador (Priority: P1)
 
-El administrador crea una regla de nómina que agrupa los parámetros de cálculo de pago:
-tarifa horaria ordinaria, umbral de horas diarias para activar la hora extra, multiplicador
-de hora extra y montos de referencia para bonos estándar. Cada regla tiene fecha de inicio
-de vigencia para que las modificaciones futuras no alteren períodos ya calculados.
+El administrador accede al perfil de un colaborador y asigna o actualiza su tarifa horaria
+(Bs./h). Este valor es el único parámetro de cálculo requerido: el sistema lo usa para
+calcular `horas_trabajadas × tarifa_hora = total_pago` en cada liquidación semanal.
+No existen reglas agrupadas, umbrales de hora extra, multiplicadores ni montos de referencia
+para bonos — solo el valor de tarifa que persiste en el perfil del colaborador.
 
-**Why this priority**: La regla de nómina es el núcleo de todos los cálculos de pago.
-Sin parámetros configurados, el sistema no puede calcular liquidaciones. Es el prerequisito
-de todas las operaciones de spec 006 y spec 007.
+**Why this priority**: Sin tarifa configurada, el sistema no puede calcular el total de pago
+de la liquidación. Es el prerequisito directo del cálculo de liquidaciones (feature 006).
 
-**Independent Test**: El administrador crea la regla "Tarifa Estándar 2026" con tarifa de
-15 bs/h, umbral de 8 h/día, multiplicador 1.5× y vigencia desde 2026-01-01. Verifica que
-la regla aparece en el listado como vigente y puede asignarse a un departamento.
+**Independent Test**: El administrador abre el perfil del colaborador "Juan Pérez" y
+establece su tarifa en 15 Bs./h. Al procesar la liquidación de la semana siguiente con
+40 horas trabajadas, el total calculado es 600 Bs. Al cambiar la tarifa a 18 Bs./h, los
+nuevos cálculos usan 18; las liquidaciones ya aprobadas no se ven afectadas.
 
 **Acceptance Scenarios**:
 
-1. **Given** el administrador accede a la gestión de reglas de nómina,
-   **When** crea una nueva regla con nombre, tarifa ordinaria, umbral de hora extra,
-   multiplicador y fecha de inicio de vigencia,
-   **Then** la regla queda registrada como vigente desde esa fecha y disponible para
-   asignarse a departamentos o colaboradores.
+1. **Given** el administrador accede al perfil de un colaborador,
+   **When** ingresa o modifica la tarifa horaria (valor > 0),
+   **Then** el valor queda guardado y es el que el sistema usa para calcular la próxima
+   liquidación de ese colaborador.
 
-2. **Given** existe una regla de nómina activa,
-   **When** el administrador crea una nueva regla con fecha de vigencia desde la fecha X,
-   **Then** la regla anterior queda marcada como histórica hasta X y la nueva aplica desde
-   X en adelante. Los períodos ya calculados con la regla anterior no se ven afectados.
+2. **Given** un colaborador tiene tarifa configurada,
+   **When** el administrador la actualiza,
+   **Then** el cambio aplica a liquidaciones futuras (no aprobadas). Las liquidaciones
+   ya en estado APROBADO no se recalculan. El log de auditoría registra el valor anterior,
+   el nuevo valor, el usuario que realizó el cambio y el timestamp.
 
-3. **Given** el administrador configura una regla de nómina,
-   **When** define los montos de referencia de bonos estándar (transporte, alimentación) e
-   indica si cada tipo de bono está habilitado por defecto,
-   **Then** esos valores quedan vinculados a la regla y son el valor de referencia que el
-   supervisor ve al asignar bonos durante la revisión de liquidación.
-
-4. **Given** el administrador intenta guardar una regla con tarifa ≤ 0, umbral ≤ 0 o
-   multiplicador ≤ 1,
+3. **Given** el administrador intenta guardar una tarifa con valor ≤ 0,
    **When** intenta confirmar,
-   **Then** el sistema rechaza la operación con un mensaje que identifica el campo inválido.
-   La regla no se guarda.
+   **Then** el sistema rechaza la operación con un mensaje indicando que la tarifa debe
+   ser mayor a cero. El valor no se guarda.
+
+4. **Given** el administrador consulta la lista de colaboradores,
+   **When** visualiza el listado,
+   **Then** cada colaborador muestra su tarifa horaria vigente y si aún no tiene tarifa
+   asignada, aparece con un indicador de "Sin tarifa" que alerta sobre la configuración
+   incompleta.
 
 ---
 
 ### User Story 2 - Configurar Plantilla de Horario (Priority: P1)
 
 El administrador crea una plantilla de horario que define los días laborables de la semana
-y la hora de entrada y salida esperada. La plantilla es la referencia para detectar atrasos
-y clasificar si el turno es de horario extremo.
+y la hora de entrada esperada. La plantilla es la referencia para detectar atrasos
+automáticamente durante la revisión de liquidación.
 
 **Why this priority**: Sin una plantilla de horario asignada, el sistema no puede detectar
 atrasos automáticamente ni mostrar el indicador de atraso al supervisor durante la revisión
 de liquidación (spec 006). Es un prerequisito directo para esa feature.
 
 **Independent Test**: El administrador crea la plantilla "Turno Mañana" con días laborables
-lunes a viernes, entrada 7:00 y salida 16:00. Un colaborador asignado a esa plantilla con
+lunes a viernes y hora de entrada 7:00. Un colaborador asignado a esa plantilla con
 ingreso a las 7:32 aparece con atraso en la revisión de su liquidación.
 
 **Acceptance Scenarios**:
 
 1. **Given** el administrador accede a la gestión de plantillas de horario,
-   **When** crea una nueva plantilla con nombre, días laborables seleccionados, hora de
-   entrada esperada y hora de salida esperada,
-   **Then** la plantilla queda disponible para asignarse a departamentos o colaboradores.
+   **When** crea una nueva plantilla con nombre, días laborables seleccionados y hora de
+   entrada esperada,
+   **Then** la plantilla queda disponible para asignarse a colaboradores.
 
 2. **Given** una plantilla de horario configurada con entrada a las 7:00,
    **When** un colaborador asignado a esa plantilla registra un ingreso a las 7:32,
    **Then** el sistema marca ese día como atraso; el supervisor ve el indicador al revisar
    la liquidación del colaborador.
 
-3. **Given** el administrador crea una plantilla y activa la opción de horario extremo,
-   **When** guarda la plantilla,
-   **Then** la plantilla queda clasificada como turno extremo; este indicador está disponible
-   para que reglas futuras distingan entre turnos estándar y extremos.
-
-4. **Given** el administrador intenta guardar una plantilla sin seleccionar ningún día
-   laborable, o con hora de entrada igual a hora de salida,
+3. **Given** el administrador intenta guardar una plantilla sin seleccionar ningún día
+   laborable, o con una hora de entrada inválida,
    **When** intenta confirmar,
    **Then** el sistema rechaza la operación indicando el problema de validación.
 
 ---
 
-### User Story 3 - Asignar Regla y Horario a Departamento o Colaborador (Priority: P1)
-
-El administrador asigna una regla de nómina y una plantilla de horario a un departamento
-completo. Todos los colaboradores del departamento heredan esa configuración
-automáticamente. Opcionalmente puede asignar una configuración distinta a un colaborador
-individual que tenga condiciones especiales.
-
-**Why this priority**: La asignación es el puente entre la configuración y los colaboradores.
-Sin ella, ninguna regla ni plantilla tiene efecto en el cálculo de liquidaciones.
-
-**Independent Test**: El administrador asigna la regla "Tarifa Estándar" y la plantilla
-"Turno Mañana" al departamento ACABADO. Todos los colaboradores de ACABADO sin override
-individual heredan esa configuración automáticamente.
-
-**Acceptance Scenarios**:
-
-1. **Given** existen reglas de nómina y plantillas de horario creadas,
-   **When** el administrador asigna una regla y una plantilla a un departamento,
-   **Then** todos los colaboradores del departamento que no tienen override individual
-   quedan vinculados a esa regla y plantilla para sus liquidaciones.
-
-2. **Given** un departamento tiene la regla R1 y plantilla P1,
-   **When** el administrador asigna al colaborador C (miembro de ese departamento) la regla
-   R2 y plantilla P2 como override individual,
-   **Then** el colaborador C utiliza R2 y P2 en sus liquidaciones; los demás colaboradores
-   del departamento siguen usando R1 y P1.
-
-3. **Given** un colaborador tiene override individual activo,
-   **When** el administrador elimina el override del colaborador,
-   **Then** el colaborador vuelve a heredar la regla y plantilla de su departamento.
-
-4. **Given** el administrador consulta la lista de colaboradores de un departamento,
-   **When** visualiza la configuración efectiva de cada colaborador,
-   **Then** el sistema muestra para cada uno qué regla y plantilla aplican y si provienen
-   del departamento (herencia) o de un override individual.
-
-5. **Given** el administrador intenta guardar la asignación de un departamento sin
-   seleccionar una regla de nómina o sin seleccionar una plantilla de horario,
-   **When** intenta confirmar,
-   **Then** el sistema rechaza la operación; ambos campos son obligatorios para
-   la asignación de departamento.
-
----
-
 ### Edge Cases
 
-- ¿Qué pasa si se intenta modificar una regla ya usada en períodos calculados? → No es posible; las reglas son inmutables una vez creadas. Para cambiar parámetros se crea una nueva regla con fecha de vigencia futura.
-- ¿Puede un departamento no tener regla ni plantilla asignada? → Sí temporalmente, pero el sistema muestra una advertencia al intentar calcular liquidaciones para colaboradores de ese departamento sin configuración completa.
-- ¿Qué pasa si un colaborador no tiene override y su departamento tampoco tiene asignación? → El sistema no puede calcular la liquidación; advierte al supervisor con un mensaje específico indicando que falta configuración.
-- ¿Puede la misma regla asignarse a múltiples departamentos simultáneamente? → Sí; una regla puede estar asignada a cualquier número de departamentos y colaboradores al mismo tiempo.
-- ¿Puede eliminarse una plantilla de horario que ya está asignada? → No; el sistema rechaza la eliminación y muestra a qué departamentos/colaboradores está asignada. El administrador debe reasignar antes.
-- ¿Puede un override individual tener solo regla (sin plantilla) o solo plantilla (sin regla)? → Sí; el override es parcial. Si solo se anula la regla, el colaborador usa la regla del override más la plantilla del departamento, y viceversa.
+- ¿Qué pasa si se actualiza la tarifa de un colaborador con liquidaciones ya aprobadas? → El cambio aplica solo a liquidaciones futuras (no aprobadas). Las liquidaciones en estado APROBADO no se recalculan.
+- ¿Puede un colaborador no tener tarifa configurada? → Sí temporalmente, pero el sistema muestra un indicador de "Sin tarifa" en el listado. El cálculo de liquidación no puede ejecutarse sin tarifa.
+- ¿Puede eliminarse una plantilla de horario que ya está asignada a un colaborador? → No; el sistema rechaza la eliminación e indica a qué colaboradores está asignada. El administrador debe reasignar antes de eliminar.
+- ¿Puede un colaborador no tener plantilla de horario asignada? → Sí; en ese caso el sistema no detecta atrasos para ese colaborador. No es un error bloqueante para la liquidación.
+- ¿Los turnos que cruzan la medianoche están soportados? → No; solo se soportan turnos dentro del mismo día calendario.
 
 ## Requirements *(mandatory)*
 
 ### Functional Requirements
 
-**Regla de Nómina**
+**Tarifa Horaria**
 
-- **FR-001**: Solo el ADMINISTRADOR puede crear y consultar reglas de nómina. El SUPERVISOR no tiene acceso a la configuración de reglas.
-- **FR-002**: El sistema DEBE permitir crear una regla de nómina con los campos obligatorios: nombre descriptivo único, tarifa horaria ordinaria (valor > 0), umbral de horas diarias para activar hora extra (valor > 0), multiplicador de hora extra (valor > 1) y fecha de inicio de vigencia.
-- **FR-003**: El sistema DEBE permitir configurar en la regla los montos de referencia para bonos estándar: monto de bono de transporte y monto de bono de alimentación, con un indicador de si cada tipo de bono está habilitado por defecto. Ambos montos pueden ser cero (bono no aplica).
-- **FR-004**: Una regla de nómina no puede modificarse una vez creada. Para cambiar sus parámetros, el administrador debe crear una nueva regla. El sistema cierra automáticamente la vigencia de la regla anterior (vigente_hasta) al confirmar la nueva.
-- **FR-005**: El sistema DEBE mostrar la lista de reglas de nómina con: nombre, tarifa ordinaria, umbral, multiplicador, período de vigencia y estado (vigente / histórica).
+- **FR-001**: Solo el ADMINISTRADOR puede configurar la tarifa horaria y las plantillas de horario. El SUPERVISOR no tiene acceso a estas configuraciones.
+- **FR-002**: El sistema DEBE permitir asignar una `tarifa_hora` (valor > 0, en Bs./h) a cada colaborador. Este es el único parámetro de cálculo requerido. No existen umbrales de hora extra ni multiplicadores.
+- **FR-003**: ~~Montos de referencia de bonos~~ — **fuera de alcance**. Los bonos se gestionan manualmente en la liquidación; no hay valores de referencia configurables en esta feature.
+- **FR-004**: La tarifa_hora asignada a un colaborador puede modificarse directamente. El historial de cambios queda registrado en el log de auditoría (quién cambió, cuándo, valor anterior y nuevo).
+- **FR-005**: El sistema DEBE mostrar la tarifa_hora vigente de cada colaborador, con la fecha del último cambio y el usuario que lo realizó.
 
 **Plantilla de Horario**
 
-- **FR-006**: El sistema DEBE permitir crear una plantilla de horario con: nombre descriptivo único, días laborables de la semana (selección múltiple de lunes a domingo; mínimo uno), hora de entrada esperada, hora de salida esperada e indicador de horario extremo (sí/no).
-- **FR-007**: El sistema DEBE validar que la hora de entrada y la hora de salida sean distintas. Los turnos que cruzan la medianoche están fuera del alcance de esta feature.
-- **FR-008**: Una plantilla asignada a al menos un departamento o colaborador activo no puede eliminarse. El sistema muestra a quién está asignada antes de rechazar la eliminación.
-- **FR-009**: El sistema DEBE mostrar la lista de plantillas con: nombre, días laborables, horario, indicador de turno extremo y estado de uso (asignada / sin asignar).
+- **FR-006**: El sistema DEBE permitir crear una plantilla de horario con: nombre descriptivo único, días laborables de la semana (selección múltiple de lunes a domingo; mínimo uno) y hora de entrada esperada (para detección de atraso). La hora de salida y el indicador de horario extremo quedan fuera de scope.
+- **FR-007**: ~~Validación hora entrada/salida~~ — **simplificado**. Solo se valida que la hora de entrada sea un valor válido (HH:MM entre 00:00 y 23:59). Los turnos que cruzan la medianoche siguen fuera del alcance.
+- **FR-008**: Una plantilla asignada a al menos un colaborador activo no puede eliminarse. El sistema muestra a quién está asignada antes de rechazar la eliminación.
+- **FR-009**: El sistema DEBE mostrar la lista de plantillas con: nombre, días laborables, hora de entrada esperada y estado de uso (asignada / sin asignar).
 
-**Asignación**
-
-- **FR-010**: El administrador DEBE poder asignar una regla de nómina y una plantilla de horario a un departamento. Ambos campos son obligatorios para la asignación de departamento.
-- **FR-011**: El administrador DEBE poder asignar un override de regla y/o plantilla a un colaborador individual, sobrescribiendo parcial o totalmente la configuración de su departamento.
-- **FR-012**: El administrador DEBE poder eliminar el override individual de un colaborador, restaurando la herencia completa del departamento.
-- **FR-013**: El sistema DEBE mostrar para cada colaborador la configuración efectiva resultante (regla y plantilla que se aplicarán), con un indicador claro de si proviene del departamento (herencia) o de un override individual.
-- **FR-014**: Toda creación de regla, plantilla o asignación DEBE quedar registrada en el log de auditoría con el usuario que realizó la acción y el timestamp.
+- **FR-010**: Toda modificación de tarifa horaria o creación/modificación de plantilla DEBE quedar registrada en el log de auditoría con el usuario que realizó la acción, el timestamp, y los valores anterior y nuevo.
 
 ### Key Entities
 
-- **Regla de Nómina**: Agrupación nombrada de parámetros de cálculo: tarifa ordinaria, umbral de hora extra, multiplicador y montos de referencia de bonos estándar. Es inmutable una vez creada; los cambios se implementan como una nueva versión con nueva fecha de vigencia.
-- **Plantilla de Horario**: Define los días laborables de la semana y la hora de entrada y salida esperada para un turno. Clasifica el turno como estándar o extremo.
-- **Asignación de Departamento**: Vincula una regla de nómina y una plantilla de horario activas a un departamento. Todos los colaboradores del departamento la heredan salvo que tengan override individual.
-- **Override Individual**: Asignación explícita (total o parcial) de regla y/o plantilla a un colaborador específico, que prevalece sobre la configuración del departamento.
+- **Tarifa Horaria**: Valor numérico en Bs./h asignado directamente al perfil de cada colaborador. Es el único parámetro de cálculo requerido; se puede modificar en cualquier momento. El historial de cambios queda en el log de auditoría.
+- **Plantilla de Horario**: Define el nombre, los días laborables de la semana y la hora de entrada esperada para un turno. Se asigna directamente al perfil del colaborador y sirve para detectar atrasos automáticamente.
 
 ## Success Criteria *(mandatory)*
 
 ### Measurable Outcomes
 
-- **SC-001**: El administrador puede crear una regla de nómina completa con todos sus parámetros en menos de 2 minutos.
+- **SC-001**: El administrador puede establecer o actualizar la tarifa horaria de un colaborador en menos de 30 segundos desde que accede al perfil.
 - **SC-002**: El administrador puede crear una plantilla de horario completa en menos de 1 minuto.
-- **SC-003**: El administrador puede asignar regla y plantilla a un departamento en menos de 1 minuto.
-- **SC-004**: El 100% de los colaboradores de un departamento asignado refleja la nueva configuración en el mismo instante en que se guarda la asignación, sin pasos adicionales.
-- **SC-005**: El 100% de las creaciones de reglas, plantillas y asignaciones quedan en el log de auditoría con usuario y timestamp.
-- **SC-006**: El sistema rechaza el 100% de los intentos de guardar una regla con tarifa ≤ 0, umbral ≤ 0 o multiplicador ≤ 1.
+- **SC-003**: El 100% de las modificaciones de tarifa y creaciones/modificaciones de plantillas quedan en el log de auditoría con usuario, timestamp y valores anterior/nuevo.
+- **SC-004**: El sistema rechaza el 100% de los intentos de guardar una tarifa ≤ 0 con un mensaje de validación claro.
+- **SC-005**: El listado de colaboradores muestra la tarifa vigente de cada uno; los colaboradores sin tarifa se identifican con un indicador visible.
+
+## Clarifications
+
+### Session 2026-06-01
+
+- Q: ¿Cuando el supervisor revisa una liquidación, el total de pago se calcula automáticamente o se ingresa manualmente? → A: El sistema calcula `horas × tarifa_hora` automáticamente; el administrador solo necesita configurar la tarifa. Lo que desaparece son los templates de reglas con vigencia/effective dating, los montos de referencia de bonos y los cálculos sugeridos — no el cálculo básico de horas × tarifa.
+- Q: ¿El concepto de hora extra (overtime) sigue existiendo? → A: No — todas las horas se pagan al mismo valor de tarifa_hora; no hay distinción entre horas ordinarias y extra, ni umbral ni multiplicador. El ajuste manual (ajuste_tipo en la liquidación) cubre casos especiales.
+- Q: ¿La plantilla de horario (US2) sigue en scope y en qué forma? → A: Sí, pero simplificada — nombre + días laborables + hora de entrada esperada (para detección de atraso). Se eliminan el criterio de hora de salida y el indicador de "turno extremo".
+- Q: ¿Cómo se asigna la tarifa_hora y la plantilla de horario a los colaboradores? → A: Directamente en el perfil de cada colaborador — el admin edita los valores individualmente por persona. No existe asignación por departamento ni herencia. US3 (Asignación de Departamento) queda fuera de scope.
 
 ## Assumptions
 
-- La función de configurar reglas y horarios es exclusiva del rol ADMINISTRADOR. El SUPERVISOR no tiene acceso a estas configuraciones.
-- Una "regla de nómina" en el contexto de esta feature agrupa múltiples parámetros que en el modelo de datos (spec 003) pueden estar representados como entradas de `ConfiguracionRegla` con effective dating (vigente_desde / vigente_hasta). El mapeo exacto campo a campo se define en la fase de planificación.
-- Los montos de referencia de bonos estándar en la regla de nómina son valores de referencia, no máximos ni obligatorios. El supervisor puede ingresar montos distintos al asignar un bono durante la revisión de liquidación (spec 006).
-- "Horario extremo" es un indicador booleano en la plantilla para uso informativo y futuras reglas diferenciadas. La lógica de pago diferenciado para turnos extremos está fuera del alcance de esta feature.
-- Los turnos que cruzan la medianoche (hora de salida menor a hora de entrada) están fuera del alcance de esta feature. Solo se soportan turnos dentro del mismo día calendario.
-- Esta feature asume que los departamentos (áreas de trabajo) ya existen en el sistema. La creación de departamentos es responsabilidad de spec 004 (registro de colaboradores).
-- **Posible enmienda al modelo de datos (spec 003)**: La asignación de regla y plantilla a departamentos puede requerir agregar campos de referencia a la entidad `Area`. Si la entidad actual no los tiene, esta enmienda debe tramitarse en la fase de planificación antes de la implementación.
-- El override individual parcial (solo regla o solo plantilla) es válido. Si un colaborador tiene override solo de regla, hereda la plantilla del departamento, y viceversa.
-- Esta feature depende de spec 004 (registro de colaboradores y departamentos) para que existan entidades a las que asignar configuraciones.
+- La función de configurar tarifa horaria y plantillas de horario es exclusiva del rol ADMINISTRADOR. El SUPERVISOR no tiene acceso a estas configuraciones.
+- La tarifa horaria y la plantilla de horario se configuran directamente en el perfil de cada colaborador. No existe asignación por departamento ni herencia de configuración.
+- Los bonos se gestionan manualmente en la liquidación; no hay valores de referencia configurables en esta feature.
+- Los turnos que cruzan la medianoche están fuera del alcance de esta feature. Solo se soportan turnos dentro del mismo día calendario.
+- Esta feature depende de spec 004 (registro de colaboradores) para que existan colaboradores a los que asignar tarifa y plantilla.
+- El modelo de datos requiere agregar `tarifa_hora` y `plantilla_horario_id` al perfil del colaborador (`colaboradores`). Esta enmienda se tramita en la fase de planificación.

@@ -140,43 +140,23 @@ export async function findOrCreateBorrador(
   return r.rows[0].id as string;
 }
 
-// ─── Config rule resolver ─────────────────────────────────────────────────────
+// ─── Lateness helper ──────────────────────────────────────────────────────────
 
-async function resolveConfigRule(
-  client: PoolClient,
-  tipo: string,
-  colaboradorId: string,
-  fecha: string,
-): Promise<{ id: string; valor: number } | null> {
-  const colabRule = await client.query(
-    `SELECT id, valor FROM configuraciones_reglas
-     WHERE tipo = $1 AND aplica_a = 'COLABORADOR' AND colaborador_id = $2
-       AND vigente_desde <= $3 AND (vigente_hasta IS NULL OR vigente_hasta >= $3)
-     ORDER BY vigente_desde DESC LIMIT 1`,
-    [tipo, colaboradorId, fecha],
-  );
-  if (colabRule.rows.length > 0) return { id: colabRule.rows[0].id, valor: Number(colabRule.rows[0].valor) };
-
-  const globalRule = await client.query(
-    `SELECT id, valor FROM configuraciones_reglas
-     WHERE tipo = $1 AND aplica_a = 'GLOBAL'
-       AND vigente_desde <= $2 AND (vigente_hasta IS NULL OR vigente_hasta >= $2)
-     ORDER BY vigente_desde DESC LIMIT 1`,
-    [tipo, fecha],
-  );
-  if (globalRule.rows.length > 0) return { id: globalRule.rows[0].id, valor: Number(globalRule.rows[0].valor) };
-  return null;
+function getDiaSemana(fechaISO: string): string {
+  const dias = ['DOMINGO', 'LUNES', 'MARTES', 'MIERCOLES', 'JUEVES', 'VIERNES', 'SABADO'];
+  const d = new Date(fechaISO + 'T12:00:00Z');
+  return dias[d.getUTCDay()];
 }
 
 // ─── Calculator ───────────────────────────────────────────────────────────────
 
 export function deriveEstadoDia(
   horasAjustadas: number | null,
-  descuentoTipo: string | null,
+  ajusteTipo: string | null,
   aprobar: boolean,
 ): string {
-  if (horasAjustadas !== null && descuentoTipo !== null) return 'CON_AJUSTE_Y_DESCUENTO';
-  if (descuentoTipo !== null) return 'CON_DESCUENTO';
+  if (horasAjustadas !== null && ajusteTipo !== null) return 'CON_AJUSTE_Y_DESCUENTO';
+  if (ajusteTipo !== null) return 'CON_DESCUENTO';
   if (horasAjustadas !== null) return 'CON_AJUSTE_HORAS';
   if (aprobar) return 'APROBADO';
   return 'SIN_REVISION';
@@ -184,18 +164,18 @@ export function deriveEstadoDia(
 
 export async function calcularTotales(client: PoolClient, liquidacionId: string) {
   const liqRes = await client.query(
-    `SELECT ls.id, ls.colaborador_id, ls.semana_id, sl.fecha_fin
+    `SELECT ls.id, ls.colaborador_id, ls.semana_id, c.tarifa_hora
      FROM liquidaciones_semanales ls
-     JOIN semanas_laborales sl ON sl.id = ls.semana_id
+     JOIN colaboradores c ON c.id = ls.colaborador_id
      WHERE ls.id = $1`,
     [liquidacionId],
   );
   if (liqRes.rows.length === 0) throw { status: 404, message: 'Liquidación no encontrada' };
   const liq = liqRes.rows[0];
-  const fechaFin: string = liq.fecha_fin.toISOString().slice(0, 10);
+  const tarifa = liq.tarifa_hora !== null ? Number(liq.tarifa_hora) : 0;
 
   const diasRes = await client.query(
-    `SELECT id, fecha, horas_calculadas, horas_ajustadas_supervisor, descuento_tipo, descuento_valor
+    `SELECT id, fecha, horas_calculadas, horas_ajustadas_supervisor, ajuste_tipo, ajuste_valor
      FROM dias_liquidacion WHERE liquidacion_id = $1`,
     [liquidacionId],
   );
@@ -205,56 +185,42 @@ export async function calcularTotales(client: PoolClient, liquidacionId: string)
     [liq.colaborador_id, liq.semana_id],
   );
 
-  const umbralRule = await resolveConfigRule(client, 'UMBRAL_HORA_EXTRA', liq.colaborador_id, fechaFin);
-  const umbral = umbralRule?.valor ?? 8;
-
-  const multRule = await resolveConfigRule(client, 'MULTIPLICADOR_HORA_EXTRA', liq.colaborador_id, fechaFin);
-  const multiplicador = multRule?.valor ?? 1.5;
-
-  let horasOrdinarias = 0, horasExtra = 0;
-  let valorHorasOrdinarias = 0, valorHorasExtra = 0, totalDescuentos = 0;
+  let horasOrdinarias = 0;
+  let valorHorasOrdinarias = 0;
+  let totalDescuentos = 0;
 
   for (const dia of diasRes.rows) {
-    const fechaDia: string = dia.fecha.toISOString().slice(0, 10);
     const horas = dia.horas_ajustadas_supervisor !== null
       ? Number(dia.horas_ajustadas_supervisor)
       : Number(dia.horas_calculadas);
 
-    const tarifaRule = await resolveConfigRule(client, 'TARIFA_HORA', liq.colaborador_id, fechaDia);
-    let tarifa = tarifaRule?.valor ?? 0;
-
-    if (dia.descuento_tipo === 'TARIFA_DIA' && dia.descuento_valor !== null) {
-      tarifa = Number(dia.descuento_valor);
+    let tarifaEfectiva = tarifa;
+    if (dia.ajuste_tipo === 'TARIFA_DIA' && dia.ajuste_valor !== null) {
+      tarifaEfectiva = Number(dia.ajuste_valor);
     }
 
-    const horasOrd = Math.min(horas, umbral);
-    const horasExt = Math.max(horas - umbral, 0);
+    horasOrdinarias += horas;
+    valorHorasOrdinarias += horas * tarifaEfectiva;
 
-    horasOrdinarias += horasOrd;
-    horasExtra += horasExt;
-    valorHorasOrdinarias += horasOrd * tarifa;
-    valorHorasExtra += horasExt * tarifa * multiplicador;
-
-    if (dia.descuento_tipo === 'MONTO_FIJO' && dia.descuento_valor !== null) {
-      totalDescuentos += Number(dia.descuento_valor);
+    if (dia.ajuste_tipo === 'MONTO_FIJO' && dia.ajuste_valor !== null) {
+      totalDescuentos += Number(dia.ajuste_valor);
     }
   }
 
   const totalBonos = bonosRes.rows.reduce((s: number, b: { monto: string }) => s + Number(b.monto), 0);
-  const totalPago = valorHorasOrdinarias + valorHorasExtra + totalBonos - totalDescuentos;
+  const totalPago = valorHorasOrdinarias + totalBonos - totalDescuentos;
   const calculadoEn = new Date();
 
   await client.query(
     `UPDATE liquidaciones_semanales SET
-       horas_ordinarias = $1, horas_extra = $2,
-       valor_horas_ordinarias = $3, valor_horas_extra = $4,
-       total_bonos = $5, total_descuentos = $6, total_pago = $7, calculado_en = $8
-     WHERE id = $9`,
-    [horasOrdinarias, horasExtra, valorHorasOrdinarias, valorHorasExtra,
-      totalBonos, totalDescuentos, totalPago, calculadoEn, liquidacionId],
+       horas_ordinarias = $1, horas_extra = 0,
+       valor_horas_ordinarias = $2, valor_horas_extra = 0,
+       total_bonos = $3, total_descuentos = $4, total_pago = $5, calculado_en = $6
+     WHERE id = $7`,
+    [horasOrdinarias, valorHorasOrdinarias, totalBonos, totalDescuentos, totalPago, calculadoEn, liquidacionId],
   );
 
-  return { horasOrdinarias, horasExtra, valorHorasOrdinarias, valorHorasExtra,
+  return { horasOrdinarias, horasExtra: 0, valorHorasOrdinarias, valorHorasExtra: 0,
     totalBonos, totalDescuentos, totalPago, calculadoEn };
 }
 
@@ -270,14 +236,36 @@ async function calcularDiasDesdeEventos(
   const punchMap = await fetchPunchMap(client, colaboradorId, fechaInicio, fechaFin);
   if (punchMap.size === 0) return;
 
+  const plantillaRes = await client.query(
+    `SELECT ph.dias_laborables, ph.hora_entrada_esperada::text
+     FROM colaboradores c
+     LEFT JOIN plantillas_horario ph ON ph.id = c.plantilla_horario_id
+     WHERE c.id = $1`,
+    [colaboradorId],
+  );
+  const plantilla = plantillaRes.rows[0];
+
   for (const [fecha, punches] of punchMap) {
     const { horasParejadas } = buildJornadas(punches, []);
+
+    let atrasoDetectado = false;
+    if (plantilla?.dias_laborables && plantilla?.hora_entrada_esperada) {
+      const diaSemana = getDiaSemana(fecha);
+      if ((plantilla.dias_laborables as string[]).includes(diaSemana)) {
+        const primeraEntrada = punches.sort((a, b) => a.getTime() - b.getTime())[0];
+        if (primeraEntrada) {
+          const horaEntrada = toHHMM(primeraEntrada);
+          atrasoDetectado = horaEntrada > (plantilla.hora_entrada_esperada as string).slice(0, 5);
+        }
+      }
+    }
+
     await client.query(
       `INSERT INTO dias_liquidacion
          (id, liquidacion_id, fecha, horas_calculadas, atraso_detectado, estado_dia)
-       VALUES (gen_random_uuid(), $1, $2, $3, false, 'SIN_REVISION')
+       VALUES (gen_random_uuid(), $1, $2, $3, $4, 'SIN_REVISION')
        ON CONFLICT (liquidacion_id, fecha) DO NOTHING`,
-      [liquidacionId, fecha, horasParejadas],
+      [liquidacionId, fecha, horasParejadas, atrasoDetectado],
     );
   }
 
@@ -332,7 +320,7 @@ export async function getLiquidacionDetail(
   const [diasRes, bonosRes, punchMap] = await Promise.all([
     client.query(
       `SELECT id, fecha::text, horas_calculadas, horas_ajustadas_supervisor, atraso_detectado,
-              estado_dia, motivo_ajuste, descuento_tipo, descuento_valor, descuento_motivo,
+              estado_dia, motivo_ajuste, ajuste_tipo, ajuste_valor, ajuste_descripcion,
               marcaciones_excluidas
        FROM dias_liquidacion WHERE liquidacion_id = $1 ORDER BY fecha`,
       [liq.id],
@@ -405,9 +393,9 @@ export async function getLiquidacionDetail(
         atrasoDetectado: Boolean(d.atraso_detectado),
         estadoDia: d.estado_dia,
         motivoAjuste: d.motivo_ajuste ?? null,
-        descuentoTipo: d.descuento_tipo ?? null,
-        descuentoValor: d.descuento_valor != null ? Number(d.descuento_valor) : null,
-        descuentoMotivo: d.descuento_motivo ?? null,
+        ajusteTipo: d.ajuste_tipo ?? null,
+        ajusteValor: d.ajuste_valor != null ? Number(d.ajuste_valor) : null,
+        ajusteDescripcion: d.ajuste_descripcion ?? null,
         jornadas: jornadaData.jornadas,
         horasParejadas: jornadaData.horasParejadas,
         marcacionSuelta: jornadaData.marcacionSuelta,
@@ -480,19 +468,48 @@ export async function generarBorradoresSemana(
     [fechaInicio, fechaFin],
   );
 
+  // Fetch plantilla data per collaborator
+  const plantillasRes = await client.query(
+    `SELECT c.id AS colaborador_id, ph.dias_laborables, ph.hora_entrada_esperada::text
+     FROM colaboradores c
+     LEFT JOIN plantillas_horario ph ON ph.id = c.plantilla_horario_id
+     WHERE c.id = ANY($1::uuid[])`,
+    [colaboradorIds],
+  );
+  const plantillaPorColab = new Map<string, { dias_laborables: string[]; hora_entrada_esperada: string } | null>(
+    plantillasRes.rows.map((r) => [
+      r.colaborador_id as string,
+      r.dias_laborables ? { dias_laborables: r.dias_laborables as string[], hora_entrada_esperada: r.hora_entrada_esperada as string } : null,
+    ]),
+  );
+
   // Insert one dia_liquidacion per (colaborador, date) with paired-shift hours
   for (const ev of eventosRes.rows) {
     const liquidacionId = liqByColab.get(ev.colaborador_id as string);
     if (!liquidacionId) continue;
 
     const { horasParejadas } = buildJornadas(ev.marcaciones as Date[], []);
+    const plantilla = plantillaPorColab.get(ev.colaborador_id as string) ?? null;
+    const fecha: string = (ev.fecha as Date).toISOString().slice(0, 10);
+
+    let atrasoDetectado = false;
+    if (plantilla) {
+      const diaSemana = getDiaSemana(fecha);
+      if (plantilla.dias_laborables.includes(diaSemana)) {
+        const primeraEntrada = (ev.marcaciones as Date[]).sort((a, b) => a.getTime() - b.getTime())[0];
+        if (primeraEntrada) {
+          const horaEntrada = toHHMM(primeraEntrada);
+          atrasoDetectado = horaEntrada > plantilla.hora_entrada_esperada.slice(0, 5);
+        }
+      }
+    }
 
     await client.query(
       `INSERT INTO dias_liquidacion
          (id, liquidacion_id, fecha, horas_calculadas, atraso_detectado, estado_dia)
-       VALUES (gen_random_uuid(), $1, $2, $3, false, 'SIN_REVISION')
+       VALUES (gen_random_uuid(), $1, $2, $3, $4, 'SIN_REVISION')
        ON CONFLICT (liquidacion_id, fecha) DO NOTHING`,
-      [liquidacionId, ev.fecha, horasParejadas],
+      [liquidacionId, ev.fecha, horasParejadas, atrasoDetectado],
     );
   }
 

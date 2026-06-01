@@ -26,9 +26,9 @@ const schema = z
   .object({
     horasAjustadasSupervisor: z.union([z.number().min(0), z.literal('')]).optional(),
     motivoAjuste: z.string().optional(),
-    descuentoTipo: z.string().optional(),
-    descuentoValor: z.union([z.number().positive(), z.literal('')]).optional(),
-    descuentoMotivo: z.string().optional(),
+    ajusteTipo: z.string().optional(),
+    ajusteValor: z.union([z.number().positive(), z.literal('')]).optional(),
+    ajusteDescripcion: z.string().optional(),
     aprobar: z.boolean().optional(),
   })
   .superRefine((data, ctx) => {
@@ -40,19 +40,19 @@ const schema = z
         path: ['motivoAjuste'],
       });
     }
-    if (data.descuentoTipo && data.descuentoTipo !== '') {
-      if (!data.descuentoValor && data.descuentoValor !== 0) {
+    if (data.ajusteTipo && data.ajusteTipo !== '') {
+      if (!data.ajusteValor && data.ajusteValor !== 0) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message: 'Valor requerido si se aplica un descuento',
-          path: ['descuentoValor'],
+          message: 'Valor requerido si se aplica un ajuste',
+          path: ['ajusteValor'],
         });
       }
-      if (!data.descuentoMotivo) {
+      if (!data.ajusteDescripcion) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message: 'Motivo requerido si se aplica un descuento',
-          path: ['descuentoMotivo'],
+          message: 'Descripción requerida si se aplica un ajuste',
+          path: ['ajusteDescripcion'],
         });
       }
     }
@@ -88,14 +88,14 @@ export function DiaAjusteDialog({ dia, open, onClose }: Props) {
     defaultValues: {
       horasAjustadasSupervisor: dia.horasAjustadasSupervisor ?? '',
       motivoAjuste: dia.motivoAjuste ?? '',
-      descuentoTipo: (dia.descuentoTipo as FormValues['descuentoTipo']) ?? '',
-      descuentoValor: dia.descuentoValor ?? '',
-      descuentoMotivo: dia.descuentoMotivo ?? '',
+      ajusteTipo: (dia.ajusteTipo as FormValues['ajusteTipo']) ?? '',
+      ajusteValor: dia.ajusteValor ?? '',
+      ajusteDescripcion: dia.ajusteDescripcion ?? '',
       aprobar: false,
     },
   });
 
-  const descuentoTipo = watch('descuentoTipo');
+  const ajusteTipo = watch('ajusteTipo');
   const horasField = watch('horasAjustadasSupervisor');
 
   const onSubmit = async (values: FormValues) => {
@@ -106,10 +106,10 @@ export function DiaAjusteDialog({ dia, open, onClose }: Props) {
       body.horasAjustadasSupervisor = values.horasAjustadasSupervisor;
       body.motivoAjuste = values.motivoAjuste;
     }
-    if (values.descuentoTipo && values.descuentoTipo !== '') {
-      body.descuentoTipo = values.descuentoTipo;
-      body.descuentoValor = values.descuentoValor;
-      body.descuentoMotivo = values.descuentoMotivo;
+    if (values.ajusteTipo && values.ajusteTipo !== '') {
+      body.ajusteTipo = values.ajusteTipo;
+      body.ajusteValor = values.ajusteValor;
+      body.ajusteDescripcion = values.ajusteDescripcion;
     }
     if (values.aprobar) body.aprobar = true;
 
@@ -119,10 +119,10 @@ export function DiaAjusteDialog({ dia, open, onClose }: Props) {
         horasAjustadasSupervisor: body.horasAjustadasSupervisor as number,
         motivoAjuste: body.motivoAjuste as string,
       }),
-      ...(body.descuentoTipo !== undefined && {
-        descuentoTipo: body.descuentoTipo as string,
-        descuentoValor: body.descuentoValor as number,
-        descuentoMotivo: body.descuentoMotivo as string,
+      ...(body.ajusteTipo !== undefined && {
+        ajusteTipo: body.ajusteTipo as string,
+        ajusteValor: body.ajusteValor as number,
+        ajusteDescripcion: body.ajusteDescripcion as string,
       }),
     };
     applyOptimisticDia(optimisticDia);
@@ -209,40 +209,40 @@ export function DiaAjusteDialog({ dia, open, onClose }: Props) {
             )}
 
             <Controller
-              name="descuentoTipo"
+              name="ajusteTipo"
               control={control}
               render={({ field }) => (
-                <FormControl size="small" error={!!errors.descuentoTipo}>
-                  <InputLabel>Tipo de descuento</InputLabel>
-                  <Select label="Tipo de descuento" {...field}>
-                    <MenuItem value="">Sin descuento</MenuItem>
-                    <MenuItem value="TARIFA_DIA">Reducción de tarifa</MenuItem>
+                <FormControl size="small" error={!!errors.ajusteTipo}>
+                  <InputLabel>Tipo de ajuste</InputLabel>
+                  <Select label="Tipo de ajuste" {...field}>
+                    <MenuItem value="">Sin ajuste</MenuItem>
+                    <MenuItem value="TARIFA_DIA">Ajuste de tarifa</MenuItem>
                     <MenuItem value="MONTO_FIJO">Monto fijo</MenuItem>
                   </Select>
-                  {errors.descuentoTipo && (
-                    <FormHelperText>{errors.descuentoTipo.message}</FormHelperText>
+                  {errors.ajusteTipo && (
+                    <FormHelperText>{errors.ajusteTipo.message}</FormHelperText>
                   )}
                 </FormControl>
               )}
             />
 
-            {descuentoTipo && descuentoTipo !== '' && (
+            {ajusteTipo && ajusteTipo !== '' && (
               <>
                 <TextField
-                  label={descuentoTipo === 'TARIFA_DIA' ? 'Tarifa (Bs./h)' : 'Monto (Bs.)'}
+                  label={ajusteTipo === 'TARIFA_DIA' ? 'Tarifa (Bs./h)' : 'Monto (Bs.)'}
                   type="number"
                   size="small"
                   slotProps={{ htmlInput: { min: 0.01, step: 0.01 } }}
-                  {...register('descuentoValor', { valueAsNumber: true })}
-                  error={!!errors.descuentoValor}
-                  helperText={errors.descuentoValor?.message}
+                  {...register('ajusteValor', { valueAsNumber: true })}
+                  error={!!errors.ajusteValor}
+                  helperText={errors.ajusteValor?.message}
                 />
                 <TextField
-                  label="Motivo del descuento"
+                  label="Descripción del ajuste"
                   size="small"
-                  {...register('descuentoMotivo')}
-                  error={!!errors.descuentoMotivo}
-                  helperText={errors.descuentoMotivo?.message}
+                  {...register('ajusteDescripcion')}
+                  error={!!errors.ajusteDescripcion}
+                  helperText={errors.ajusteDescripcion?.message}
                 />
               </>
             )}

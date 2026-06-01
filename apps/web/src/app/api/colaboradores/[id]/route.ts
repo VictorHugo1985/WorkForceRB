@@ -8,8 +8,8 @@ const EditSchema = z.object({
   cedula: z.string().min(1),
   telefono: z.string().max(30).nullable().optional(),
   fecha_nacimiento: z.string().nullable().optional(),
-  area_id: z.string().uuid(),
   supervisor_id: z.string().uuid().nullable().optional(),
+  plantilla_horario_id: z.string().uuid().nullable().optional(),
   codigos: z.array(z.object({ id: z.string().uuid(), workno: z.string().min(1) })).optional(),
 });
 
@@ -36,12 +36,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     return NextResponse.json({ error: 'VALIDATION_ERROR', fields }, { status: 400 });
   }
 
-  const { nombre, apellido, cedula, telefono, fecha_nacimiento, area_id, supervisor_id, codigos } = parsed.data;
+  const { nombre, apellido, cedula, telefono, fecha_nacimiento, supervisor_id, plantilla_horario_id, codigos } = parsed.data;
 
   const client = await pool.connect();
   try {
     const existing = await client.query(
-      `SELECT id, nombre, apellido, cedula, area_id, supervisor_id FROM colaboradores WHERE id = $1`,
+      `SELECT id, nombre, apellido, cedula, supervisor_id, plantilla_horario_id FROM colaboradores WHERE id = $1`,
       [id],
     );
     if (existing.rows.length === 0) {
@@ -63,9 +63,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     await client.query(
       `UPDATE colaboradores
        SET nombre = $1, apellido = $2, cedula = $3, telefono = $4, fecha_nacimiento = $5,
-           area_id = $6, supervisor_id = $7, actualizado_en = now()
+           supervisor_id = $6, plantilla_horario_id = $7, actualizado_en = now()
        WHERE id = $8`,
-      [nombre, apellido, cedula, telefono ?? null, fecha_nacimiento ?? null, area_id, supervisor_id ?? null, id],
+      [nombre, apellido, cedula, telefono ?? null, fecha_nacimiento ?? null, supervisor_id ?? null, plantilla_horario_id ?? null, id],
     );
 
     if (codigos && codigos.length > 0) {
@@ -98,14 +98,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
           userId,
           `Edición de datos básicos: ${nombre} ${apellido}`,
           ip,
-          JSON.stringify({ nombre: prev.nombre, apellido: prev.apellido, cedula: prev.cedula, area_id: prev.area_id, supervisor_id: prev.supervisor_id }),
-          JSON.stringify({ nombre, apellido, cedula, area_id, supervisor_id: supervisor_id ?? null }),
+          JSON.stringify({ nombre: prev.nombre, apellido: prev.apellido, cedula: prev.cedula, supervisor_id: prev.supervisor_id, plantilla_horario_id: prev.plantilla_horario_id }),
+          JSON.stringify({ nombre, apellido, cedula, supervisor_id: supervisor_id ?? null, plantilla_horario_id: plantilla_horario_id ?? null }),
         ],
       );
     } catch { /* audit failure does not block response */ }
 
     return NextResponse.json({
-      colaborador: { id, nombre, apellido, cedula, area_id, supervisor_id: supervisor_id ?? null },
+      colaborador: { id, nombre, apellido, cedula, supervisor_id: supervisor_id ?? null, plantilla_horario_id: plantilla_horario_id ?? null },
     });
   } catch (err: unknown) {
     const e = err as { code?: string; message?: string };
@@ -128,11 +128,13 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   try {
     const colRes = await client.query(
       `SELECT c.id, c.nombre, c.apellido, c.cedula, c.telefono, c.fecha_nacimiento, c.activo, c.creado_en,
-              a.id AS area_id, a.nombre AS area_nombre,
-              u.id AS supervisor_id, u.nombre AS supervisor_nombre, u.apellido AS supervisor_apellido
+              c.tarifa_hora,
+              u.id AS supervisor_id, u.nombre AS supervisor_nombre, u.apellido AS supervisor_apellido,
+              ph.id AS plantilla_id, ph.nombre AS plantilla_nombre,
+              ph.dias_laborables, ph.hora_entrada_esperada::text AS hora_entrada_esperada
        FROM colaboradores c
-       LEFT JOIN areas a ON a.id = c.area_id
        LEFT JOIN usuarios u ON u.id = c.supervisor_id
+       LEFT JOIN plantillas_horario ph ON ph.id = c.plantilla_horario_id
        WHERE c.id = $1`,
       [id],
     );
@@ -140,22 +142,6 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       return NextResponse.json({ error: 'NOT_FOUND' }, { status: 404 });
     }
     const col = colRes.rows[0];
-
-    const tarifaRes = await client.query(
-      `SELECT id, valor, unidad, vigente_desde FROM configuraciones_reglas
-       WHERE colaborador_id = $1 AND tipo = 'TARIFA_HORA' AND aplica_a = 'COLABORADOR'
-         AND (vigente_hasta IS NULL OR vigente_hasta >= CURRENT_DATE)
-       ORDER BY vigente_desde DESC LIMIT 1`,
-      [id],
-    );
-
-    const horarioRes = await client.query(
-      `SELECT id, valor AS umbral_horas_extra, vigente_desde FROM configuraciones_reglas
-       WHERE colaborador_id = $1 AND tipo = 'UMBRAL_HORA_EXTRA' AND aplica_a = 'COLABORADOR'
-         AND (vigente_hasta IS NULL OR vigente_hasta >= CURRENT_DATE)
-       ORDER BY vigente_desde DESC LIMIT 1`,
-      [id],
-    );
 
     const codigosRes = await client.query(
       `SELECT cc.id, cc.codigo_biometrico AS workno, cc.activo,
@@ -176,12 +162,18 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       fecha_nacimiento: col.fecha_nacimiento ? col.fecha_nacimiento.toISOString().slice(0, 10) : null,
       activo: col.activo,
       creado_en: col.creado_en,
-      area: col.area_id ? { id: col.area_id, nombre: col.area_nombre } : null,
+      tarifa_hora: col.tarifa_hora !== null ? Number(col.tarifa_hora) : null,
       supervisor: col.supervisor_id
         ? { id: col.supervisor_id, nombre: col.supervisor_nombre, apellido: col.supervisor_apellido }
         : null,
-      tarifa_vigente: tarifaRes.rows[0] ?? null,
-      horario_vigente: horarioRes.rows[0] ?? null,
+      plantilla_horario: col.plantilla_id
+        ? {
+            id: col.plantilla_id,
+            nombre: col.plantilla_nombre,
+            dias_laborables: col.dias_laborables,
+            hora_entrada_esperada: col.hora_entrada_esperada,
+          }
+        : null,
       codigos_biometricos: codigosRes.rows.map((r) => ({
         id: r.id,
         workno: r.workno,

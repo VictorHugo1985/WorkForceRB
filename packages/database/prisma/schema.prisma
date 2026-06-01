@@ -8,7 +8,7 @@
 //   spec 011     — evento_referencia_id, EstadoResolucion += POTENCIAL_DUPLICADO/DUPLICADO
 //                  tipo_evento on desglosados, TipoConfiguracion += DEDUP_WINDOW_MINUTES
 //   spec 006     — fecha_dia on bonos, TipoBono += GENERICO, dias_liquidacion table
-//                  EstadoDia + TipoDescuentoDia enums
+//                  EstadoDia + TipoAjusteDia enums
 //
 // Append-only enforcement (application layer, not DB triggers):
 //   - eventos_biometricos          → no UPDATE / DELETE in service layer
@@ -61,23 +61,6 @@ enum EstadoSemana {
   CERRADA
 }
 
-// v2.0: added DEDUP_WINDOW_MINUTES (spec 011), ASISTENCIA_MINIMA (spec 006)
-enum TipoConfiguracion {
-  TARIFA_HORA
-  TARIFA_HORA_EXTRA
-  UMBRAL_HORA_EXTRA
-  BONO_TRANSPORTE_CRITERIO
-  BONO_ALIMENTACION_CRITERIO
-  DESCUENTO
-  DEDUP_WINDOW_MINUTES
-  ASISTENCIA_MINIMA
-}
-
-enum AplicaA {
-  GLOBAL
-  COLABORADOR
-}
-
 // v2.0: added GENERICO (spec 006)
 enum TipoBono {
   TRANSPORTE
@@ -100,8 +83,8 @@ enum EstadoDia {
   CON_DESCUENTO
 }
 
-// v2.0: new enum for DiaLiquidacion.descuento_tipo (spec 006)
-enum TipoDescuentoDia {
+// v2.0: new enum for DiaLiquidacion.ajuste_tipo (spec 006); renamed descuento→ajuste
+enum TipoAjusteDia {
   TARIFA_DIA
   MONTO_FIJO
 }
@@ -128,7 +111,7 @@ model Usuario {
   bonos_aprobados                Bono[]               @relation("BonoAprobadoPor")
   liquidaciones_aprobadas        LiquidacionSemanal[] @relation("LiquidacionAprobadaPor")
   liquidaciones_pagadas          LiquidacionSemanal[] @relation("LiquidacionPagadaPor")
-  configuraciones_creadas        ConfiguracionRegla[] @relation("ConfiguracionCreadaPor")
+  plantillas_horario_creadas     PlantillaHorario[]   @relation("PlantillaCreadaPor")
   registros_auditoria            RegistroAuditoria[]
 
   @@map("usuarios")
@@ -146,21 +129,23 @@ model UsuarioRol {
 }
 
 model Colaborador {
-  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  nombre         String
-  apellido       String
-  cedula         String   @unique
-  activo         Boolean  @default(true)
-  supervisor_id  String?  @db.Uuid
-  creado_en      DateTime @default(now()) @db.Timestamptz
-  actualizado_en DateTime @updatedAt @db.Timestamptz
+  id                    String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  nombre                String
+  apellido              String
+  cedula                String   @unique
+  activo                Boolean  @default(true)
+  supervisor_id         String?  @db.Uuid
+  tarifa_hora           Decimal? @db.Decimal(15, 4)
+  plantilla_horario_id  String?  @db.Uuid
+  creado_en             DateTime @default(now()) @db.Timestamptz
+  actualizado_en        DateTime @updatedAt @db.Timestamptz
 
-  supervisor             Usuario?             @relation("SupervisorColaborador", fields: [supervisor_id], references: [id])
-  codigos                CodigoColaborador[]
-  eventos_biometricos    EventoBiometrico[]
-  bonos                  Bono[]
-  liquidaciones          LiquidacionSemanal[]
-  configuraciones_reglas ConfiguracionRegla[] @relation("ConfiguracionAplicaA")
+  supervisor         Usuario?          @relation("SupervisorColaborador", fields: [supervisor_id], references: [id])
+  plantilla_horario  PlantillaHorario? @relation(fields: [plantilla_horario_id], references: [id])
+  codigos            CodigoColaborador[]
+  eventos_biometricos EventoBiometrico[]
+  bonos              Bono[]
+  liquidaciones      LiquidacionSemanal[]
 
   @@map("colaboradores")
 }
@@ -260,26 +245,20 @@ model SemanaLaboral {
   @@map("semanas_laborales")
 }
 
-// Effective Dating pattern — query: tipo AND vigente_desde <= date AND (vigente_hasta IS NULL OR vigente_hasta >= date)
-// v2.0: TipoConfiguracion expanded with DEDUP_WINDOW_MINUTES, ASISTENCIA_MINIMA
-model ConfiguracionRegla {
-  id             String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tipo           TipoConfiguracion
-  clave          String
-  valor          Decimal           @db.Decimal(15, 4)
-  unidad         String
-  aplica_a       AplicaA           @default(GLOBAL)
-  colaborador_id String?           @db.Uuid
-  vigente_desde  DateTime          @db.Date
-  vigente_hasta  DateTime?         @db.Date
-  creado_por     String            @db.Uuid
-  creado_en      DateTime          @default(now()) @db.Timestamptz
+// spec 008: schedule templates for automated lateness detection
+model PlantillaHorario {
+  id                    String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  nombre                String   @unique
+  dias_laborables       String[]
+  hora_entrada_esperada String   @db.Time
+  creado_por            String   @db.Uuid
+  creado_en             DateTime @default(now()) @db.Timestamptz
+  actualizado_en        DateTime @updatedAt @db.Timestamptz
 
-  colaborador        Colaborador? @relation("ConfiguracionAplicaA", fields: [colaborador_id], references: [id])
-  creado_por_usuario Usuario      @relation("ConfiguracionCreadaPor", fields: [creado_por], references: [id])
+  creado_por_usuario Usuario       @relation("PlantillaCreadaPor", fields: [creado_por], references: [id])
+  colaboradores      Colaborador[]
 
-  @@index([tipo, vigente_desde, vigente_hasta])
-  @@map("configuraciones_reglas")
+  @@map("plantillas_horario")
 }
 
 // v2.0: added fecha_dia (spec 006); unique constraint updated to (colaborador_id, fecha_dia, tipo)
@@ -344,9 +323,9 @@ model DiaLiquidacion {
   atraso_detectado          Boolean          @default(false)
   estado_dia                EstadoDia        @default(SIN_REVISION)
   motivo_ajuste             String?
-  descuento_tipo            TipoDescuentoDia?
-  descuento_valor           Decimal?         @db.Decimal(15, 2)
-  descuento_motivo          String?
+  ajuste_tipo               TipoAjusteDia?
+  ajuste_valor              Decimal?         @db.Decimal(15, 2)
+  ajuste_descripcion        String?
 
   liquidacion LiquidacionSemanal @relation(fields: [liquidacion_id], references: [id], onDelete: Cascade)
 

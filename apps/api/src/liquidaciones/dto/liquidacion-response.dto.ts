@@ -1,4 +1,4 @@
-import { EstadoDia, EstadoLiquidacion, TipoDescuentoDia, TipoBono } from '@prisma/client';
+import { EstadoDia, EstadoLiquidacion, TipoAjusteDia, TipoBono } from '@prisma/client';
 
 export class DiaLiquidacionDto {
   id: string;
@@ -8,9 +8,9 @@ export class DiaLiquidacionDto {
   atrasoDetectado: boolean;
   estadoDia: EstadoDia;
   motivoAjuste: string | null;
-  descuentoTipo: TipoDescuentoDia | null;
-  descuentoValor: number | null;
-  descuentoMotivo: string | null;
+  ajusteTipo: TipoAjusteDia | null;
+  ajusteValor: number | null;
+  ajusteDescripcion: string | null;
 }
 
 export class BonoDto {

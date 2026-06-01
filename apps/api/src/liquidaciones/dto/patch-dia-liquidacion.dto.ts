@@ -8,7 +8,7 @@ import {
   Min,
   ValidateIf,
 } from 'class-validator';
-import { TipoDescuentoDia } from '@prisma/client';
+import { TipoAjusteDia } from '@prisma/client';
 
 export class PatchDiaLiquidacionDto {
   @IsOptional()
@@ -21,17 +21,17 @@ export class PatchDiaLiquidacionDto {
   motivoAjuste?: string;
 
   @IsOptional()
-  @IsEnum(TipoDescuentoDia)
-  descuentoTipo?: TipoDescuentoDia;
+  @IsEnum(TipoAjusteDia)
+  ajusteTipo?: TipoAjusteDia;
 
-  @ValidateIf((o) => o.descuentoTipo !== undefined && o.descuentoTipo !== null)
+  @ValidateIf((o) => o.ajusteTipo !== undefined && o.ajusteTipo !== null)
   @IsNumber()
   @IsPositive()
-  descuentoValor?: number;
+  ajusteValor?: number;
 
-  @ValidateIf((o) => o.descuentoTipo !== undefined && o.descuentoTipo !== null)
+  @ValidateIf((o) => o.ajusteTipo !== undefined && o.ajusteTipo !== null)
   @IsString()
-  descuentoMotivo?: string;
+  ajusteDescripcion?: string;
 
   @IsOptional()
   @IsBoolean()

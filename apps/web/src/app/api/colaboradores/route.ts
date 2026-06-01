@@ -9,10 +9,8 @@ export async function GET(req: NextRequest) {
   const client = await pool.connect();
   try {
     const result = await client.query(
-      `SELECT c.id, c.nombre, c.apellido, c.cedula, c.activo,
-              a.id AS area_id, a.nombre AS area_nombre
+      `SELECT c.id, c.nombre, c.apellido, c.cedula, c.activo, c.tarifa_hora
        FROM colaboradores c
-       LEFT JOIN areas a ON a.id = c.area_id
        ORDER BY c.apellido, c.nombre`,
     );
     const colaboradores = result.rows.map((r) => ({
@@ -21,7 +19,7 @@ export async function GET(req: NextRequest) {
       apellido: r.apellido,
       cedula: r.cedula,
       activo: r.activo,
-      area: r.area_id ? { id: r.area_id, nombre: r.area_nombre } : null,
+      tarifa_hora: r.tarifa_hora !== null ? Number(r.tarifa_hora) : null,
     }));
     return NextResponse.json({ colaboradores });
   } finally {
@@ -40,10 +38,8 @@ const ColaboradorSchema = z.object({
   cedula: z.string().min(1),
   telefono: z.string().max(30).nullable().optional(),
   fecha_nacimiento: z.string().nullable().optional(),
-  area_id: z.string().uuid(),
   supervisor_id: z.string().uuid().nullable().optional(),
   tarifa_hora: z.number().positive().nullable().optional(),
-  umbral_horas_extra: z.number().positive().nullable().optional(),
   codigo_biometrico: CodigoBiometricoSchema.nullable().optional(),
 });
 
@@ -68,11 +64,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'VALIDATION_ERROR', fields }, { status: 400 });
   }
 
-  const { nombre, apellido, cedula, telefono, fecha_nacimiento, area_id, supervisor_id, tarifa_hora, umbral_horas_extra, codigo_biometrico } = parsed.data;
+  const { nombre, apellido, cedula, telefono, fecha_nacimiento, supervisor_id, tarifa_hora, codigo_biometrico } = parsed.data;
 
   const client = await pool.connect();
   try {
-    // US2: check cédula duplicada
     const dupCheck = await client.query(
       `SELECT id FROM colaboradores WHERE cedula = $1 LIMIT 1`,
       [cedula],
@@ -84,50 +79,20 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Insert colaborador (actualizado_en has no DB default — Prisma sets it at app layer)
     const colRes = await client.query<{ id: string }>(
-      `INSERT INTO colaboradores (nombre, apellido, cedula, telefono, fecha_nacimiento, area_id, supervisor_id, actualizado_en)
+      `INSERT INTO colaboradores (nombre, apellido, cedula, telefono, fecha_nacimiento, supervisor_id, tarifa_hora, actualizado_en)
        VALUES ($1, $2, $3, $4, $5, $6, $7, now())
        RETURNING id`,
-      [nombre, apellido, cedula, telefono ?? null, fecha_nacimiento ?? null, area_id, supervisor_id ?? null],
+      [nombre, apellido, cedula, telefono ?? null, fecha_nacimiento ?? null, supervisor_id ?? null, tarifa_hora ?? null],
     );
     const colaboradorId = colRes.rows[0].id;
 
     const warnings: string[] = [];
-    const configuracionesCreadas: string[] = [];
-    const today = new Date().toISOString().slice(0, 10);
 
-    // Best-effort: tarifa horaria
-    if (tarifa_hora) {
-      try {
-        await client.query(
-          `INSERT INTO configuraciones_reglas (tipo, clave, valor, unidad, aplica_a, colaborador_id, vigente_desde, creado_por)
-           VALUES ('TARIFA_HORA', 'Tarifa hora ordinaria', $1, 'Bs.', 'COLABORADOR', $2, $3, $4)`,
-          [tarifa_hora, colaboradorId, today, userId],
-        );
-        configuracionesCreadas.push('TARIFA_HORA');
-      } catch (err: any) {
-        warnings.push(`Tarifa no configurada: ${err.message}`);
-      }
-    } else {
-      warnings.push('Sin tarifa configurada: se usará la tarifa global vigente al momento de liquidar.');
+    if (!tarifa_hora) {
+      warnings.push('Sin tarifa configurada: el colaborador no tendrá tarifa hasta que sea asignada desde su perfil.');
     }
 
-    // Best-effort: umbral horas extra
-    if (umbral_horas_extra) {
-      try {
-        await client.query(
-          `INSERT INTO configuraciones_reglas (tipo, clave, valor, unidad, aplica_a, colaborador_id, vigente_desde, creado_por)
-           VALUES ('UMBRAL_HORA_EXTRA', 'Umbral horas extra diarias', $1, 'horas', 'COLABORADOR', $2, $3, $4)`,
-          [umbral_horas_extra, colaboradorId, today, userId],
-        );
-        configuracionesCreadas.push('UMBRAL_HORA_EXTRA');
-      } catch (err: any) {
-        warnings.push(`Horario no configurado: ${err.message}`);
-      }
-    }
-
-    // Best-effort: código biométrico
     let codigoBiometricoCreado = false;
     if (codigo_biometrico) {
       try {
@@ -146,7 +111,6 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Best-effort: audit log
     try {
       const ip = req.headers.get('x-forwarded-for') ?? null;
       await client.query(
@@ -157,20 +121,22 @@ export async function POST(req: NextRequest) {
           userId,
           `Registro de nuevo colaborador: ${nombre} ${apellido}`,
           ip,
-          JSON.stringify({ nombre, apellido, cedula, area_id, supervisor_id, tarifa_hora, umbral_horas_extra, codigo_biometrico }),
+          JSON.stringify({ nombre, apellido, cedula, supervisor_id, tarifa_hora, codigo_biometrico }),
         ],
       );
     } catch { /* audit failure does not block response */ }
 
     const colaboradorRow = await client.query(
-      `SELECT id, nombre, apellido, cedula, area_id, supervisor_id, activo, creado_en FROM colaboradores WHERE id = $1`,
+      `SELECT id, nombre, apellido, cedula, supervisor_id, tarifa_hora, activo, creado_en FROM colaboradores WHERE id = $1`,
       [colaboradorId],
     );
 
     return NextResponse.json(
       {
-        colaborador: colaboradorRow.rows[0],
-        configuraciones_creadas: configuracionesCreadas,
+        colaborador: {
+          ...colaboradorRow.rows[0],
+          tarifa_hora: colaboradorRow.rows[0].tarifa_hora !== null ? Number(colaboradorRow.rows[0].tarifa_hora) : null,
+        },
         codigo_biometrico_creado: codigoBiometricoCreado,
         warnings,
       },

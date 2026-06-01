@@ -6,9 +6,9 @@ import { checkLiquidacionRole, assertEditable, assertScope, deriveEstadoDia, cal
 const PatchSchema = z.object({
   horasAjustadasSupervisor: z.number().min(0).optional(),
   motivoAjuste: z.string().optional(),
-  descuentoTipo: z.enum(['TARIFA_DIA', 'MONTO_FIJO']).optional(),
-  descuentoValor: z.number().positive().optional(),
-  descuentoMotivo: z.string().optional(),
+  ajusteTipo: z.enum(['TARIFA_DIA', 'MONTO_FIJO']).optional(),
+  ajusteValor: z.number().positive().optional(),
+  ajusteDescripcion: z.string().optional(),
   aprobar: z.boolean().optional(),
   marcacionesExcluidas: z.array(z.string()).optional(),
 });
@@ -49,9 +49,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       ? dto.horasAjustadasSupervisor
       : dia.horas_ajustadas_supervisor !== null ? Number(dia.horas_ajustadas_supervisor) : null;
 
-    const descuentoTipo = dto.descuentoTipo !== undefined ? dto.descuentoTipo : dia.descuento_tipo;
+    const ajusteTipo = dto.ajusteTipo !== undefined ? dto.ajusteTipo : dia.ajuste_tipo;
 
-    const estadoDia = deriveEstadoDia(horasAjustadas, descuentoTipo, dto.aprobar ?? false);
+    const estadoDia = deriveEstadoDia(horasAjustadas, ajusteTipo, dto.aprobar ?? false);
 
     const sets: string[] = [];
     const queryParams: unknown[] = [id];
@@ -62,10 +62,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       sets.push(`horas_ajustadas_supervisor = ${push(dto.horasAjustadasSupervisor)}`);
       sets.push(`motivo_ajuste = ${push(dto.motivoAjuste ?? null)}`);
     }
-    if (dto.descuentoTipo !== undefined) {
-      sets.push(`descuento_tipo = ${push(dto.descuentoTipo)}`);
-      sets.push(`descuento_valor = ${push(dto.descuentoValor ?? null)}`);
-      sets.push(`descuento_motivo = ${push(dto.descuentoMotivo ?? null)}`);
+    if (dto.ajusteTipo !== undefined) {
+      sets.push(`ajuste_tipo = ${push(dto.ajusteTipo)}`);
+      sets.push(`ajuste_valor = ${push(dto.ajusteValor ?? null)}`);
+      sets.push(`ajuste_descripcion = ${push(dto.ajusteDescripcion ?? null)}`);
     }
     if (dto.marcacionesExcluidas !== undefined) {
       sets.push(`marcaciones_excluidas = ${push(JSON.stringify(dto.marcacionesExcluidas))}`);
@@ -115,9 +115,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       atrasoDetectado: Boolean(updDia.atraso_detectado),
       estadoDia: updDia.estado_dia,
       motivoAjuste: updDia.motivo_ajuste ?? null,
-      descuentoTipo: updDia.descuento_tipo ?? null,
-      descuentoValor: updDia.descuento_valor != null ? Number(updDia.descuento_valor) : null,
-      descuentoMotivo: updDia.descuento_motivo ?? null,
+      ajusteTipo: updDia.ajuste_tipo ?? null,
+      ajusteValor: updDia.ajuste_valor != null ? Number(updDia.ajuste_valor) : null,
+      ajusteDescripcion: updDia.ajuste_descripcion ?? null,
       ...jornadaFields,
     };
 

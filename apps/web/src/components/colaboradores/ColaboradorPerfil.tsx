@@ -30,6 +30,13 @@ interface CodigoBiometrico {
   dispositivo: { id: string; nombre: string; numero_serie: string };
 }
 
+interface PlantillaHorario {
+  id: string;
+  nombre: string;
+  dias_laborables: string[];
+  hora_entrada_esperada: string;
+}
+
 interface PerfilData {
   id: string;
   nombre: string;
@@ -39,10 +46,9 @@ interface PerfilData {
   fecha_nacimiento: string | null;
   activo: boolean;
   creado_en: string;
-  area: { id: string; nombre: string } | null;
   supervisor: { id: string; nombre: string; apellido: string } | null;
-  tarifa_vigente: { id: string; valor: number; unidad: string; vigente_desde: string } | null;
-  horario_vigente: { id: string; umbral_horas_extra: number; vigente_desde: string } | null;
+  tarifa_hora: number | null;
+  plantilla_horario: PlantillaHorario | null;
   codigos_biometricos: CodigoBiometrico[];
 }
 
@@ -50,17 +56,19 @@ interface ColaboradorPerfilProps {
   perfil: PerfilData;
 }
 
-// supervisor_id: accept '' (no supervisor) or a UUID; coerce '' → null before sending
 const EditSchema = z.object({
   nombre: z.string().min(1, 'Requerido').max(100),
   apellido: z.string().min(1, 'Requerido').max(100),
   cedula: z.string().min(1, 'Requerido'),
   telefono: z.string().max(30).optional().or(z.literal('')),
   fecha_nacimiento: z.string().optional().or(z.literal('')),
-  area_id: z.string().min(1, 'Seleccione un área'),
   supervisor_id: z.union([z.string().uuid(), z.literal(''), z.null()]).optional(),
 });
 type EditFormValues = z.infer<typeof EditSchema>;
+
+const TarifaSchema = z.object({
+  valor: z.number({ invalid_type_error: 'Ingrese un número' }).positive('Debe ser mayor a 0'),
+});
 
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -86,9 +94,10 @@ export default function ColaboradorPerfil({ perfil }: ColaboradorPerfilProps) {
     telefono: perfil.telefono,
     fecha_nacimiento: perfil.fecha_nacimiento,
     activo: perfil.activo,
-    area: perfil.area,
     supervisor: perfil.supervisor,
   });
+  const [tarifaHora, setTarifaHora] = useState<number | null>(perfil.tarifa_hora);
+  const [plantilla, setPlantilla] = useState<PlantillaHorario | null>(perfil.plantilla_horario);
   const [localCodigos, setLocalCodigos] = useState<CodigoBiometrico[]>(perfil.codigos_biometricos);
   const [worknos, setWorknos] = useState<Record<string, string>>(
     Object.fromEntries(perfil.codigos_biometricos.map((c) => [c.id, c.workno])),
@@ -96,8 +105,19 @@ export default function ColaboradorPerfil({ perfil }: ColaboradorPerfilProps) {
 
   const [isEditing, setIsEditing] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
-  const [areas, setAreas] = useState<{ id: string; nombre: string }[]>([]);
   const [supervisores, setSupervisores] = useState<{ id: string; nombre: string; apellido: string }[]>([]);
+
+  // Tarifa edit dialog
+  const [tarifaDialogOpen, setTarifaDialogOpen] = useState(false);
+  const [tarifaSubmitting, setTarifaSubmitting] = useState(false);
+  const [tarifaInput, setTarifaInput] = useState('');
+  const [tarifaError, setTarifaError] = useState<string | null>(null);
+
+  // Plantilla selector dialog
+  const [plantillaDialogOpen, setPlantillaDialogOpen] = useState(false);
+  const [plantillaLoading, setPlantillaLoading] = useState(false);
+  const [plantillasDisponibles, setPlantillasDisponibles] = useState<PlantillaHorario[]>([]);
+  const [plantillaSeleccionada, setPlantillaSeleccionada] = useState<string>('');
 
   const [bajaDialogOpen, setBajaDialogOpen] = useState(false);
   const [bajaLoading, setBajaLoading] = useState(false);
@@ -110,23 +130,18 @@ export default function ColaboradorPerfil({ perfil }: ColaboradorPerfilProps) {
       cedula: data.cedula,
       telefono: data.telefono ?? '',
       fecha_nacimiento: data.fecha_nacimiento ?? '',
-      area_id: data.area?.id ?? '',
       supervisor_id: data.supervisor?.id ?? '',
     },
   });
 
   function handleEditClick() {
-    Promise.all([
-      fetch('/api/areas').then((r) => r.json()).then((d) => setAreas(d.areas ?? [])),
-      fetch('/api/usuarios/supervisores').then((r) => r.json()).then((d) => setSupervisores(d.supervisores ?? [])),
-    ]);
+    fetch('/api/usuarios/supervisores').then((r) => r.json()).then((d) => setSupervisores(d.supervisores ?? []));
     reset({
       nombre: data.nombre,
       apellido: data.apellido,
       cedula: data.cedula,
       telefono: data.telefono ?? '',
       fecha_nacimiento: data.fecha_nacimiento ?? '',
-      area_id: data.area?.id ?? '',
       supervisor_id: data.supervisor?.id ?? '',
     });
     setWorknos(Object.fromEntries(localCodigos.map((c) => [c.id, c.workno])));
@@ -156,7 +171,6 @@ export default function ColaboradorPerfil({ perfil }: ColaboradorPerfilProps) {
         showError(`No se pudo guardar: ${msg}`);
         return;
       }
-      const areaObj = areas.find((a) => a.id === values.area_id) ?? data.area;
       const supObj = supervisores.find((s) => s.id === supervisor_id) ?? null;
       setData((prev) => ({
         ...prev,
@@ -165,7 +179,6 @@ export default function ColaboradorPerfil({ perfil }: ColaboradorPerfilProps) {
         cedula: values.cedula,
         telefono: values.telefono || null,
         fecha_nacimiento: values.fecha_nacimiento || null,
-        area: areaObj ? { id: areaObj.id, nombre: areaObj.nombre } : null,
         supervisor: supObj ? { id: supObj.id, nombre: supObj.nombre, apellido: supObj.apellido } : null,
       }));
       setLocalCodigos((prev) => prev.map((c) => ({ ...c, workno: worknos[c.id] ?? c.workno })));
@@ -175,6 +188,82 @@ export default function ColaboradorPerfil({ perfil }: ColaboradorPerfilProps) {
       const msg = 'Error de red. Intente de nuevo.';
       setEditError(msg);
       showError(msg);
+    }
+  }
+
+  function openTarifaDialog() {
+    setTarifaInput(tarifaHora !== null ? String(tarifaHora) : '');
+    setTarifaError(null);
+    setTarifaDialogOpen(true);
+  }
+
+  async function handleTarifaSave() {
+    const parsed = TarifaSchema.safeParse({ valor: Number(tarifaInput) });
+    if (!parsed.success) {
+      setTarifaError(parsed.error.issues[0]?.message ?? 'Valor inválido');
+      return;
+    }
+    setTarifaSubmitting(true);
+    try {
+      const res = await fetch(`/api/colaboradores/${perfil.id}/tarifa`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ valor: parsed.data.valor }),
+      });
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        setTarifaError(json?.message ?? 'Error al guardar');
+        return;
+      }
+      setTarifaHora(parsed.data.valor);
+      setTarifaDialogOpen(false);
+      showSuccess('Tarifa actualizada correctamente.');
+    } catch {
+      setTarifaError('Error de red. Intente de nuevo.');
+    } finally {
+      setTarifaSubmitting(false);
+    }
+  }
+
+  async function openPlantillaDialog() {
+    setPlantillaLoading(true);
+    setPlantillaDialogOpen(true);
+    setPlantillaSeleccionada(plantilla?.id ?? '');
+    try {
+      const res = await fetch('/api/plantillas-horario');
+      const json = await res.json();
+      setPlantillasDisponibles(json.plantillas ?? []);
+    } catch {
+      showError('Error cargando plantillas.');
+    } finally {
+      setPlantillaLoading(false);
+    }
+  }
+
+  async function handlePlantillaSave() {
+    try {
+      const res = await fetch(`/api/colaboradores/${perfil.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nombre: data.nombre,
+          apellido: data.apellido,
+          cedula: data.cedula,
+          supervisor_id: data.supervisor?.id ?? null,
+          plantilla_horario_id: plantillaSeleccionada || null,
+        }),
+      });
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        showError(json?.message ?? 'Error al guardar');
+        return;
+      }
+      const found = plantillasDisponibles.find((p) => p.id === plantillaSeleccionada) ?? null;
+      setPlantilla(found);
+      setPlantillaDialogOpen(false);
+      showSuccess('Plantilla de horario actualizada.');
+    } catch {
+      showError('Error de red. Intente de nuevo.');
     }
   }
 
@@ -310,21 +399,6 @@ export default function ColaboradorPerfil({ perfil }: ColaboradorPerfilProps) {
             helperText={errors.fecha_nacimiento?.message}
           />
           <Controller
-            name="area_id"
-            control={control}
-            render={({ field }) => (
-              <FormControl size="small" required error={!!errors.area_id}>
-                <InputLabel>Área de trabajo</InputLabel>
-                <Select {...field} label="Área de trabajo">
-                  {areas.map((a) => (
-                    <MenuItem key={a.id} value={a.id}>{a.nombre}</MenuItem>
-                  ))}
-                </Select>
-                {errors.area_id && <FormHelperText>{errors.area_id.message}</FormHelperText>}
-              </FormControl>
-            )}
-          />
-          <Controller
             name="supervisor_id"
             control={control}
             render={({ field }) => (
@@ -336,11 +410,11 @@ export default function ColaboradorPerfil({ perfil }: ColaboradorPerfilProps) {
                     <MenuItem key={s.id} value={s.id}>{s.nombre} {s.apellido}</MenuItem>
                   ))}
                 </Select>
+                {errors.supervisor_id && <FormHelperText error>{errors.supervisor_id.message}</FormHelperText>}
               </FormControl>
             )}
           />
 
-          {/* Códigos biométricos editables */}
           {localCodigos.length > 0 && (
             <>
               <Typography variant="subtitle2" sx={{ fontWeight: 600, mt: 1 }}>
@@ -382,7 +456,6 @@ export default function ColaboradorPerfil({ perfil }: ColaboradorPerfilProps) {
             label="Fecha de nacimiento"
             value={data.fecha_nacimiento ? formatDate(data.fecha_nacimiento) : '—'}
           />
-          <Row label="Área de trabajo" value={data.area?.nombre ?? '—'} />
           <Row
             label="Supervisor"
             value={data.supervisor ? `${data.supervisor.nombre} ${data.supervisor.apellido}` : 'Sin supervisor'}
@@ -391,34 +464,41 @@ export default function ColaboradorPerfil({ perfil }: ColaboradorPerfilProps) {
         </>
       )}
 
-      {/* ── Tarifa salarial ── (siempre visible) */}
+      {/* ── Tarifa salarial ── */}
       {!isEditing && (
         <>
-          <Typography variant="subtitle1" sx={{ fontWeight: 500, mt: 3, mb: 1 }}>Tarifa salarial</Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 3, mb: 1 }}>
+            <Typography variant="subtitle1" sx={{ fontWeight: 500 }}>Tarifa salarial</Typography>
+            <Button size="small" onClick={openTarifaDialog} sx={{ ml: 'auto' }}>
+              Editar tarifa
+            </Button>
+          </Box>
           <Divider sx={{ mb: 1 }} />
-          {perfil.tarifa_vigente ? (
-            <>
-              <Row
-                label="Tarifa por hora"
-                value={`${Number(perfil.tarifa_vigente.valor).toLocaleString('es-VE')} Bs.`}
-              />
-              <Row label="Vigente desde" value={formatDate(perfil.tarifa_vigente.vigente_desde)} />
-            </>
+          {tarifaHora !== null ? (
+            <Row label="Tarifa por hora" value={`${tarifaHora.toLocaleString('es-VE')} Bs./h`} />
           ) : (
-            <Alert severity="warning" sx={{ mt: 1 }}>Sin tarifa propia — se usará la tarifa global al liquidar.</Alert>
+            <Alert severity="warning" sx={{ mt: 1 }}>Sin tarifa configurada — el colaborador no generará valor en las liquidaciones hasta que se asigne una tarifa.</Alert>
           )}
 
-          <Typography variant="subtitle1" sx={{ fontWeight: 500, mt: 3, mb: 1 }}>Horario laboral</Typography>
+          {/* ── Plantilla de horario ── */}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 3, mb: 1 }}>
+            <Typography variant="subtitle1" sx={{ fontWeight: 500 }}>Plantilla de horario</Typography>
+            <Button size="small" onClick={openPlantillaDialog} sx={{ ml: 'auto' }}>
+              {plantilla ? 'Cambiar' : 'Asignar'}
+            </Button>
+          </Box>
           <Divider sx={{ mb: 1 }} />
-          {perfil.horario_vigente ? (
+          {plantilla ? (
             <>
-              <Row label="Umbral horas extra / día" value={`${perfil.horario_vigente.umbral_horas_extra} h`} />
-              <Row label="Vigente desde" value={formatDate(perfil.horario_vigente.vigente_desde)} />
+              <Row label="Plantilla" value={plantilla.nombre} />
+              <Row label="Días laborables" value={plantilla.dias_laborables.join(', ')} />
+              <Row label="Hora entrada esperada" value={plantilla.hora_entrada_esperada} />
             </>
           ) : (
-            <Alert severity="info" sx={{ mt: 1 }}>Sin horario propio — hereda la configuración global.</Alert>
+            <Alert severity="info" sx={{ mt: 1 }}>Sin plantilla asignada — no se detectarán atrasos en las liquidaciones.</Alert>
           )}
 
+          {/* ── Códigos biométricos ── */}
           <Typography variant="subtitle1" sx={{ fontWeight: 500, mt: 3, mb: 1 }}>Códigos biométricos</Typography>
           <Divider sx={{ mb: 1 }} />
           {localCodigos.length === 0 ? (
@@ -436,6 +516,68 @@ export default function ColaboradorPerfil({ perfil }: ColaboradorPerfilProps) {
         </>
       )}
 
+      {/* ── Tarifa edit dialog ── */}
+      <Dialog open={tarifaDialogOpen} onClose={() => setTarifaDialogOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>Editar tarifa por hora</DialogTitle>
+        <DialogContent sx={{ pt: 2 }}>
+          {tarifaError && <Alert severity="error" sx={{ mb: 2 }}>{tarifaError}</Alert>}
+          <TextField
+            label="Tarifa (Bs./h)"
+            type="number"
+            size="small"
+            fullWidth
+            value={tarifaInput}
+            onChange={(e) => setTarifaInput(e.target.value)}
+            inputProps={{ min: 0.01, step: 0.01 }}
+            autoFocus
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setTarifaDialogOpen(false)} disabled={tarifaSubmitting}>Cancelar</Button>
+          <Button
+            variant="contained"
+            onClick={handleTarifaSave}
+            disabled={tarifaSubmitting}
+            startIcon={tarifaSubmitting ? <CircularProgress size={14} /> : undefined}
+          >
+            Guardar
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* ── Plantilla selector dialog ── */}
+      <Dialog open={plantillaDialogOpen} onClose={() => setPlantillaDialogOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>Asignar plantilla de horario</DialogTitle>
+        <DialogContent sx={{ pt: 2 }}>
+          {plantillaLoading ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
+              <CircularProgress size={24} />
+            </Box>
+          ) : (
+            <FormControl size="small" fullWidth>
+              <InputLabel>Plantilla</InputLabel>
+              <Select
+                value={plantillaSeleccionada}
+                onChange={(e) => setPlantillaSeleccionada(e.target.value)}
+                label="Plantilla"
+              >
+                <MenuItem value=""><em>Sin plantilla</em></MenuItem>
+                {plantillasDisponibles.map((p) => (
+                  <MenuItem key={p.id} value={p.id}>{p.nombre}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setPlantillaDialogOpen(false)}>Cancelar</Button>
+          <Button variant="contained" onClick={handlePlantillaSave} disabled={plantillaLoading}>
+            Guardar
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* ── Baja dialog ── */}
       <Dialog open={bajaDialogOpen} onClose={() => setBajaDialogOpen(false)} maxWidth="xs" fullWidth>
         <DialogTitle>Dar de baja al colaborador</DialogTitle>
         <DialogContent>

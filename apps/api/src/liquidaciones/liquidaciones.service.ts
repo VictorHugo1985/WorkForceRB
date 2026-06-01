@@ -291,7 +291,7 @@ export class LiquidacionesService {
 
     const horasAjustadas =
       dto.horasAjustadasSupervisor !== undefined ? dto.horasAjustadasSupervisor : null;
-    const descuentoTipo = dto.descuentoTipo ?? null;
+    const ajusteTipo = dto.ajusteTipo ?? null;
 
     const estadoDia = this.calculator.deriveEstadoDia(
       dto.horasAjustadasSupervisor !== undefined
@@ -299,7 +299,7 @@ export class LiquidacionesService {
         : dia.horas_ajustadas_supervisor !== null
         ? Number(dia.horas_ajustadas_supervisor)
         : null,
-      dto.descuentoTipo !== undefined ? dto.descuentoTipo : dia.descuento_tipo,
+      dto.ajusteTipo !== undefined ? dto.ajusteTipo : dia.ajuste_tipo,
       dto.aprobar ?? false,
     );
 
@@ -310,10 +310,10 @@ export class LiquidacionesService {
           horas_ajustadas_supervisor: dto.horasAjustadasSupervisor,
           motivo_ajuste: dto.motivoAjuste ?? null,
         }),
-        ...(dto.descuentoTipo !== undefined && {
-          descuento_tipo: dto.descuentoTipo,
-          descuento_valor: dto.descuentoValor ?? null,
-          descuento_motivo: dto.descuentoMotivo ?? null,
+        ...(dto.ajusteTipo !== undefined && {
+          ajuste_tipo: dto.ajusteTipo,
+          ajuste_valor: dto.ajusteValor ?? null,
+          ajuste_descripcion: dto.ajusteDescripcion ?? null,
         }),
         estado_dia: estadoDia,
       },
@@ -321,8 +321,8 @@ export class LiquidacionesService {
 
     const accion = dto.horasAjustadasSupervisor !== undefined
       ? 'DIA_HORAS_AJUSTADAS'
-      : dto.descuentoTipo !== undefined
-      ? 'DIA_DESCUENTO_APLICADO'
+      : dto.ajusteTipo !== undefined
+      ? 'DIA_AJUSTE_APLICADO'
       : 'DIA_APROBADO';
 
     try {

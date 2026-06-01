@@ -7,42 +7,22 @@ import FormControl from '@mui/material/FormControl';
 import InputLabel from '@mui/material/InputLabel';
 import Select from '@mui/material/Select';
 import MenuItem from '@mui/material/MenuItem';
-import FormHelperText from '@mui/material/FormHelperText';
 import Typography from '@mui/material/Typography';
 import type { WizardFormValues } from '../RegistroWizard';
 
-interface Area { id: string; nombre: string; }
 interface Supervisor { id: string; nombre: string; apellido: string; }
 
 export default function Step2AreaSupervisor() {
-  const { control, formState: { errors } } = useFormContext<WizardFormValues>();
-  const [areas, setAreas] = useState<Area[]>([]);
+  const { control } = useFormContext<WizardFormValues>();
   const [supervisores, setSupervisores] = useState<Supervisor[]>([]);
 
   useEffect(() => {
-    fetch('/api/areas').then((r) => r.json()).then((d) => setAreas(d.areas ?? []));
     fetch('/api/usuarios/supervisores').then((r) => r.json()).then((d) => setSupervisores(d.supervisores ?? []));
   }, []);
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      <Typography variant="h6" gutterBottom>Área y supervisor</Typography>
-
-      <Controller
-        name="area_id"
-        control={control}
-        render={({ field }) => (
-          <FormControl fullWidth required error={!!errors.area_id}>
-            <InputLabel>Área de trabajo</InputLabel>
-            <Select {...field} label="Área de trabajo">
-              {areas.map((a) => (
-                <MenuItem key={a.id} value={a.id}>{a.nombre}</MenuItem>
-              ))}
-            </Select>
-            {errors.area_id && <FormHelperText>{errors.area_id.message}</FormHelperText>}
-          </FormControl>
-        )}
-      />
+      <Typography variant="h6" gutterBottom>Supervisor</Typography>
 
       <Controller
         name="supervisor_id"
