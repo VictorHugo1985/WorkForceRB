@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import Box from '@mui/material/Box';
 import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
+import Divider from '@mui/material/Divider';
 import Link from '@mui/material/Link';
 import Paper from '@mui/material/Paper';
 import Table from '@mui/material/Table';
@@ -22,14 +23,8 @@ interface Props {
   nombre: string;
   apellido: string;
   semanaId: string;
-  maxShifts: number;
   tarifaHora: number | null;
   onEstadoChange: (liquidacionId: string, estado: 'APROBADO') => void;
-}
-
-function estadoChip(estado: string) {
-  if (estado === 'APROBADO') return <Chip label="Aprobado" size="small" color="success" />;
-  return <Chip label="Borrador" size="small" color="warning" variant="outlined" />;
 }
 
 export function LiquidacionColaborador({
@@ -38,7 +33,6 @@ export function LiquidacionColaborador({
   nombre,
   apellido,
   semanaId,
-  maxShifts,
   tarifaHora,
   onEstadoChange,
 }: Props) {
@@ -49,10 +43,10 @@ export function LiquidacionColaborador({
   useEffect(() => {
     fetch(`/api/liquidaciones/${liquidacionId}`)
       .then((r) => {
-        if (!r.ok) throw new Error('Error al cargar liquidación');
+        if (!r.ok) throw new Error('Error al cargar');
         return r.json() as Promise<LiquidacionData>;
       })
-      .then((data) => setLiquidacion(data))
+      .then(setLiquidacion)
       .catch((e: Error) => setFetchError(e.message))
       .finally(() => setLoading(false));
   }, [liquidacionId]);
@@ -83,95 +77,106 @@ export function LiquidacionColaborador({
   const isLocked = liquidacion?.estado === 'APROBADO';
   const hasInconsistencias = liquidacion?.dias.some((d) => d.tieneInconsistencia) ?? false;
 
-  // Column headers: Fecha + ENT/SAL pairs + Horas + Estado
-  const shiftHeaders: string[] = [];
-  for (let i = 0; i < maxShifts; i++) {
-    shiftHeaders.push(`ENT.${i + 1}`, `SAL.${i + 1}`);
-  }
-
   return (
-    <Paper variant="outlined" sx={{ p: 2 }}>
-      {/* Header */}
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
-        <Link
-          href={`/liquidaciones/${semanaId}/${colaboradorId}`}
-          target="_blank"
-          rel="noopener"
-          underline="hover"
-          sx={{ fontWeight: 600, fontSize: '1rem' }}
-        >
-          {apellido}, {nombre}
-        </Link>
-        {liquidacion && estadoChip(liquidacion.estado)}
+    <Paper
+      variant="outlined"
+      sx={{
+        overflow: 'hidden',
+        borderColor: isLocked ? 'success.light' : 'divider',
+        opacity: isLocked ? 0.85 : 1,
+      }}
+    >
+      {/* ── Collaborator header ── */}
+      <Box
+        sx={{
+          px: 2,
+          py: 1.25,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          bgcolor: isLocked ? 'success.50' : 'background.default',
+          flexWrap: 'wrap',
+          gap: 1,
+        }}
+      >
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Link
+            href={`/liquidaciones/${semanaId}/${colaboradorId}`}
+            target="_blank"
+            rel="noopener"
+            underline="hover"
+            sx={{ fontWeight: 600, fontSize: '0.95rem' }}
+          >
+            {apellido}, {nombre}
+          </Link>
+          {liquidacion && (
+            liquidacion.estado === 'APROBADO'
+              ? <Chip label="Aprobado" size="small" color="success" />
+              : <Chip label="Borrador" size="small" color="warning" variant="outlined" />
+          )}
+        </Box>
+
+        {liquidacion && (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <Typography variant="body2" color="text.secondary">
+              {liquidacion.horasOrdinarias.toFixed(2)} h
+              {tarifaHora !== null && (
+                <> · {tarifaHora.toFixed(2)} Bs./h</>
+              )}
+            </Typography>
+            <Typography variant="body2" sx={{ fontWeight: 600 }} color="success.dark">
+              {liquidacion.totalPago.toLocaleString('es-VE', { minimumFractionDigits: 2 })} Bs.
+            </Typography>
+            <ConfirmarColaboradorButton
+              liquidacionId={liquidacionId}
+              hasInconsistencias={hasInconsistencias}
+              isConfirmed={isLocked}
+              onConfirmed={handleConfirmed}
+            />
+          </Box>
+        )}
       </Box>
 
+      <Divider />
+
+      {/* ── Loading / error states ── */}
       {loading && (
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 2 }}>
-          <CircularProgress size={20} />
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 2, py: 1.5 }}>
+          <CircularProgress size={16} />
           <Typography variant="body2" color="text.secondary">Cargando…</Typography>
         </Box>
       )}
-
       {fetchError && (
-        <Typography color="error" variant="body2">{fetchError}</Typography>
+        <Typography color="error" variant="body2" sx={{ px: 2, py: 1 }}>{fetchError}</Typography>
       )}
 
-      {liquidacion && (
-        <Box sx={{ overflowX: 'auto' }}>
-          <Table size="small" sx={{ minWidth: 400 }}>
-            <TableHead>
-              <TableRow>
-                <TableCell sx={{ fontWeight: 600 }}>Fecha</TableCell>
-                {shiftHeaders.map((h) => (
-                  <TableCell key={h} sx={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{h}</TableCell>
-                ))}
-                <TableCell sx={{ fontWeight: 600 }}>Horas</TableCell>
-                <TableCell sx={{ fontWeight: 600 }}>Estado</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {liquidacion.dias.map((dia) => (
-                <PlanillaDiaRow
-                  key={dia.id}
-                  dia={dia}
-                  maxShifts={maxShifts}
-                  isReadOnly={isLocked}
-                  onDiaUpdate={handleDiaUpdate}
-                />
-              ))}
-
-              {/* Summary row */}
-              <TableRow sx={{ bgcolor: 'action.hover' }}>
-                <TableCell colSpan={1 + maxShifts * 2} sx={{ fontWeight: 600 }}>
-                  Total semana
-                </TableCell>
-                <TableCell sx={{ fontWeight: 600 }}>
-                  {liquidacion.horasOrdinarias.toFixed(2)} h
-                </TableCell>
-                <TableCell colSpan={1}>
-                  <Typography variant="caption" color="text.secondary">
-                    {tarifaHora !== null ? `${tarifaHora.toFixed(2)} Bs./h` : '—'}
-                  </Typography>
-                </TableCell>
-              </TableRow>
-
-              {/* Payment row */}
-              <TableRow>
-                <TableCell colSpan={2 + maxShifts * 2} sx={{ fontWeight: 600, color: 'success.main' }}>
-                  Total a pagar: {liquidacion.totalPago.toLocaleString('es-VE', { minimumFractionDigits: 2 })} Bs.
-                </TableCell>
-                <TableCell colSpan={1} align="right">
-                  <ConfirmarColaboradorButton
-                    liquidacionId={liquidacionId}
-                    hasInconsistencias={hasInconsistencias}
-                    isConfirmed={isLocked}
-                    onConfirmed={handleConfirmed}
-                  />
-                </TableCell>
-              </TableRow>
-            </TableBody>
-          </Table>
-        </Box>
+      {/* ── Days table ── */}
+      {liquidacion && liquidacion.dias.length > 0 && (
+        <Table size="small">
+          <TableHead>
+            <TableRow sx={{ bgcolor: 'action.hover' }}>
+              <TableCell sx={{ fontWeight: 600, width: 90 }}>Fecha</TableCell>
+              <TableCell sx={{ fontWeight: 600 }}>Marcaciones</TableCell>
+              <TableCell sx={{ fontWeight: 600 }}>Horas</TableCell>
+              <TableCell sx={{ fontWeight: 600, width: 110 }}>Estado</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {liquidacion.dias.map((dia) => (
+              <PlanillaDiaRow
+                key={dia.id}
+                dia={dia}
+                isReadOnly={isLocked}
+                onDiaUpdate={handleDiaUpdate}
+              />
+            ))}
+          </TableBody>
+        </Table>
+      )}
+      {liquidacion && liquidacion.dias.length === 0 && (
+        <Typography variant="body2" color="text.secondary" sx={{ px: 2, py: 1.5 }}>
+          Sin días registrados.
+        </Typography>
       )}
     </Paper>
   );
