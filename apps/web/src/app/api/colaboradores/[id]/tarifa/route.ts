@@ -40,11 +40,21 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (existing.rows.length === 0) {
       return NextResponse.json({ error: 'NOT_FOUND' }, { status: 404 });
     }
-    const valorAnterior = existing.rows[0].tarifa_hora !== null ? Number(existing.rows[0].tarifa_hora) : null;
+    const valorAnterior = existing.rows[0].tarifa_hora !== null
+      ? Number(existing.rows[0].tarifa_hora)
+      : null;
 
+    // Update current tarifa on the colaborador record
     await client.query(
       `UPDATE colaboradores SET tarifa_hora = $1, actualizado_en = now() WHERE id = $2`,
       [valor, colaboradorId],
+    );
+
+    // Insert into history (always — even if value is the same, captures the intent)
+    await client.query(
+      `INSERT INTO historico_tarifas_hora (colaborador_id, tarifa_hora, vigente_desde, creado_por)
+       VALUES ($1, $2, CURRENT_DATE, $3)`,
+      [colaboradorId, valor, userId],
     );
 
     try {
@@ -64,6 +74,38 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     } catch { /* audit failure does not block response */ }
 
     return NextResponse.json({ tarifa_hora: valor });
+  } finally {
+    client.release();
+  }
+}
+
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const auth = await checkAdminRole(req);
+  if (auth instanceof NextResponse) return auth;
+
+  const { id: colaboradorId } = await params;
+
+  const client = await pool.connect();
+  try {
+    const res = await client.query(
+      `SELECT h.id, h.tarifa_hora, h.vigente_desde, h.creado_en,
+              u.nombre || ' ' || u.apellido AS creado_por_nombre
+       FROM historico_tarifas_hora h
+       LEFT JOIN usuarios u ON u.id = h.creado_por
+       WHERE h.colaborador_id = $1
+       ORDER BY h.vigente_desde DESC, h.creado_en DESC`,
+      [colaboradorId],
+    );
+
+    return NextResponse.json({
+      historico: res.rows.map((r) => ({
+        id: r.id,
+        tarifaHora: Number(r.tarifa_hora),
+        vigenteDesdé: (r.vigente_desde as Date).toISOString().slice(0, 10),
+        creadoEn: (r.creado_en as Date).toISOString(),
+        creadoPorNombre: r.creado_por_nombre ?? null,
+      })),
+    });
   } finally {
     client.release();
   }

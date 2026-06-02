@@ -16,6 +16,7 @@ import { InlineDiaEditor } from './InlineDiaEditor';
 interface Props {
   dia: DiaLiquidacionData;
   isReadOnly: boolean;
+  tarifaHora: number | null;
   onDiaUpdate: (updatedDia: DiaLiquidacionData, updatedTotales: TotalesData) => void;
 }
 
@@ -102,7 +103,7 @@ function AjusteLabel({ dia }: { dia: DiaLiquidacionData }) {
   );
 }
 
-export function PlanillaDiaRow({ dia, isReadOnly, onDiaUpdate }: Props) {
+export function PlanillaDiaRow({ dia, isReadOnly, tarifaHora, onDiaUpdate }: Props) {
   const [expanded, setExpanded] = useState(false);
 
   const displayHoras = dia.horasAjustadasSupervisor ?? dia.horasParejadas ?? dia.horasCalculadas;
@@ -171,6 +172,7 @@ export function PlanillaDiaRow({ dia, isReadOnly, onDiaUpdate }: Props) {
             <Collapse in={expanded} unmountOnExit>
               <InlineDiaEditor
                 dia={dia}
+                tarifaHora={tarifaHora}
                 onSaved={handleSaved}
                 onCancel={() => setExpanded(false)}
               />

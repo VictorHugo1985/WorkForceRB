@@ -272,6 +272,7 @@ export function LiquidacionColaborador({
                 key={dia.id}
                 dia={dia}
                 isReadOnly={isLocked}
+                tarifaHora={localTarifa}
                 onDiaUpdate={handleDiaUpdate}
               />
             ))}

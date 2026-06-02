@@ -115,6 +115,7 @@ model Usuario {
   liquidaciones_pagadas          LiquidacionSemanal[] @relation("LiquidacionPagadaPor")
   plantillas_horario_creadas     PlantillaHorario[]   @relation("PlantillaCreadaPor")
   registros_auditoria            RegistroAuditoria[]
+  tarifas_registradas            HistoricoTarifaHora[] @relation("TarifaHistoricoCreador")
 
   @@map("usuarios")
 }
@@ -150,8 +151,24 @@ model Colaborador {
   eventos_biometricos EventoBiometrico[]
   bonos              Bono[]
   liquidaciones      LiquidacionSemanal[]
+  historico_tarifas  HistoricoTarifaHora[]
 
   @@map("colaboradores")
+}
+
+model HistoricoTarifaHora {
+  id             String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  colaborador_id String      @db.Uuid
+  tarifa_hora    Decimal     @db.Decimal(15, 4)
+  vigente_desde  DateTime    @db.Date
+  creado_por     String?     @db.Uuid
+  creado_en      DateTime    @default(now()) @db.Timestamptz
+
+  colaborador Colaborador @relation(fields: [colaborador_id], references: [id], onDelete: Cascade)
+  usuario     Usuario?    @relation("TarifaHistoricoCreador", fields: [creado_por], references: [id], onDelete: SetNull)
+
+  @@index([colaborador_id, vigente_desde(sort: Desc), creado_en(sort: Desc)])
+  @@map("historico_tarifas_hora")
 }
 
 model CodigoColaborador {
