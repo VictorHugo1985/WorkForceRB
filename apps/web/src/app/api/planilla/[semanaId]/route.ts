@@ -11,7 +11,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ sema
   const client = await pool.connect();
   try {
     const semanaRes = await client.query(
-      `SELECT id, fecha_inicio::text, fecha_fin::text, estado
+      `SELECT id, fecha_inicio::text, fecha_fin::text, estado, tipo_periodo
        FROM semanas_laborales WHERE id = $1`,
       [semanaId],
     );
@@ -21,8 +21,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ sema
     const semana = semanaRes.rows[0];
     const fechaInicio = (semana.fecha_inicio as string).slice(0, 10);
     const fechaFin = (semana.fecha_fin as string).slice(0, 10);
+    const tipoPeriodo = (semana.tipo_periodo as string | null) ?? null;
 
-    // Collaborators with ≥ 1 punch in the week + max shifts per collaborator
+    // Collaborators with ≥ 1 punch in the week, filtered by tipo_pago when period has tipo_periodo
     const rosterRes = await client.query(
       `WITH punched AS (
          SELECT cc.colaborador_id,
@@ -42,8 +43,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ sema
        SELECT cm.colaborador_id, cm.max_shifts, c.nombre, c.apellido, c.tarifa_hora
        FROM colab_max cm
        JOIN colaboradores c ON c.id = cm.colaborador_id
+       WHERE ($3::text IS NULL OR c.tipo_pago::text = $3)
        ORDER BY c.apellido, c.nombre`,
-      [fechaInicio, fechaFin],
+      [fechaInicio, fechaFin, tipoPeriodo],
     );
 
     if (rosterRes.rows.length === 0) {
