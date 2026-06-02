@@ -348,6 +348,7 @@ model DiaLiquidacion {
   ajuste_tipo               TipoAjusteDia?
   ajuste_valor              Decimal?         @db.Decimal(15, 2)
   ajuste_descripcion        String?
+  marcaciones_manuales      Json?
 
   liquidacion LiquidacionSemanal @relation(fields: [liquidacion_id], references: [id], onDelete: Cascade)
 

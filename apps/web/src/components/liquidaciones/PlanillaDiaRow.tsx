@@ -9,8 +9,9 @@ import TableCell from '@mui/material/TableCell';
 import TableRow from '@mui/material/TableRow';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import EditIcon from '@mui/icons-material/Edit';
+import TuneIcon from '@mui/icons-material/Tune';
 import type { DiaLiquidacionData, TotalesData } from '@/stores/liquidacion.store';
+import { MarcacionesEditor } from './MarcacionesEditor';
 import { InlineDiaEditor } from './InlineDiaEditor';
 
 interface Props {
@@ -46,65 +47,8 @@ function estadoChip(estado: string) {
   }
 }
 
-function MarcacionesDisplay({ dia }: { dia: DiaLiquidacionData }) {
-  const jornadas = dia.jornadas ?? [];
-  const tieneInconsistencia = dia.tieneInconsistencia;
-  const marcacionSuelta = dia.marcacionSuelta;
-
-  if (jornadas.length === 0 && !tieneInconsistencia) {
-    return <Typography variant="body2" color="text.disabled">—</Typography>;
-  }
-
-  return (
-    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, alignItems: 'center' }}>
-      {jornadas.map((j, i) => (
-        <Typography key={i} variant="body2" component="span" sx={{ whiteSpace: 'nowrap' }}>
-          {i > 0 && (
-            <Typography component="span" color="text.disabled" sx={{ mr: 0.75 }}>·</Typography>
-          )}
-          {j.entrada}
-          <Typography component="span" color="text.secondary" sx={{ mx: 0.5 }}>→</Typography>
-          {j.salida}
-        </Typography>
-      ))}
-      {tieneInconsistencia && marcacionSuelta && (
-        <Tooltip title="Marcación sin par — expandir para completar">
-          <Typography
-            variant="body2"
-            component="span"
-            color="warning.main"
-            sx={{ whiteSpace: 'nowrap', fontWeight: 500 }}
-          >
-            {jornadas.length > 0 && (
-              <span style={{ marginRight: 6, color: 'inherit' }}>·</span>
-            )}
-            ⚠ {marcacionSuelta}
-          </Typography>
-        </Tooltip>
-      )}
-      {tieneInconsistencia && !marcacionSuelta && (
-        <Tooltip title="Número impar de marcaciones">
-          <Typography component="span" color="warning.main">⚠</Typography>
-        </Tooltip>
-      )}
-    </Box>
-  );
-}
-
-function AjusteLabel({ dia }: { dia: DiaLiquidacionData }) {
-  if (!dia.ajusteTipo) return null;
-  const label = dia.ajusteTipo === 'TARIFA_DIA'
-    ? `Tarifa: ${dia.ajusteValor?.toFixed(2) ?? '?'} Bs./h`
-    : `Fijo: ${dia.ajusteValor?.toFixed(2) ?? '?'} Bs.`;
-  return (
-    <Tooltip title={dia.ajusteDescripcion ?? ''}>
-      <Chip label={label} size="small" color="warning" sx={{ mt: 0.25 }} />
-    </Tooltip>
-  );
-}
-
 export function PlanillaDiaRow({ dia, isReadOnly, tarifaHora, onDiaUpdate }: Props) {
-  const [expanded, setExpanded] = useState(false);
+  const [ajusteExpanded, setAjusteExpanded] = useState(false);
 
   const displayHoras = dia.horasAjustadasSupervisor ?? dia.horasParejadas ?? dia.horasCalculadas;
   const isAjustado = dia.horasAjustadasSupervisor !== null && dia.horasAjustadasSupervisor !== undefined;
@@ -112,69 +56,78 @@ export function PlanillaDiaRow({ dia, isReadOnly, tarifaHora, onDiaUpdate }: Pro
 
   const handleSaved = (updatedDia: DiaLiquidacionData, updatedTotales: TotalesData) => {
     onDiaUpdate(updatedDia, updatedTotales);
-    setExpanded(false);
+    setAjusteExpanded(false);
   };
 
   return (
     <>
-      <TableRow hover sx={{ '& > td': { borderBottom: expanded ? 'none' : undefined } }}>
+      <TableRow sx={{ '& > td': { borderBottom: ajusteExpanded ? 'none' : undefined } }}>
         {/* Fecha */}
-        <TableCell sx={{ whiteSpace: 'nowrap', fontWeight: 500, width: 90 }}>
+        <TableCell sx={{ whiteSpace: 'nowrap', fontWeight: 500, width: 90, verticalAlign: 'top', pt: 1.25 }}>
           {formatFecha(dia.fecha)}
         </TableCell>
 
-        {/* Marcaciones */}
-        <TableCell>
-          <MarcacionesDisplay dia={dia} />
+        {/* Marcaciones — always editable pairs */}
+        <TableCell sx={{ verticalAlign: 'top', pt: 1 }}>
+          <MarcacionesEditor dia={dia} isReadOnly={cellReadOnly} onSaved={onDiaUpdate} />
         </TableCell>
 
-        {/* Horas */}
-        <TableCell sx={{ width: 120 }}>
+        {/* Horas efectivas */}
+        <TableCell sx={{ width: 110, verticalAlign: 'top', pt: 1.25 }}>
           <Typography variant="body2">{displayHoras.toFixed(2)} h</Typography>
-          {isAjustado && (
+          {isAjustado && dia.marcacionesManuales == null && (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.25 }}>
-              <Chip label="Ajustado" size="small" color="info" />
+              <Chip label="Ajust." size="small" color="info" />
               <Typography variant="caption" color="text.secondary">
                 orig: {(dia.horasParejadas ?? dia.horasCalculadas).toFixed(2)}
               </Typography>
             </Box>
           )}
+          {dia.ajusteTipo && (
+            <Tooltip title={dia.ajusteDescripcion ?? ''}>
+              <Chip
+                label={dia.ajusteTipo === 'TARIFA_DIA'
+                  ? `${dia.ajusteValor?.toFixed(2) ?? '?'} Bs./h`
+                  : `${dia.ajusteValor?.toFixed(2) ?? '?'} Bs.`}
+                size="small"
+                color="warning"
+                sx={{ mt: 0.25 }}
+              />
+            </Tooltip>
+          )}
         </TableCell>
 
-        {/* Estado + ajuste */}
-        <TableCell sx={{ width: 130 }}>
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.25 }}>
-            {estadoChip(dia.estadoDia)}
-            <AjusteLabel dia={dia} />
-          </Box>
+        {/* Estado */}
+        <TableCell sx={{ width: 110, verticalAlign: 'top', pt: 1.25 }}>
+          {estadoChip(dia.estadoDia)}
         </TableCell>
 
-        {/* Edit toggle */}
-        <TableCell sx={{ width: 40, px: 0.5 }}>
+        {/* Ajuste toggle (tipo de ajuste / motivo) */}
+        <TableCell sx={{ width: 40, px: 0.5, verticalAlign: 'top', pt: 0.75 }}>
           {!cellReadOnly && (
-            <Tooltip title={expanded ? 'Cerrar' : 'Editar día'}>
+            <Tooltip title={ajusteExpanded ? 'Cerrar ajuste' : 'Tipo de ajuste'}>
               <IconButton
                 size="small"
-                onClick={() => setExpanded((v) => !v)}
-                color={expanded ? 'primary' : 'default'}
+                onClick={() => setAjusteExpanded((v) => !v)}
+                color={ajusteExpanded ? 'primary' : (dia.ajusteTipo ? 'warning' : 'default')}
               >
-                <EditIcon fontSize="small" />
+                <TuneIcon fontSize="small" />
               </IconButton>
             </Tooltip>
           )}
         </TableCell>
       </TableRow>
 
-      {/* Inline editor panel */}
+      {/* Ajuste panel (tipo + motivo) */}
       {!cellReadOnly && (
         <TableRow>
-          <TableCell colSpan={5} sx={{ py: 0, borderBottom: expanded ? undefined : 'none' }}>
-            <Collapse in={expanded} unmountOnExit>
+          <TableCell colSpan={5} sx={{ py: 0, borderBottom: ajusteExpanded ? undefined : 'none' }}>
+            <Collapse in={ajusteExpanded} unmountOnExit>
               <InlineDiaEditor
                 dia={dia}
                 tarifaHora={tarifaHora}
                 onSaved={handleSaved}
-                onCancel={() => setExpanded(false)}
+                onCancel={() => setAjusteExpanded(false)}
               />
             </Collapse>
           </TableCell>

@@ -31,6 +31,7 @@ export interface DiaLiquidacionData {
   tieneInconsistencia?: boolean;
   marcacionesExcluidas?: string[];
   excludedPunchDisplay?: ExcludedPunch[];
+  marcacionesManuales?: Array<{ entrada: string; salida: string }> | null;
 }
 
 export interface BonoData {

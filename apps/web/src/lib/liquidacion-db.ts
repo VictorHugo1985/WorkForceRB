@@ -321,7 +321,7 @@ export async function getLiquidacionDetail(
     client.query(
       `SELECT id, fecha::text, horas_calculadas, horas_ajustadas_supervisor, atraso_detectado,
               estado_dia, motivo_ajuste, ajuste_tipo, ajuste_valor, ajuste_descripcion,
-              marcaciones_excluidas
+              marcaciones_excluidas, marcaciones_manuales
        FROM dias_liquidacion WHERE liquidacion_id = $1 ORDER BY fecha`,
       [liq.id],
     ),
@@ -382,9 +382,60 @@ export async function getLiquidacionDetail(
     aprobadaEn: liq.aprobada_en ?? null,
     dias: diasRes.rows.map((d) => {
       const fecha = (d.fecha as string).slice(0, 10);
-      const punches = punchMap.get(fecha) ?? [];
-      const excluded: string[] = Array.isArray(d.marcaciones_excluidas) ? d.marcaciones_excluidas : [];
-      const jornadaData = buildJornadas(punches, excluded);
+      const manuales = d.marcaciones_manuales as Array<{ entrada: string; salida: string }> | null;
+
+      let jornadaFields: {
+        jornadas: import('@/stores/liquidacion.store').Jornada[];
+        horasParejadas: number;
+        marcacionSuelta: string | null;
+        marcacionSueltaRaw: string | null;
+        tieneInconsistencia: boolean;
+        marcacionesExcluidas: string[];
+        excludedPunchDisplay: import('@/stores/liquidacion.store').ExcludedPunch[];
+        marcacionesManuales: Array<{ entrada: string; salida: string }> | null;
+      };
+
+      if (manuales && manuales.length > 0) {
+        // Supervisor-edited jornadas take precedence over biometric data
+        const horasParejadas = manuales.reduce((sum, j) => {
+          const [sh, sm] = j.entrada.split(':').map(Number);
+          const [eh, em] = j.salida.split(':').map(Number);
+          const diff = (eh * 60 + em) - (sh * 60 + sm);
+          return sum + (diff > 0 ? Math.round(diff / 60 * 100) / 100 : 0);
+        }, 0);
+        jornadaFields = {
+          jornadas: manuales.map((j) => {
+            const [sh, sm] = j.entrada.split(':').map(Number);
+            const [eh, em] = j.salida.split(':').map(Number);
+            const diff = (eh * 60 + em) - (sh * 60 + sm);
+            return { entrada: j.entrada, salida: j.salida,
+              horas: diff > 0 ? Math.round(diff / 60 * 100) / 100 : 0,
+              entradaRaw: j.entrada, salidaRaw: j.salida };
+          }),
+          horasParejadas,
+          marcacionSuelta: null,
+          marcacionSueltaRaw: null,
+          tieneInconsistencia: false,
+          marcacionesExcluidas: [],
+          excludedPunchDisplay: [],
+          marcacionesManuales: manuales,
+        };
+      } else {
+        const punches = punchMap.get(fecha) ?? [];
+        const excluded: string[] = Array.isArray(d.marcaciones_excluidas) ? d.marcaciones_excluidas : [];
+        const jd = buildJornadas(punches, excluded);
+        jornadaFields = {
+          jornadas: jd.jornadas,
+          horasParejadas: jd.horasParejadas,
+          marcacionSuelta: jd.marcacionSuelta,
+          marcacionSueltaRaw: jd.marcacionSueltaRaw,
+          tieneInconsistencia: jd.tieneInconsistencia,
+          marcacionesExcluidas: excluded,
+          excludedPunchDisplay: jd.excludedPunchDisplay,
+          marcacionesManuales: null,
+        };
+      }
+
       return {
         id: d.id,
         fecha,
@@ -396,13 +447,7 @@ export async function getLiquidacionDetail(
         ajusteTipo: d.ajuste_tipo ?? null,
         ajusteValor: d.ajuste_valor != null ? Number(d.ajuste_valor) : null,
         ajusteDescripcion: d.ajuste_descripcion ?? null,
-        jornadas: jornadaData.jornadas,
-        horasParejadas: jornadaData.horasParejadas,
-        marcacionSuelta: jornadaData.marcacionSuelta,
-        marcacionSueltaRaw: jornadaData.marcacionSueltaRaw,
-        tieneInconsistencia: jornadaData.tieneInconsistencia,
-        marcacionesExcluidas: excluded,
-        excludedPunchDisplay: jornadaData.excludedPunchDisplay,
+        ...jornadaFields,
       };
     }),
     bonos: bonosRes.rows.map((b) => ({
