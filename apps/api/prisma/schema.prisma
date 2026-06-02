@@ -92,6 +92,12 @@ enum TipoAjusteDia {
   DESCUENTO
 }
 
+enum TipoPeriodoPago {
+  SEMANAL
+  QUINCENAL
+  MENSUAL
+}
+
 // ─── Models ───────────────────────────────────────────────────────────────────
 
 // v2.0: removed rol field; added debe_cambiar_password; roles via usuario_roles (spec 005/009)
@@ -111,6 +117,7 @@ model Usuario {
   roles                          UsuarioRol[]
   colaboradores_supervisados     Colaborador[]        @relation("SupervisorColaborador")
   semanas_cerradas               SemanaLaboral[]      @relation("SemanaCerradaPor")
+  semanas_creadas                SemanaLaboral[]      @relation("SemanaCreadorPor")
   bonos_aprobados                Bono[]               @relation("BonoAprobadoPor")
   liquidaciones_aprobadas        LiquidacionSemanal[] @relation("LiquidacionAprobadaPor")
   liquidaciones_pagadas          LiquidacionSemanal[] @relation("LiquidacionPagadaPor")
@@ -142,6 +149,7 @@ model Colaborador {
   activo                Boolean   @default(true)
   supervisor_id         String?   @db.Uuid
   tarifa_hora           Decimal?  @db.Decimal(15, 4)
+  tipo_pago             TipoPeriodoPago?
   plantilla_horario_id  String?   @db.Uuid
   creado_en             DateTime  @default(now()) @db.Timestamptz
   actualizado_en        DateTime  @updatedAt @db.Timestamptz
@@ -254,12 +262,15 @@ model SemanaLaboral {
   id           String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   fecha_inicio DateTime     @unique @db.Date
   fecha_fin    DateTime     @db.Date
-  estado       EstadoSemana @default(ABIERTA)
-  cerrada_por  String?      @db.Uuid
-  cerrada_en   DateTime?    @db.Timestamptz
-  creado_en    DateTime     @default(now()) @db.Timestamptz
+  estado       EstadoSemana    @default(ABIERTA)
+  tipo_periodo TipoPeriodoPago?
+  cerrada_por  String?         @db.Uuid
+  cerrada_en   DateTime?       @db.Timestamptz
+  creado_por   String?         @db.Uuid
+  creado_en    DateTime        @default(now()) @db.Timestamptz
 
   cerrado_por_usuario Usuario?             @relation("SemanaCerradaPor", fields: [cerrada_por], references: [id])
+  creado_por_usuario  Usuario?             @relation("SemanaCreadorPor", fields: [creado_por], references: [id])
   bonos               Bono[]
   liquidaciones       LiquidacionSemanal[]
 

@@ -37,6 +37,8 @@ interface PlantillaHorario {
   hora_entrada_esperada: string;
 }
 
+type TipoPago = 'SEMANAL' | 'QUINCENAL' | 'MENSUAL';
+
 interface PerfilData {
   id: string;
   nombre: string;
@@ -48,6 +50,7 @@ interface PerfilData {
   creado_en: string;
   supervisor: { id: string; nombre: string; apellido: string } | null;
   tarifa_hora: number | null;
+  tipo_pago: TipoPago | null;
   plantilla_horario: PlantillaHorario | null;
   codigos_biometricos: CodigoBiometrico[];
 }
@@ -97,6 +100,8 @@ export default function ColaboradorPerfil({ perfil }: ColaboradorPerfilProps) {
     supervisor: perfil.supervisor,
   });
   const [tarifaHora, setTarifaHora] = useState<number | null>(perfil.tarifa_hora);
+  const [tipoPago, setTipoPago] = useState<TipoPago | null>(perfil.tipo_pago);
+  const [savingTipoPago, setSavingTipoPago] = useState(false);
   const [plantilla, setPlantilla] = useState<PlantillaHorario | null>(perfil.plantilla_horario);
   const [localCodigos, setLocalCodigos] = useState<CodigoBiometrico[]>(perfil.codigos_biometricos);
   const [worknos, setWorknos] = useState<Record<string, string>>(
@@ -264,6 +269,34 @@ export default function ColaboradorPerfil({ perfil }: ColaboradorPerfilProps) {
       showSuccess('Plantilla de horario actualizada.');
     } catch {
       showError('Error de red. Intente de nuevo.');
+    }
+  }
+
+  async function handleTipoPagoChange(nuevoTipo: TipoPago | null) {
+    setSavingTipoPago(true);
+    try {
+      const res = await fetch(`/api/colaboradores/${perfil.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nombre: data.nombre,
+          apellido: data.apellido,
+          cedula: data.cedula,
+          supervisor_id: data.supervisor?.id ?? null,
+          tipo_pago: nuevoTipo,
+        }),
+      });
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        showError(json?.message ?? 'Error al guardar tipo de pago');
+        return;
+      }
+      setTipoPago(nuevoTipo);
+      showSuccess('Tipo de pago actualizado.');
+    } catch {
+      showError('Error de red. Intente de nuevo.');
+    } finally {
+      setSavingTipoPago(false);
     }
   }
 
@@ -479,6 +512,23 @@ export default function ColaboradorPerfil({ perfil }: ColaboradorPerfilProps) {
           ) : (
             <Alert severity="warning" sx={{ mt: 1 }}>Sin tarifa configurada — el colaborador no generará valor en las liquidaciones hasta que se asigne una tarifa.</Alert>
           )}
+
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', py: 1, alignItems: 'center' }}>
+            <Typography variant="body2" color="text.secondary" sx={{ minWidth: 180 }}>Tipo de pago</Typography>
+            <FormControl size="small" sx={{ minWidth: 160 }}>
+              <Select
+                value={tipoPago ?? ''}
+                onChange={(e) => handleTipoPagoChange((e.target.value as TipoPago) || null)}
+                displayEmpty
+                disabled={savingTipoPago}
+              >
+                <MenuItem value=""><em>Sin definir</em></MenuItem>
+                <MenuItem value="SEMANAL">Semanal</MenuItem>
+                <MenuItem value="QUINCENAL">Quincenal</MenuItem>
+                <MenuItem value="MENSUAL">Mensual</MenuItem>
+              </Select>
+            </FormControl>
+          </Box>
 
           {/* ── Plantilla de horario ── */}
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 3, mb: 1 }}>

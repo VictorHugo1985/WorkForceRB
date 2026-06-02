@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { pool, checkAdminRole, verifyToken, isBlacklisted, COOKIE_NAME } from '@/lib/auth-server';
-import { generarBorradoresSemana } from '@/lib/liquidacion-db';
+import { pool, verifyToken, isBlacklisted, COOKIE_NAME } from '@/lib/auth-server';
+import { checkLiquidacionRole, generarBorradoresSemana } from '@/lib/liquidacion-db';
+
+const TIPO_PERIODO = ['SEMANAL', 'QUINCENAL', 'MENSUAL'] as const;
 
 const CreateSchema = z.object({
   fechaInicio: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato YYYY-MM-DD requerido'),
   fechaFin: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato YYYY-MM-DD requerido'),
+  tipoPeriodo: z.enum(TIPO_PERIODO).optional(),
 });
 
 export async function GET(req: NextRequest) {
@@ -24,17 +27,32 @@ export async function GET(req: NextRequest) {
   const client = await pool.connect();
   try {
     const res = await client.query(
-      `SELECT id, fecha_inicio, fecha_fin, estado, creado_en FROM semanas_laborales ORDER BY fecha_inicio DESC`,
+      `SELECT sl.id, sl.fecha_inicio, sl.fecha_fin, sl.estado, sl.tipo_periodo, sl.creado_en,
+              u.nombre AS creado_por_nombre, u.apellido AS creado_por_apellido
+       FROM semanas_laborales sl
+       LEFT JOIN usuarios u ON u.id = sl.creado_por
+       ORDER BY sl.fecha_inicio DESC`,
     );
-    return NextResponse.json(res.rows);
+    return NextResponse.json(res.rows.map((r) => ({
+      id: r.id,
+      fecha_inicio: r.fecha_inicio,
+      fecha_fin: r.fecha_fin,
+      estado: r.estado,
+      tipo_periodo: r.tipo_periodo ?? null,
+      creado_en: r.creado_en,
+      creado_por: r.creado_por_nombre
+        ? `${r.creado_por_nombre} ${r.creado_por_apellido}`
+        : null,
+    })));
   } finally {
     client.release();
   }
 }
 
 export async function POST(req: NextRequest) {
-  const auth = await checkAdminRole(req);
+  const auth = await checkLiquidacionRole(req);
   if (auth instanceof NextResponse) return auth;
+  const { userId } = auth;
 
   let body: unknown;
   try { body = await req.json(); } catch { return NextResponse.json({ error: 'INVALID_JSON' }, { status: 400 }); }
@@ -44,7 +62,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ message: parsed.error.issues[0].message }, { status: 400 });
   }
 
-  const { fechaInicio, fechaFin } = parsed.data;
+  const { fechaInicio, fechaFin, tipoPeriodo } = parsed.data;
   if (fechaFin < fechaInicio) {
     return NextResponse.json({ message: 'La fecha fin debe ser posterior al inicio' }, { status: 400 });
   }
@@ -60,19 +78,26 @@ export async function POST(req: NextRequest) {
     }
 
     const res = await client.query(
-      `INSERT INTO semanas_laborales (id, fecha_inicio, fecha_fin, estado, creado_en)
-       VALUES (gen_random_uuid(), $1, $2, 'ABIERTA', now())
-       RETURNING id, fecha_inicio, fecha_fin, estado, creado_en`,
-      [fechaInicio, fechaFin],
+      `INSERT INTO semanas_laborales (id, fecha_inicio, fecha_fin, estado, tipo_periodo, creado_por, creado_en)
+       VALUES (gen_random_uuid(), $1, $2, 'ABIERTA', $3, $4, now())
+       RETURNING id, fecha_inicio, fecha_fin, estado, tipo_periodo, creado_en`,
+      [fechaInicio, fechaFin, tipoPeriodo ?? null, userId],
     );
     const semana = res.rows[0];
 
-    // Auto-generate BORRADOR liquidaciones for all active collaborators
     try {
       await generarBorradoresSemana(client, semana.id as string, fechaInicio, fechaFin);
-    } catch { /* non-critical — semana is still created */ }
+    } catch { /* non-critical */ }
 
-    return NextResponse.json(semana, { status: 201 });
+    return NextResponse.json({
+      id: semana.id,
+      fecha_inicio: semana.fecha_inicio,
+      fecha_fin: semana.fecha_fin,
+      estado: semana.estado,
+      tipo_periodo: semana.tipo_periodo ?? null,
+      creado_en: semana.creado_en,
+      creado_por: null,
+    }, { status: 201 });
   } finally {
     client.release();
   }

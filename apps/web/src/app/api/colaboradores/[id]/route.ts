@@ -10,6 +10,7 @@ const EditSchema = z.object({
   fecha_nacimiento: z.string().nullable().optional(),
   supervisor_id: z.string().uuid().nullable().optional(),
   plantilla_horario_id: z.string().uuid().nullable().optional(),
+  tipo_pago: z.enum(['SEMANAL', 'QUINCENAL', 'MENSUAL']).nullable().optional(),
   codigos: z.array(z.object({ id: z.string().uuid(), workno: z.string().min(1) })).optional(),
 });
 
@@ -36,7 +37,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     return NextResponse.json({ error: 'VALIDATION_ERROR', fields }, { status: 400 });
   }
 
-  const { nombre, apellido, cedula, telefono, fecha_nacimiento, supervisor_id, plantilla_horario_id, codigos } = parsed.data;
+  const { nombre, apellido, cedula, telefono, fecha_nacimiento, supervisor_id, plantilla_horario_id, tipo_pago, codigos } = parsed.data;
 
   const client = await pool.connect();
   try {
@@ -63,9 +64,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     await client.query(
       `UPDATE colaboradores
        SET nombre = $1, apellido = $2, cedula = $3, telefono = $4, fecha_nacimiento = $5,
-           supervisor_id = $6, plantilla_horario_id = $7, actualizado_en = now()
-       WHERE id = $8`,
-      [nombre, apellido, cedula, telefono ?? null, fecha_nacimiento ?? null, supervisor_id ?? null, plantilla_horario_id ?? null, id],
+           supervisor_id = $6, plantilla_horario_id = $7, tipo_pago = $8, actualizado_en = now()
+       WHERE id = $9`,
+      [nombre, apellido, cedula, telefono ?? null, fecha_nacimiento ?? null, supervisor_id ?? null, plantilla_horario_id ?? null, tipo_pago ?? null, id],
     );
 
     if (codigos && codigos.length > 0) {
@@ -128,7 +129,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   try {
     const colRes = await client.query(
       `SELECT c.id, c.nombre, c.apellido, c.cedula, c.telefono, c.fecha_nacimiento, c.activo, c.creado_en,
-              c.tarifa_hora,
+              c.tarifa_hora, c.tipo_pago,
               u.id AS supervisor_id, u.nombre AS supervisor_nombre, u.apellido AS supervisor_apellido,
               ph.id AS plantilla_id, ph.nombre AS plantilla_nombre,
               ph.dias_laborables, ph.hora_entrada_esperada::text AS hora_entrada_esperada
@@ -163,6 +164,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       activo: col.activo,
       creado_en: col.creado_en,
       tarifa_hora: col.tarifa_hora !== null ? Number(col.tarifa_hora) : null,
+      tipo_pago: col.tipo_pago ?? null,
       supervisor: col.supervisor_id
         ? { id: col.supervisor_id, nombre: col.supervisor_nombre, apellido: col.supervisor_apellido }
         : null,

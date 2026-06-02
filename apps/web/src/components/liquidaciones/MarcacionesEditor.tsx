@@ -118,6 +118,7 @@ export function MarcacionesEditor({ dia, isReadOnly, onSaved }: Props) {
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
       {jornadas.map((j, i) => {
         const h = shiftHours(j.entrada, j.salida);
+        const salidaIncompleta = j.entrada !== '' && j.salida === '';
         return (
           <Box key={i} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
             <TextField
@@ -132,17 +133,30 @@ export function MarcacionesEditor({ dia, isReadOnly, onSaved }: Props) {
               }}
             />
             <Typography variant="caption" color="text.secondary" sx={{ userSelect: 'none' }}>→</Typography>
-            <TextField
-              size="small"
-              type="time"
-              value={j.salida}
-              onChange={(e) => update(i, 'salida', e.target.value)}
-              disabled={isReadOnly || saving}
-              sx={{ width: 108 }}
-              slotProps={{
-                htmlInput: { step: 60, style: { fontSize: '0.8rem', padding: '4px 6px' } },
-              }}
-            />
+            <Tooltip title={salidaIncompleta ? 'Salida pendiente' : ''} placement="top">
+              <TextField
+                size="small"
+                type="time"
+                value={j.salida}
+                onChange={(e) => update(i, 'salida', e.target.value)}
+                disabled={isReadOnly || saving}
+                sx={{
+                  width: 108,
+                  ...(salidaIncompleta && {
+                    '& .MuiOutlinedInput-notchedOutline': {
+                      borderColor: 'warning.main',
+                      borderWidth: 2,
+                    },
+                    '&:hover .MuiOutlinedInput-notchedOutline': {
+                      borderColor: 'warning.dark',
+                    },
+                  }),
+                }}
+                slotProps={{
+                  htmlInput: { step: 60, style: { fontSize: '0.8rem', padding: '4px 6px' } },
+                }}
+              />
+            </Tooltip>
             {h > 0 && (
               <Typography variant="caption" color="text.secondary" sx={{ minWidth: 36 }}>
                 {h.toFixed(1)}h
