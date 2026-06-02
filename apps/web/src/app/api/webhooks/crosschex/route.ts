@@ -7,7 +7,6 @@ const OK = { code: '200', msg: 'success' };
 const RANGE_24H_MS = 24 * 60 * 60 * 1000;
 
 type TipoEvento = 'ENTRADA' | 'SALIDA' | 'DESCONOCIDO';
-type EstadoResolucion = 'RESUELTO' | 'SIN_RESOLVER' | 'DISPOSITIVO_DESCONOCIDO';
 
 function derivarTipoEvento(record: any): TipoEvento {
   // CrossChex Cloud: check_type 0 = entrada, 1 = salida
@@ -56,7 +55,6 @@ async function processRecord(record: any, fallbackRequestId: string) {
 
   const client = await pool.connect();
   try {
-    // Only resolve the device — colaborador resolution happens at query time.
     const devRow = serialNumber
       ? await client.query(
           `SELECT id FROM dispositivos_biometricos WHERE numero_serie = $1 AND activo = true LIMIT 1`,
@@ -65,15 +63,14 @@ async function processRecord(record: any, fallbackRequestId: string) {
       : { rows: [] };
 
     const dispositivoId: string | null = devRow.rows[0]?.id ?? null;
-    const estado: EstadoResolucion = dispositivoId ? 'SIN_RESOLVER' : 'DISPOSITIVO_DESCONOCIDO';
 
     const eventoRes = await client.query<{ id: string }>(
       `INSERT INTO eventos_biometricos
-         (request_id, dispositivo_id, codigo_biometrico, estado_resolucion, payload_completo)
-       VALUES ($1, $2, $3, $4::\"EstadoResolucion\", $5)
+         (request_id, dispositivo_id, codigo_biometrico, payload_completo)
+       VALUES ($1, $2, $3, $4)
        ON CONFLICT (request_id) DO UPDATE SET request_id = EXCLUDED.request_id
        RETURNING id`,
-      [requestId, dispositivoId, workno, estado, JSON.stringify(record)],
+      [requestId, dispositivoId, workno, JSON.stringify(record)],
     );
     const eventoId = eventoRes.rows[0].id;
 
