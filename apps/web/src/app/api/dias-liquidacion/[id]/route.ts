@@ -6,7 +6,7 @@ import { checkLiquidacionRole, assertEditable, assertScope, deriveEstadoDia, cal
 const PatchSchema = z.object({
   horasAjustadasSupervisor: z.number().min(0).optional(),
   motivoAjuste: z.string().optional(),
-  ajusteTipo: z.enum(['TARIFA_DIA', 'MONTO_FIJO']).optional(),
+  ajusteTipo: z.enum(['TARIFA_DIA', 'MONTO_FIJO']).nullable().optional(),
   ajusteValor: z.number().positive().optional(),
   ajusteDescripcion: z.string().optional(),
   aprobar: z.boolean().optional(),
