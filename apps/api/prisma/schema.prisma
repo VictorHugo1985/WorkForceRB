@@ -87,8 +87,9 @@ enum EstadoDia {
 
 // v2.0: new enum for DiaLiquidacion.ajuste_tipo (spec 006); renamed descuento→ajuste
 enum TipoAjusteDia {
-  TARIFA_DIA
-  MONTO_FIJO
+  BONO_HORAS_EXTRAS
+  BONO_FIJO
+  DESCUENTO
 }
 
 // ─── Models ───────────────────────────────────────────────────────────────────

@@ -10,12 +10,19 @@ import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
 import FormControl from '@mui/material/FormControl';
 import FormHelperText from '@mui/material/FormHelperText';
+import InputAdornment from '@mui/material/InputAdornment';
 import InputLabel from '@mui/material/InputLabel';
 import MenuItem from '@mui/material/MenuItem';
 import Select from '@mui/material/Select';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import type { DiaLiquidacionData, TotalesData } from '@/stores/liquidacion.store';
+
+const TIPOS = [
+  { value: 'BONO_HORAS_EXTRAS', label: 'Bono Horas Extras', color: 'success' },
+  { value: 'BONO_FIJO',         label: 'Bono Fijo',         color: 'success' },
+  { value: 'DESCUENTO',         label: 'Descuento',         color: 'warning' },
+] as const;
 
 const schema = z.object({
   ajusteTipo: z.string().optional(),
@@ -55,10 +62,11 @@ export function InlineDiaEditor({ dia, tarifaHora, onSaved, onCancel }: Props) {
     });
 
   const ajusteTipo = watch('ajusteTipo');
+  const isDescuento = ajusteTipo === 'DESCUENTO';
+  const isBono = ajusteTipo === 'BONO_HORAS_EXTRAS' || ajusteTipo === 'BONO_FIJO';
 
   const onSubmit = async (values: FormValues) => {
     setSaveError(null);
-
     const body: Record<string, unknown> = {};
 
     if (values.ajusteTipo && values.ajusteTipo !== '') {
@@ -66,14 +74,10 @@ export function InlineDiaEditor({ dia, tarifaHora, onSaved, onCancel }: Props) {
       body.ajusteValor = values.ajusteValor;
       body.ajusteDescripcion = values.ajusteDescripcion?.trim();
     } else if (dia.ajusteTipo) {
-      // Clear a previously saved adjustment
       body.ajusteTipo = null;
     }
 
-    if (Object.keys(body).length === 0) {
-      onCancel();
-      return;
-    }
+    if (Object.keys(body).length === 0) { onCancel(); return; }
 
     try {
       const res = await fetch(`/api/dias-liquidacion/${dia.id}`, {
@@ -81,13 +85,11 @@ export function InlineDiaEditor({ dia, tarifaHora, onSaved, onCancel }: Props) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
-
       if (!res.ok) {
         const err = await res.json().catch(() => ({})) as { message?: string };
         setSaveError(err.message ?? `Error ${res.status}`);
         return;
       }
-
       const data = await res.json() as { dia: DiaLiquidacionData; totales: TotalesData };
       onSaved(data.dia, data.totales);
     } catch {
@@ -103,18 +105,12 @@ export function InlineDiaEditor({ dia, tarifaHora, onSaved, onCancel }: Props) {
     >
       {saveError && <Alert severity="error" sx={{ mb: 1.5 }}>{saveError}</Alert>}
 
-      {/* Context: effective tarifa for this day */}
       {tarifaHora !== null && (
-        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-          Costo por hora vigente:{' '}
-          <strong>{tarifaHora.toFixed(2)} Bs./h</strong>
-          {ajusteTipo === 'TARIFA_DIA' && (
-            <> — se reemplazará por el valor del ajuste</>
-          )}
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.25 }}>
+          Tarifa vigente: <strong>{tarifaHora.toFixed(2)} Bs./h</strong>
         </Typography>
       )}
 
-      {/* Adjustment type + fields */}
       <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap', alignItems: 'flex-start' }}>
         <Controller
           name="ajusteTipo"
@@ -124,8 +120,9 @@ export function InlineDiaEditor({ dia, tarifaHora, onSaved, onCancel }: Props) {
               <InputLabel>Tipo de ajuste</InputLabel>
               <Select label="Tipo de ajuste" {...field}>
                 <MenuItem value="">Sin ajuste</MenuItem>
-                <MenuItem value="TARIFA_DIA">Tarifa del día</MenuItem>
-                <MenuItem value="MONTO_FIJO">Monto fijo</MenuItem>
+                {TIPOS.map((t) => (
+                  <MenuItem key={t.value} value={t.value}>{t.label}</MenuItem>
+                ))}
               </Select>
               {errors.ajusteTipo && <FormHelperText>{errors.ajusteTipo.message}</FormHelperText>}
             </FormControl>
@@ -136,13 +133,22 @@ export function InlineDiaEditor({ dia, tarifaHora, onSaved, onCancel }: Props) {
           <>
             <TextField
               size="small"
-              label={ajusteTipo === 'TARIFA_DIA' ? 'Tarifa (Bs./h)' : 'Monto (Bs.)'}
+              label="Monto (Bs.)"
               type="number"
               {...register('ajusteValor', { valueAsNumber: true })}
               error={!!errors.ajusteValor}
               helperText={errors.ajusteValor?.message}
-              sx={{ width: 150 }}
-              slotProps={{ htmlInput: { min: 0.01, step: 0.01 } }}
+              sx={{ width: 140 }}
+              slotProps={{
+                htmlInput: { min: 0.01, step: 0.01 },
+                input: {
+                  startAdornment: (
+                    <InputAdornment position="start" sx={{ color: isDescuento ? 'warning.main' : 'success.main' }}>
+                      {isDescuento ? '−' : '+'}
+                    </InputAdornment>
+                  ),
+                },
+              }}
             />
             <TextField
               size="small"
@@ -150,13 +156,23 @@ export function InlineDiaEditor({ dia, tarifaHora, onSaved, onCancel }: Props) {
               {...register('ajusteDescripcion')}
               error={!!errors.ajusteDescripcion}
               helperText={errors.ajusteDescripcion?.message}
-              sx={{ flex: 1, minWidth: 200 }}
+              sx={{ flex: 1, minWidth: 180 }}
             />
           </>
         )}
       </Box>
 
-      {/* Actions */}
+      {isBono && (
+        <Typography variant="caption" color="success.main" sx={{ display: 'block', mt: 0.75 }}>
+          Se suma al total del colaborador
+        </Typography>
+      )}
+      {isDescuento && (
+        <Typography variant="caption" color="warning.main" sx={{ display: 'block', mt: 0.75 }}>
+          Se descuenta del total del colaborador
+        </Typography>
+      )}
+
       <Box sx={{ display: 'flex', gap: 1, mt: 1.5 }}>
         <Button
           type="submit"

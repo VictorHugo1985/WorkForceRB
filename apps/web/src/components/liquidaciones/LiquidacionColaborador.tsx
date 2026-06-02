@@ -2,12 +2,16 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import Checkbox from '@mui/material/Checkbox';
 import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
 import Divider from '@mui/material/Divider';
+import FormControlLabel from '@mui/material/FormControlLabel';
 import IconButton from '@mui/material/IconButton';
 import InputAdornment from '@mui/material/InputAdornment';
 import Paper from '@mui/material/Paper';
+import Skeleton from '@mui/material/Skeleton';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
@@ -19,9 +23,12 @@ import Typography from '@mui/material/Typography';
 import CheckIcon from '@mui/icons-material/Check';
 import CloseIcon from '@mui/icons-material/Close';
 import EditIcon from '@mui/icons-material/Edit';
+import PaymentsIcon from '@mui/icons-material/Payments';
+import VerifiedIcon from '@mui/icons-material/Verified';
 import type { DiaLiquidacionData, LiquidacionData, TotalesData } from '@/stores/liquidacion.store';
 import { PlanillaDiaRow } from './PlanillaDiaRow';
-import { ConfirmarColaboradorButton } from './ConfirmarColaboradorButton';
+
+export type EstadoLiquidacion = 'BORRADOR' | 'APROBADO' | 'PAGADO';
 
 interface Props {
   liquidacionId: string;
@@ -30,56 +37,66 @@ interface Props {
   apellido: string;
   semanaId: string;
   tarifaHora: number | null;
-  onEstadoChange: (liquidacionId: string, estado: 'APROBADO') => void;
+  onEstadoChange: (liquidacionId: string, estado: EstadoLiquidacion) => void;
 }
 
-// ── Inline tarifa editor ──────────────────────────────────────────────────────
+// ── Avatar ────────────────────────────────────────────────────────────────────
+
+function Avatar({ nombre, apellido, estado }: { nombre: string; apellido: string; estado: EstadoLiquidacion | null }) {
+  const initials = `${apellido[0] ?? ''}${nombre[0] ?? ''}`.toUpperCase();
+  const bgMap: Record<EstadoLiquidacion, string> = {
+    BORRADOR: '#1976d2',
+    APROBADO: '#2e7d32',
+    PAGADO:   '#6a1b9a',
+  };
+  const bg = estado ? bgMap[estado] : '#616161';
+  return (
+    <Box
+      sx={{
+        width: 38, height: 38, borderRadius: '50%', bgcolor: bg,
+        display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+      }}
+    >
+      <Typography variant="body2" sx={{ color: 'white', fontWeight: 700, fontSize: '0.8rem', letterSpacing: 0.5 }}>
+        {initials}
+      </Typography>
+    </Box>
+  );
+}
+
+// ── Tarifa editor ─────────────────────────────────────────────────────────────
 
 interface TarifaEditorProps {
   colaboradorId: string;
   value: number | null;
-  onChange: (newValue: number) => void;
+  readOnly: boolean;
+  onChange: (v: number) => void;
 }
 
-function TarifaEditor({ colaboradorId, value, onChange }: TarifaEditorProps) {
+function TarifaEditor({ colaboradorId, value, readOnly, onChange }: TarifaEditorProps) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const startEdit = () => {
-    setDraft(value !== null ? String(value) : '');
-    setError(null);
-    setEditing(true);
-    setTimeout(() => inputRef.current?.select(), 0);
-  };
-
-  const cancel = () => {
-    setEditing(false);
-    setError(null);
-  };
+  const start = () => { setDraft(value != null ? String(value) : ''); setError(null); setEditing(true); setTimeout(() => inputRef.current?.select(), 0); };
+  const cancel = () => { setEditing(false); setError(null); };
 
   const save = async () => {
     const num = parseFloat(draft);
     if (isNaN(num) || num <= 0) { setError('Valor inválido'); return; }
-    setSaving(true);
-    setError(null);
+    setSaving(true); setError(null);
     try {
       const res = await fetch(`/api/colaboradores/${colaboradorId}/tarifa`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ valor: num }),
       });
       if (res.status === 403) { setError('Sin permisos'); return; }
-      if (!res.ok) { setError('Error al guardar'); return; }
-      onChange(num);
-      setEditing(false);
-    } catch {
-      setError('Error de red');
-    } finally {
-      setSaving(false);
-    }
+      if (!res.ok) { setError('Error'); return; }
+      onChange(num); setEditing(false);
+    } catch { setError('Error de red'); }
+    finally { setSaving(false); }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -99,7 +116,7 @@ function TarifaEditor({ colaboradorId, value, onChange }: TarifaEditorProps) {
           onKeyDown={handleKeyDown}
           error={!!error}
           helperText={error}
-          sx={{ width: 110 }}
+          sx={{ width: 120 }}
           slotProps={{
             htmlInput: { step: 0.5, min: 0.01 },
             input: { endAdornment: <InputAdornment position="end">Bs./h</InputAdornment> },
@@ -118,15 +135,159 @@ function TarifaEditor({ colaboradorId, value, onChange }: TarifaEditorProps) {
   }
 
   return (
-    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-      <Typography variant="body2" color="text.secondary">
-        {value !== null ? `${value.toFixed(2)} Bs./h` : '— Bs./h'}
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25 }}>
+      <Typography variant="body2" color="text.secondary" sx={{ minWidth: 90 }}>
+        {value != null ? `${value.toFixed(2)} Bs./h` : '— Bs./h'}
       </Typography>
-      <Tooltip title="Editar tarifa/hora">
-        <IconButton size="small" onClick={startEdit} sx={{ p: 0.25 }}>
-          <EditIcon sx={{ fontSize: 13 }} />
-        </IconButton>
-      </Tooltip>
+      {!readOnly && (
+        <Tooltip title="Editar tarifa/hora">
+          <IconButton size="small" onClick={start} sx={{ p: 0.25 }}>
+            <EditIcon sx={{ fontSize: 13 }} />
+          </IconButton>
+        </Tooltip>
+      )}
+    </Box>
+  );
+}
+
+// ── Stat chip ─────────────────────────────────────────────────────────────────
+
+function Stat({ label, value, color }: { label: string; value: string; color?: string }) {
+  return (
+    <Box sx={{ textAlign: 'center' }}>
+      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', lineHeight: 1.2 }}>
+        {label}
+      </Typography>
+      <Typography variant="body2" sx={{ fontWeight: 600, color: color ?? 'text.primary' }}>
+        {value}
+      </Typography>
+    </Box>
+  );
+}
+
+// ── Confirmar button (inline) ─────────────────────────────────────────────────
+
+interface ConfirmarProps {
+  liquidacionId: string;
+  hasInconsistencias: boolean;
+  onConfirmed: () => void;
+}
+
+function ConfirmarButton({ liquidacionId, hasInconsistencias, onConfirmed }: ConfirmarProps) {
+  const [showWarn, setShowWarn] = useState(false);
+  const [ack, setAck] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const doConfirm = async () => {
+    setLoading(true); setError(null);
+    try {
+      const res = await fetch(`/api/liquidaciones/${liquidacionId}/aprobar`, { method: 'POST' });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({})) as { message?: string };
+        setError(err.message ?? 'Error al confirmar'); return;
+      }
+      onConfirmed();
+    } catch { setError('Error de conexión'); }
+    finally { setLoading(false); }
+  };
+
+  return (
+    <Box>
+      <Button
+        variant="contained"
+        size="small"
+        onClick={() => hasInconsistencias ? setShowWarn(true) : doConfirm()}
+        disabled={loading}
+        startIcon={loading ? <CircularProgress size={14} color="inherit" /> : <VerifiedIcon />}
+        sx={{ whiteSpace: 'nowrap' }}
+      >
+        Confirmar
+      </Button>
+      {error && <Typography variant="caption" color="error" sx={{ ml: 1 }}>{error}</Typography>}
+      {showWarn && (
+        <Box sx={{ mt: 1, p: 1.5, bgcolor: 'warning.50', border: 1, borderColor: 'warning.light', borderRadius: 1, maxWidth: 380 }}>
+          <Typography variant="caption" color="warning.dark" sx={{ display: 'block', mb: 1 }}>
+            Hay días con marcaciones inconsistentes. ¿Confirmar de todas formas?
+          </Typography>
+          <FormControlLabel
+            control={<Checkbox checked={ack} onChange={(e) => setAck(e.target.checked)} size="small" />}
+            label={<Typography variant="caption">Reconozco las inconsistencias</Typography>}
+          />
+          <Box sx={{ display: 'flex', gap: 1, mt: 0.5 }}>
+            <Button
+              size="small"
+              variant="contained"
+              color="warning"
+              disabled={!ack || loading}
+              onClick={doConfirm}
+              endIcon={loading ? <CircularProgress size={12} color="inherit" /> : undefined}
+            >
+              Confirmar
+            </Button>
+            <Button size="small" onClick={() => setShowWarn(false)}>Cancelar</Button>
+          </Box>
+        </Box>
+      )}
+    </Box>
+  );
+}
+
+// ── Pagar button ──────────────────────────────────────────────────────────────
+
+interface PagarProps {
+  liquidacionId: string;
+  onPagado: () => void;
+}
+
+function PagarButton({ liquidacionId, onPagado }: PagarProps) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [confirm, setConfirm] = useState(false);
+
+  const doPagar = async () => {
+    setLoading(true); setError(null);
+    try {
+      const res = await fetch(`/api/liquidaciones/${liquidacionId}/pagar`, { method: 'POST' });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({})) as { message?: string };
+        setError(err.message ?? 'Error'); return;
+      }
+      onPagado();
+    } catch { setError('Error de conexión'); }
+    finally { setLoading(false); }
+  };
+
+  if (!confirm) {
+    return (
+      <Button
+        variant="outlined"
+        size="small"
+        color="secondary"
+        onClick={() => setConfirm(true)}
+        startIcon={<PaymentsIcon />}
+        sx={{ whiteSpace: 'nowrap', borderColor: 'secondary.main', color: 'secondary.main' }}
+      >
+        Marcar como Pagado
+      </Button>
+    );
+  }
+
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+      <Typography variant="caption" color="text.secondary">¿Confirmar pago?</Typography>
+      <Button
+        size="small"
+        variant="contained"
+        color="secondary"
+        onClick={doPagar}
+        disabled={loading}
+        endIcon={loading ? <CircularProgress size={12} color="inherit" /> : undefined}
+      >
+        Sí, pagado
+      </Button>
+      <Button size="small" onClick={() => setConfirm(false)}>Cancelar</Button>
+      {error && <Typography variant="caption" color="error">{error}</Typography>}
     </Box>
   );
 }
@@ -148,10 +309,7 @@ export function LiquidacionColaborador({
 
   useEffect(() => {
     fetch(`/api/liquidaciones/${liquidacionId}`)
-      .then((r) => {
-        if (!r.ok) throw new Error('Error al cargar');
-        return r.json() as Promise<LiquidacionData>;
-      })
+      .then((r) => { if (!r.ok) throw new Error('Error al cargar'); return r.json() as Promise<LiquidacionData>; })
       .then(setLiquidacion)
       .catch((e: Error) => setFetchError(e.message))
       .finally(() => setLoading(false));
@@ -180,90 +338,135 @@ export function LiquidacionColaborador({
     onEstadoChange(liquidacionId, 'APROBADO');
   }, [liquidacionId, onEstadoChange]);
 
-  const isLocked = liquidacion?.estado === 'APROBADO';
+  const handlePagado = useCallback(() => {
+    setLiquidacion((prev) => prev ? { ...prev, estado: 'PAGADO' } : prev);
+    onEstadoChange(liquidacionId, 'PAGADO');
+  }, [liquidacionId, onEstadoChange]);
+
+  const estado = (liquidacion?.estado ?? null) as EstadoLiquidacion | null;
+  const isAprobado = estado === 'APROBADO';
+  const isPagado   = estado === 'PAGADO';
+  const isLocked   = isAprobado || isPagado;
   const hasInconsistencias = liquidacion?.dias.some((d) => d.tieneInconsistencia) ?? false;
+
+  const borderColorMap: Record<EstadoLiquidacion, string> = {
+    BORRADOR: 'divider',
+    APROBADO: 'success.main',
+    PAGADO:   'secondary.main',
+  };
+  const borderColor = estado ? borderColorMap[estado] : 'divider';
 
   return (
     <Paper
       variant="outlined"
       sx={{
         overflow: 'hidden',
-        borderColor: isLocked ? 'success.light' : 'divider',
-        opacity: isLocked ? 0.85 : 1,
+        borderColor,
+        borderLeftWidth: 4,
+        transition: 'border-color 0.2s',
       }}
     >
-      {/* ── Header ── */}
-      <Box
-        sx={{
-          px: 2,
-          py: 1.25,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          bgcolor: isLocked ? 'success.50' : 'background.default',
-          flexWrap: 'wrap',
-          gap: 1,
-        }}
-      >
-        {/* Left: name + estado */}
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-          <Typography sx={{ fontWeight: 600, fontSize: '0.95rem' }}>
+      {/* ── Header row 1: identity + status ── */}
+      <Box sx={{ px: 2, pt: 1.5, pb: 0.75, display: 'flex', alignItems: 'center', gap: 1.5 }}>
+        <Avatar nombre={nombre} apellido={apellido} estado={estado} />
+        <Box sx={{ flex: 1 }}>
+          <Typography sx={{ fontWeight: 700, fontSize: '0.97rem', lineHeight: 1.2 }}>
             {apellido}, {nombre}
           </Typography>
-          {liquidacion && (
-            liquidacion.estado === 'APROBADO'
-              ? <Chip label="Aprobado" size="small" color="success" />
-              : <Chip label="Borrador" size="small" color="warning" variant="outlined" />
-          )}
+          {estado === 'BORRADOR' && <Chip label="Borrador" size="small" color="default" variant="outlined" sx={{ mt: 0.25 }} />}
+          {estado === 'APROBADO' && <Chip label="✓ Aprobado" size="small" color="success" sx={{ mt: 0.25 }} />}
+          {estado === 'PAGADO'   && <Chip label="💰 Pagado" size="small" color="secondary" sx={{ mt: 0.25 }} />}
         </Box>
 
-        {/* Right: tarifa | horas | total | confirmar */}
+        {/* Action zone */}
         {liquidacion && (
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
-            <TarifaEditor
-              colaboradorId={colaboradorId}
-              value={localTarifa}
-              onChange={setLocalTarifa}
-            />
-            <Typography variant="body2" color="text.secondary">
-              {liquidacion.horasOrdinarias.toFixed(2)} h
-            </Typography>
-            <Typography variant="body2" sx={{ fontWeight: 600 }} color="success.dark">
-              {liquidacion.totalPago.toLocaleString('es-VE', { minimumFractionDigits: 2 })} Bs.
-            </Typography>
-            <ConfirmarColaboradorButton
-              liquidacionId={liquidacionId}
-              hasInconsistencias={hasInconsistencias}
-              isConfirmed={isLocked}
-              onConfirmed={handleConfirmed}
-            />
+          <Box>
+            {!isLocked && (
+              <ConfirmarButton
+                liquidacionId={liquidacionId}
+                hasInconsistencias={hasInconsistencias}
+                onConfirmed={handleConfirmed}
+              />
+            )}
+            {isAprobado && (
+              <PagarButton liquidacionId={liquidacionId} onPagado={handlePagado} />
+            )}
           </Box>
         )}
       </Box>
 
-      <Divider />
-
-      {/* ── Loading / error ── */}
+      {/* ── Header row 2: stats ── */}
       {loading && (
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 2, py: 1.5 }}>
-          <CircularProgress size={16} />
-          <Typography variant="body2" color="text.secondary">Cargando…</Typography>
+        <Box sx={{ px: 2, pb: 1.25, display: 'flex', gap: 2 }}>
+          {[80, 60, 80, 80, 100].map((w, i) => (
+            <Skeleton key={i} variant="rounded" width={w} height={32} />
+          ))}
         </Box>
       )}
-      {fetchError && (
-        <Typography color="error" variant="body2" sx={{ px: 2, py: 1 }}>{fetchError}</Typography>
+      {liquidacion && (
+        <Box
+          sx={{
+            px: 2, pb: 1.25,
+            display: 'flex', alignItems: 'center', gap: 2.5, flexWrap: 'wrap',
+          }}
+        >
+          <TarifaEditor
+            colaboradorId={colaboradorId}
+            value={localTarifa}
+            readOnly={isPagado}
+            onChange={setLocalTarifa}
+          />
+          <Divider orientation="vertical" flexItem />
+          <Stat label="Horas" value={`${liquidacion.horasOrdinarias.toFixed(2)} h`} />
+          <Stat
+            label="Bonos"
+            value={`+${liquidacion.totalBonos.toLocaleString('es-VE', { minimumFractionDigits: 2 })} Bs.`}
+            color={liquidacion.totalBonos > 0 ? 'success.main' : 'text.secondary'}
+          />
+          <Stat
+            label="Descuentos"
+            value={`−${liquidacion.totalDescuentos.toLocaleString('es-VE', { minimumFractionDigits: 2 })} Bs.`}
+            color={liquidacion.totalDescuentos > 0 ? 'warning.main' : 'text.secondary'}
+          />
+          <Divider orientation="vertical" flexItem />
+          <Box sx={{ textAlign: 'center' }}>
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', lineHeight: 1.2 }}>
+              Total
+            </Typography>
+            <Typography
+              variant="body1"
+              sx={{
+                fontWeight: 700,
+                color: isPagado ? 'secondary.main' : isAprobado ? 'success.dark' : 'primary.main',
+              }}
+            >
+              {liquidacion.totalPago.toLocaleString('es-VE', { minimumFractionDigits: 2 })} Bs.
+            </Typography>
+          </Box>
+        </Box>
       )}
 
+      {fetchError && (
+        <Typography color="error" variant="body2" sx={{ px: 2, pb: 1.5 }}>{fetchError}</Typography>
+      )}
+
+      <Divider />
+
       {/* ── Days table ── */}
+      {loading && (
+        <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 1 }}>
+          {[1, 2, 3, 4, 5].map((i) => <Skeleton key={i} variant="rounded" height={40} />)}
+        </Box>
+      )}
       {liquidacion && liquidacion.dias.length > 0 && (
-        <Table size="small">
+        <Table size="small" sx={{ tableLayout: 'fixed' }}>
           <TableHead>
             <TableRow sx={{ bgcolor: 'action.hover' }}>
-              <TableCell sx={{ fontWeight: 600, width: 90 }}>Fecha</TableCell>
-              <TableCell sx={{ fontWeight: 600 }}>Marcaciones</TableCell>
-              <TableCell sx={{ fontWeight: 600, width: 120 }}>Horas</TableCell>
-              <TableCell sx={{ fontWeight: 600, width: 130 }}>Estado</TableCell>
-              <TableCell sx={{ width: 40 }} />
+              <TableCell sx={{ fontWeight: 600, width: 90, color: 'text.secondary', fontSize: '0.75rem' }}>Fecha</TableCell>
+              <TableCell sx={{ fontWeight: 600, color: 'text.secondary', fontSize: '0.75rem' }}>Marcaciones</TableCell>
+              <TableCell sx={{ fontWeight: 600, width: 115, color: 'text.secondary', fontSize: '0.75rem' }}>Horas</TableCell>
+              <TableCell sx={{ fontWeight: 600, width: 120, color: 'text.secondary', fontSize: '0.75rem' }}>Estado</TableCell>
+              <TableCell sx={{ width: 36 }} />
             </TableRow>
           </TableHead>
           <TableBody>
@@ -280,8 +483,8 @@ export function LiquidacionColaborador({
         </Table>
       )}
       {liquidacion && liquidacion.dias.length === 0 && (
-        <Typography variant="body2" color="text.secondary" sx={{ px: 2, py: 1.5 }}>
-          Sin días registrados.
+        <Typography variant="body2" color="text.secondary" sx={{ px: 2, py: 2 }}>
+          Sin días registrados esta semana.
         </Typography>
       )}
     </Paper>

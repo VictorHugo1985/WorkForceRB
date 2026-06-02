@@ -8,7 +8,7 @@ import IconButton from '@mui/material/IconButton';
 import Typography from '@mui/material/Typography';
 import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
 import ArrowForwardIosIcon from '@mui/icons-material/ArrowForwardIos';
-import { LiquidacionColaborador } from './LiquidacionColaborador';
+import { LiquidacionColaborador, type EstadoLiquidacion } from './LiquidacionColaborador';
 
 interface SemanaLaboral {
   id: string;
@@ -69,13 +69,13 @@ export function PlanillaView() {
       .finally(() => setLoadingRoster(false));
   }, [semanaActual]);
 
-  const handleEstadoChange = useCallback((liquidacionId: string, estado: 'APROBADO') => {
+  const handleEstadoChange = useCallback((liquidacionId: string, estado: EstadoLiquidacion) => {
     setRoster((prev) =>
       prev.map((e) => e.liquidacionId === liquidacionId ? { ...e, estado } : e),
     );
   }, []);
 
-  const allAprobado = roster.length > 0 && roster.every((e) => e.estado === 'APROBADO');
+  const allAprobado = roster.length > 0 && roster.every((e) => e.estado === 'APROBADO' || e.estado === 'PAGADO');
 
   if (loadingSemanas) {
     return (

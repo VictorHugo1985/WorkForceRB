@@ -108,7 +108,7 @@ export async function assertEditable(client: PoolClient, liquidacionId: string) 
     [liquidacionId],
   );
   if (r.rows.length === 0) throw { status: 404, message: 'Liquidación no encontrada' };
-  if (r.rows[0].estado === 'APROBADO')
+  if (r.rows[0].estado === 'APROBADO' || r.rows[0].estado === 'PAGADO')
     throw { status: 409, message: 'La liquidación ya fue aprobada y no puede modificarse' };
 }
 
@@ -187,6 +187,7 @@ export async function calcularTotales(client: PoolClient, liquidacionId: string)
 
   let horasOrdinarias = 0;
   let valorHorasOrdinarias = 0;
+  let totalBonosDia = 0;
   let totalDescuentos = 0;
 
   for (const dia of diasRes.rows) {
@@ -194,21 +195,20 @@ export async function calcularTotales(client: PoolClient, liquidacionId: string)
       ? Number(dia.horas_ajustadas_supervisor)
       : Number(dia.horas_calculadas);
 
-    let tarifaEfectiva = tarifa;
-    if (dia.ajuste_tipo === 'TARIFA_DIA' && dia.ajuste_valor !== null) {
-      tarifaEfectiva = Number(dia.ajuste_valor);
-    }
-
     horasOrdinarias += horas;
-    valorHorasOrdinarias += horas * tarifaEfectiva;
+    valorHorasOrdinarias += Math.round(horas * tarifa * 100) / 100;
 
-    if (dia.ajuste_tipo === 'MONTO_FIJO' && dia.ajuste_valor !== null) {
+    if ((dia.ajuste_tipo === 'BONO_HORAS_EXTRAS' || dia.ajuste_tipo === 'BONO_FIJO') && dia.ajuste_valor !== null) {
+      totalBonosDia += Number(dia.ajuste_valor);
+    } else if (dia.ajuste_tipo === 'DESCUENTO' && dia.ajuste_valor !== null) {
       totalDescuentos += Number(dia.ajuste_valor);
     }
   }
 
-  const totalBonos = bonosRes.rows.reduce((s: number, b: { monto: string }) => s + Number(b.monto), 0);
-  const totalPago = valorHorasOrdinarias + totalBonos - totalDescuentos;
+  const totalBonos = Math.round(
+    (bonosRes.rows.reduce((s: number, b: { monto: string }) => s + Number(b.monto), 0) + totalBonosDia) * 100,
+  ) / 100;
+  const totalPago = Math.max(0, Math.round((valorHorasOrdinarias + totalBonos - totalDescuentos) * 100) / 100);
   const calculadoEn = new Date();
 
   await client.query(

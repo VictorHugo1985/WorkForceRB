@@ -39,12 +39,32 @@ function estadoChip(estado: string) {
     case 'CON_AJUSTE_HORAS':
       return <Chip label="H. ajust." size="small" color="info" />;
     case 'CON_DESCUENTO':
-      return <Chip label="Ajuste" size="small" color="warning" />;
+      return <Chip label="Con ajuste" size="small" color="warning" />;
     case 'CON_AJUSTE_Y_DESCUENTO':
       return <Chip label="H. + ajuste" size="small" color="warning" />;
     default:
       return <Chip label="Sin rev." size="small" variant="outlined" />;
   }
+}
+
+function ajusteChip(tipo: string | null, valor: number | null, descripcion: string | null) {
+  if (!tipo || valor === null) return null;
+  const isDescuento = tipo === 'DESCUENTO';
+  const label = isDescuento
+    ? `−${valor.toFixed(2)} Bs.`
+    : tipo === 'BONO_HORAS_EXTRAS'
+    ? `+${valor.toFixed(2)} Bs. HE`
+    : `+${valor.toFixed(2)} Bs.`;
+  return (
+    <Tooltip title={descripcion ?? tipo}>
+      <Chip
+        label={label}
+        size="small"
+        color={isDescuento ? 'warning' : 'success'}
+        sx={{ mt: 0.25, fontWeight: 600 }}
+      />
+    </Tooltip>
+  );
 }
 
 export function PlanillaDiaRow({ dia, isReadOnly, tarifaHora, onDiaUpdate }: Props) {
@@ -74,7 +94,7 @@ export function PlanillaDiaRow({ dia, isReadOnly, tarifaHora, onDiaUpdate }: Pro
 
         {/* Horas efectivas */}
         <TableCell sx={{ width: 110, verticalAlign: 'top', pt: 1.25 }}>
-          <Typography variant="body2">{displayHoras.toFixed(2)} h</Typography>
+          <Typography variant="body2" sx={{ fontWeight: 500 }}>{displayHoras.toFixed(2)} h</Typography>
           {isAjustado && dia.marcacionesManuales == null && (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.25 }}>
               <Chip label="Ajust." size="small" color="info" />
@@ -83,18 +103,7 @@ export function PlanillaDiaRow({ dia, isReadOnly, tarifaHora, onDiaUpdate }: Pro
               </Typography>
             </Box>
           )}
-          {dia.ajusteTipo && (
-            <Tooltip title={dia.ajusteDescripcion ?? ''}>
-              <Chip
-                label={dia.ajusteTipo === 'TARIFA_DIA'
-                  ? `${dia.ajusteValor?.toFixed(2) ?? '?'} Bs./h`
-                  : `${dia.ajusteValor?.toFixed(2) ?? '?'} Bs.`}
-                size="small"
-                color="warning"
-                sx={{ mt: 0.25 }}
-              />
-            </Tooltip>
-          )}
+          {ajusteChip(dia.ajusteTipo, dia.ajusteValor ?? null, dia.ajusteDescripcion ?? null)}
         </TableCell>
 
         {/* Estado */}
@@ -109,7 +118,7 @@ export function PlanillaDiaRow({ dia, isReadOnly, tarifaHora, onDiaUpdate }: Pro
               <IconButton
                 size="small"
                 onClick={() => setAjusteExpanded((v) => !v)}
-                color={ajusteExpanded ? 'primary' : (dia.ajusteTipo ? 'warning' : 'default')}
+                color={ajusteExpanded ? 'primary' : (dia.ajusteTipo === 'DESCUENTO' ? 'warning' : dia.ajusteTipo ? 'success' : 'default')}
               >
                 <TuneIcon fontSize="small" />
               </IconButton>
