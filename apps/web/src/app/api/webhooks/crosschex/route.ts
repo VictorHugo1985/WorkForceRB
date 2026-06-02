@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { Pool } from 'pg';
-
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+import { pool } from '@/lib/auth-server';
 const OK = { code: '200', msg: 'success' };
 
 const RANGE_24H_MS = 24 * 60 * 60 * 1000;

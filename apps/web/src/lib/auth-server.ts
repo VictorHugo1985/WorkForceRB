@@ -2,7 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { Pool } from 'pg';
 import { SignJWT, jwtVerify } from 'jose';
 
-export const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+export const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  max: 2,                      // serverless: each instance needs very few connections
+  idleTimeoutMillis: 10_000,   // release idle connections quickly
+  connectionTimeoutMillis: 5_000,
+});
 
 const secret = new TextEncoder().encode(
   process.env.JWT_SECRET ?? 'workforce-jwt-secret-change-in-production',
