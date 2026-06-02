@@ -125,7 +125,9 @@ export async function POST(req: NextRequest) {
   const fallbackId = req.headers.get('requestid') ?? body?.requestId ?? crypto.randomUUID();
   const records = normalizeRecords(body);
 
-  void Promise.allSettled(records.map((r) => processRecord(r, fallbackId)));
+  const start = Date.now();
+  await Promise.allSettled(records.map((r) => processRecord(r, fallbackId)));
+  console.info('[crosschex-webhook] procesados', { count: records.length, ms: Date.now() - start });
 
   return NextResponse.json(OK);
 }
