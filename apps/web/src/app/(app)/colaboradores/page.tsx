@@ -13,6 +13,7 @@ async function getColaboradores() {
   try {
     const result = await client.query(
       `SELECT c.id, c.nombre, c.apellido, c.cedula, c.telefono, c.activo,
+              c.tarifa_hora, c.tipo_pago,
               a.id AS area_id, a.nombre AS area_nombre,
               (SELECT cc.codigo_biometrico FROM codigos_colaborador cc
                WHERE cc.colaborador_id = c.id AND cc.activo = true
@@ -29,6 +30,8 @@ async function getColaboradores() {
       workno: (r.workno ?? '') as string,
       telefono: (r.telefono ?? '') as string,
       activo: r.activo as boolean,
+      tarifa_hora: r.tarifa_hora !== null ? Number(r.tarifa_hora) : null,
+      tipo_pago: (r.tipo_pago ?? null) as 'SEMANAL' | 'QUINCENAL' | 'MENSUAL' | null,
       area: r.area_id ? { id: r.area_id as string, nombre: r.area_nombre as string } : null,
     }));
   } catch (err) {

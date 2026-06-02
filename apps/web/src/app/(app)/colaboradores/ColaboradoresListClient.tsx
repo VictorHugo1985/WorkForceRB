@@ -19,6 +19,14 @@ import Typography from '@mui/material/Typography';
 import AddIcon from '@mui/icons-material/Add';
 import { PageHeader } from '@/components/ui/PageHeader';
 
+type TipoPago = 'SEMANAL' | 'QUINCENAL' | 'MENSUAL';
+
+const TIPO_PAGO_LABEL: Record<TipoPago, string> = {
+  SEMANAL: 'Semanal',
+  QUINCENAL: 'Quincenal',
+  MENSUAL: 'Mensual',
+};
+
 interface ColaboradorRow {
   id: string;
   nombre: string;
@@ -27,6 +35,8 @@ interface ColaboradorRow {
   workno: string;
   telefono: string;
   activo: boolean;
+  tarifa_hora: number | null;
+  tipo_pago: TipoPago | null;
   area: { id: string; nombre: string } | null;
 }
 
@@ -104,6 +114,8 @@ export function ColaboradoresListClient({ colaboradores }: Props) {
                 <TableCell>Workno</TableCell>
                 <TableCell>Teléfono</TableCell>
                 <TableCell>Área</TableCell>
+                <TableCell align="right">Tarifa/h</TableCell>
+                <TableCell>Tipo de pago</TableCell>
                 <TableCell>Estado</TableCell>
               </TableRow>
             </TableHead>
@@ -121,6 +133,14 @@ export function ColaboradoresListClient({ colaboradores }: Props) {
                   <TableCell>{c.workno || '—'}</TableCell>
                   <TableCell>{c.telefono || '—'}</TableCell>
                   <TableCell>{c.area?.nombre ?? '—'}</TableCell>
+                  <TableCell align="right" sx={{ fontVariantNumeric: 'tabular-nums' }}>
+                    {c.tarifa_hora !== null ? `${c.tarifa_hora.toLocaleString('es-VE')} Bs.` : '—'}
+                  </TableCell>
+                  <TableCell>
+                    {c.tipo_pago ? (
+                      <Chip label={TIPO_PAGO_LABEL[c.tipo_pago]} size="small" variant="outlined" />
+                    ) : '—'}
+                  </TableCell>
                   <TableCell>
                     <Chip
                       label={c.activo ? 'Activo' : 'Inactivo'}
