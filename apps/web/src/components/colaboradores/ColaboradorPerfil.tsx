@@ -16,6 +16,7 @@ import DialogTitle from '@mui/material/DialogTitle';
 import Divider from '@mui/material/Divider';
 import FormControl from '@mui/material/FormControl';
 import FormHelperText from '@mui/material/FormHelperText';
+import InputAdornment from '@mui/material/InputAdornment';
 import InputLabel from '@mui/material/InputLabel';
 import MenuItem from '@mui/material/MenuItem';
 import Select from '@mui/material/Select';
@@ -66,19 +67,27 @@ const EditSchema = z.object({
   telefono: z.string().max(30).optional().or(z.literal('')),
   fecha_nacimiento: z.string().optional().or(z.literal('')),
   supervisor_id: z.union([z.string().uuid(), z.literal(''), z.null()]).optional(),
+  tarifa_hora: z.string().optional().or(z.literal('')),
+  tipo_pago: z.enum(['SEMANAL', 'QUINCENAL', 'MENSUAL']).or(z.literal('')).nullable().optional(),
+  plantilla_horario_id: z.union([z.string().uuid(), z.literal(''), z.null()]).optional(),
 });
 type EditFormValues = z.infer<typeof EditSchema>;
-
-const TarifaSchema = z.object({
-  valor: z.number().positive('Debe ser mayor a 0'),
-});
 
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <Box sx={{ display: 'flex', justifyContent: 'space-between', py: 1 }}>
       <Typography variant="body2" color="text.secondary" sx={{ minWidth: 180 }}>{label}</Typography>
-      <Typography variant="body2" sx={{ fontWeight: 500, textAlign: 'right' }}>{value}</Typography>
+      <Typography variant="body2" sx={{ fontWeight: 500, textAlign: 'right' }}>{value ?? '—'}</Typography>
     </Box>
+  );
+}
+
+function SectionTitle({ children }: { children: React.ReactNode }) {
+  return (
+    <>
+      <Typography variant="subtitle1" sx={{ fontWeight: 500, mt: 3, mb: 1 }}>{children}</Typography>
+      <Divider sx={{ mb: 1 }} />
+    </>
   );
 }
 
@@ -86,6 +95,12 @@ function formatDate(dateStr: string): string {
   const [y, m, d] = dateStr.split('-');
   return `${d}/${m}/${y}`;
 }
+
+const TIPO_PAGO_LABEL: Record<TipoPago, string> = {
+  SEMANAL: 'Semanal',
+  QUINCENAL: 'Quincenal',
+  MENSUAL: 'Mensual',
+};
 
 export default function ColaboradorPerfil({ perfil }: ColaboradorPerfilProps) {
   const { showSuccess, showError } = useSnackbar();
@@ -101,7 +116,6 @@ export default function ColaboradorPerfil({ perfil }: ColaboradorPerfilProps) {
   });
   const [tarifaHora, setTarifaHora] = useState<number | null>(perfil.tarifa_hora);
   const [tipoPago, setTipoPago] = useState<TipoPago | null>(perfil.tipo_pago);
-  const [savingTipoPago, setSavingTipoPago] = useState(false);
   const [plantilla, setPlantilla] = useState<PlantillaHorario | null>(perfil.plantilla_horario);
   const [localCodigos, setLocalCodigos] = useState<CodigoBiometrico[]>(perfil.codigos_biometricos);
   const [worknos, setWorknos] = useState<Record<string, string>>(
@@ -111,36 +125,30 @@ export default function ColaboradorPerfil({ perfil }: ColaboradorPerfilProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
   const [supervisores, setSupervisores] = useState<{ id: string; nombre: string; apellido: string }[]>([]);
-
-  // Tarifa edit dialog
-  const [tarifaDialogOpen, setTarifaDialogOpen] = useState(false);
-  const [tarifaSubmitting, setTarifaSubmitting] = useState(false);
-  const [tarifaInput, setTarifaInput] = useState('');
-  const [tarifaError, setTarifaError] = useState<string | null>(null);
-
-  // Plantilla selector dialog
-  const [plantillaDialogOpen, setPlantillaDialogOpen] = useState(false);
-  const [plantillaLoading, setPlantillaLoading] = useState(false);
   const [plantillasDisponibles, setPlantillasDisponibles] = useState<PlantillaHorario[]>([]);
-  const [plantillaSeleccionada, setPlantillaSeleccionada] = useState<string>('');
+  const [loadingEdit, setLoadingEdit] = useState(false);
 
   const [bajaDialogOpen, setBajaDialogOpen] = useState(false);
   const [bajaLoading, setBajaLoading] = useState(false);
 
   const { register, handleSubmit, reset, control, formState: { errors, isSubmitting } } = useForm<EditFormValues>({
     resolver: zodResolver(EditSchema),
-    defaultValues: {
-      nombre: data.nombre,
-      apellido: data.apellido,
-      cedula: data.cedula,
-      telefono: data.telefono ?? '',
-      fecha_nacimiento: data.fecha_nacimiento ?? '',
-      supervisor_id: data.supervisor?.id ?? '',
-    },
   });
 
-  function handleEditClick() {
-    fetch('/api/usuarios/supervisores').then((r) => r.json()).then((d) => setSupervisores(d.supervisores ?? []));
+  async function handleEditClick() {
+    setLoadingEdit(true);
+    try {
+      const [supRes, plantRes] = await Promise.all([
+        fetch('/api/usuarios/supervisores').then((r) => r.json()),
+        fetch('/api/plantillas-horario').then((r) => r.json()),
+      ]);
+      setSupervisores(supRes.supervisores ?? []);
+      setPlantillasDisponibles(plantRes.plantillas ?? []);
+    } catch {
+      showError('Error cargando datos del formulario.');
+    } finally {
+      setLoadingEdit(false);
+    }
     reset({
       nombre: data.nombre,
       apellido: data.apellido,
@@ -148,6 +156,9 @@ export default function ColaboradorPerfil({ perfil }: ColaboradorPerfilProps) {
       telefono: data.telefono ?? '',
       fecha_nacimiento: data.fecha_nacimiento ?? '',
       supervisor_id: data.supervisor?.id ?? '',
+      tarifa_hora: tarifaHora !== null ? String(tarifaHora) : '',
+      tipo_pago: tipoPago ?? '',
+      plantilla_horario_id: plantilla?.id ?? '',
     });
     setWorknos(Object.fromEntries(localCodigos.map((c) => [c.id, c.workno])));
     setEditError(null);
@@ -162,21 +173,56 @@ export default function ColaboradorPerfil({ perfil }: ColaboradorPerfilProps) {
   async function onEditSubmit(values: EditFormValues) {
     setEditError(null);
     const supervisor_id = values.supervisor_id || null;
+    const plantilla_horario_id = values.plantilla_horario_id || null;
+    const tipo_pago = (values.tipo_pago as TipoPago) || null;
     const codigos = localCodigos.map((c) => ({ id: c.id, workno: worknos[c.id] ?? c.workno }));
+    const nuevaTarifa = values.tarifa_hora ? Number(values.tarifa_hora) : null;
+
     try {
+      // Main PATCH: personal data + supervisor + plantilla + tipo_pago + codigos
       const res = await fetch(`/api/colaboradores/${perfil.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...values, supervisor_id, codigos }),
+        body: JSON.stringify({
+          nombre: values.nombre,
+          apellido: values.apellido,
+          cedula: values.cedula,
+          telefono: values.telefono || null,
+          fecha_nacimiento: values.fecha_nacimiento || null,
+          supervisor_id,
+          plantilla_horario_id,
+          tipo_pago,
+          codigos,
+        }),
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const msg = json?.message ?? json?.error ?? `Error ${res.status}`;
+        const msg = (json as { message?: string; error?: string })?.message ?? (json as { error?: string })?.error ?? `Error ${res.status}`;
         setEditError(msg);
         showError(`No se pudo guardar: ${msg}`);
         return;
       }
+
+      // Tarifa: separate endpoint if changed
+      if (nuevaTarifa !== null && nuevaTarifa !== tarifaHora) {
+        const tarifaRes = await fetch(`/api/colaboradores/${perfil.id}/tarifa`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ valor: nuevaTarifa }),
+        });
+        if (!tarifaRes.ok) {
+          const tj = await tarifaRes.json().catch(() => ({}));
+          const msg = (tj as { message?: string })?.message ?? 'Error al guardar tarifa';
+          setEditError(msg);
+          showError(msg);
+          return;
+        }
+        setTarifaHora(nuevaTarifa);
+      }
+
       const supObj = supervisores.find((s) => s.id === supervisor_id) ?? null;
+      const plantObj = plantillasDisponibles.find((p) => p.id === plantilla_horario_id) ?? null;
+
       setData((prev) => ({
         ...prev,
         nombre: values.nombre,
@@ -186,6 +232,8 @@ export default function ColaboradorPerfil({ perfil }: ColaboradorPerfilProps) {
         fecha_nacimiento: values.fecha_nacimiento || null,
         supervisor: supObj ? { id: supObj.id, nombre: supObj.nombre, apellido: supObj.apellido } : null,
       }));
+      setTipoPago(tipo_pago);
+      setPlantilla(plantObj);
       setLocalCodigos((prev) => prev.map((c) => ({ ...c, workno: worknos[c.id] ?? c.workno })));
       setIsEditing(false);
       showSuccess('Datos actualizados correctamente.');
@@ -193,110 +241,6 @@ export default function ColaboradorPerfil({ perfil }: ColaboradorPerfilProps) {
       const msg = 'Error de red. Intente de nuevo.';
       setEditError(msg);
       showError(msg);
-    }
-  }
-
-  function openTarifaDialog() {
-    setTarifaInput(tarifaHora !== null ? String(tarifaHora) : '');
-    setTarifaError(null);
-    setTarifaDialogOpen(true);
-  }
-
-  async function handleTarifaSave() {
-    const parsed = TarifaSchema.safeParse({ valor: Number(tarifaInput) });
-    if (!parsed.success) {
-      setTarifaError(parsed.error.issues[0]?.message ?? 'Valor inválido');
-      return;
-    }
-    setTarifaSubmitting(true);
-    try {
-      const res = await fetch(`/api/colaboradores/${perfil.id}/tarifa`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ valor: parsed.data.valor }),
-      });
-      if (!res.ok) {
-        const json = await res.json().catch(() => ({}));
-        setTarifaError(json?.message ?? 'Error al guardar');
-        return;
-      }
-      setTarifaHora(parsed.data.valor);
-      setTarifaDialogOpen(false);
-      showSuccess('Tarifa actualizada correctamente.');
-    } catch {
-      setTarifaError('Error de red. Intente de nuevo.');
-    } finally {
-      setTarifaSubmitting(false);
-    }
-  }
-
-  async function openPlantillaDialog() {
-    setPlantillaLoading(true);
-    setPlantillaDialogOpen(true);
-    setPlantillaSeleccionada(plantilla?.id ?? '');
-    try {
-      const res = await fetch('/api/plantillas-horario');
-      const json = await res.json();
-      setPlantillasDisponibles(json.plantillas ?? []);
-    } catch {
-      showError('Error cargando plantillas.');
-    } finally {
-      setPlantillaLoading(false);
-    }
-  }
-
-  async function handlePlantillaSave() {
-    try {
-      const res = await fetch(`/api/colaboradores/${perfil.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          nombre: data.nombre,
-          apellido: data.apellido,
-          cedula: data.cedula,
-          supervisor_id: data.supervisor?.id ?? null,
-          plantilla_horario_id: plantillaSeleccionada || null,
-        }),
-      });
-      if (!res.ok) {
-        const json = await res.json().catch(() => ({}));
-        showError(json?.message ?? 'Error al guardar');
-        return;
-      }
-      const found = plantillasDisponibles.find((p) => p.id === plantillaSeleccionada) ?? null;
-      setPlantilla(found);
-      setPlantillaDialogOpen(false);
-      showSuccess('Plantilla de horario actualizada.');
-    } catch {
-      showError('Error de red. Intente de nuevo.');
-    }
-  }
-
-  async function handleTipoPagoChange(nuevoTipo: TipoPago | null) {
-    setSavingTipoPago(true);
-    try {
-      const res = await fetch(`/api/colaboradores/${perfil.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          nombre: data.nombre,
-          apellido: data.apellido,
-          cedula: data.cedula,
-          supervisor_id: data.supervisor?.id ?? null,
-          tipo_pago: nuevoTipo,
-        }),
-      });
-      if (!res.ok) {
-        const json = await res.json().catch(() => ({}));
-        showError(json?.message ?? 'Error al guardar tipo de pago');
-        return;
-      }
-      setTipoPago(nuevoTipo);
-      showSuccess('Tipo de pago actualizado.');
-    } catch {
-      showError('Error de red. Intente de nuevo.');
-    } finally {
-      setSavingTipoPago(false);
     }
   }
 
@@ -314,7 +258,7 @@ export default function ColaboradorPerfil({ perfil }: ColaboradorPerfilProps) {
         showSuccess('Colaborador dado de baja.');
       } else {
         const json = await res.json().catch(() => ({}));
-        showError(json?.message ?? 'No se pudo dar de baja. Intente de nuevo.');
+        showError((json as { message?: string })?.message ?? 'No se pudo dar de baja. Intente de nuevo.');
       }
     } catch {
       showError('Error de red. Intente de nuevo.');
@@ -335,7 +279,7 @@ export default function ColaboradorPerfil({ perfil }: ColaboradorPerfilProps) {
         showSuccess('Colaborador reactivado.');
       } else {
         const json = await res.json().catch(() => ({}));
-        showError(json?.message ?? 'No se pudo reactivar. Intente de nuevo.');
+        showError((json as { message?: string })?.message ?? 'No se pudo reactivar. Intente de nuevo.');
       }
     } catch {
       showError('Error de red. Intente de nuevo.');
@@ -350,19 +294,17 @@ export default function ColaboradorPerfil({ perfil }: ColaboradorPerfilProps) {
         </Alert>
       )}
 
+      {/* ── Header ── */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2, flexWrap: 'wrap' }}>
         <Typography variant="h5" sx={{ fontWeight: 600 }}>
           {data.nombre} {data.apellido}
         </Typography>
-        <Chip
-          label={data.activo ? 'Activo' : 'Inactivo'}
-          color={data.activo ? 'success' : 'default'}
-          size="small"
-        />
+        <Chip label={data.activo ? 'Activo' : 'Inactivo'} color={data.activo ? 'success' : 'default'} size="small" />
         <Box sx={{ ml: 'auto', display: 'flex', gap: 1 }}>
           {!isEditing && (
             <>
-              <Button size="small" variant="outlined" onClick={handleEditClick}>
+              <Button size="small" variant="outlined" onClick={handleEditClick} disabled={loadingEdit}
+                startIcon={loadingEdit ? <CircularProgress size={14} /> : undefined}>
                 Editar
               </Button>
               {data.activo ? (
@@ -379,49 +321,18 @@ export default function ColaboradorPerfil({ perfil }: ColaboradorPerfilProps) {
         </Box>
       </Box>
 
-      {/* ── Datos personales ── */}
-      <Typography variant="subtitle1" sx={{ fontWeight: 500, mt: 2, mb: 1 }}>Datos personales</Typography>
-      <Divider sx={{ mb: 1 }} />
-
+      {/* ── Edit form ── */}
       {isEditing ? (
-        <Box
-          component="form"
-          onSubmit={handleSubmit(onEditSubmit)}
-          sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}
-        >
+        <Box component="form" onSubmit={handleSubmit(onEditSubmit)} sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
           {editError && <Alert severity="error">{editError}</Alert>}
 
-          <TextField
-            label="Nombre"
-            size="small"
-            {...register('nombre')}
-            error={!!errors.nombre}
-            helperText={errors.nombre?.message}
-            required
-          />
-          <TextField
-            label="Apellido"
-            size="small"
-            {...register('apellido')}
-            error={!!errors.apellido}
-            helperText={errors.apellido?.message}
-            required
-          />
-          <TextField
-            label="Cédula"
-            size="small"
-            {...register('cedula')}
-            error={!!errors.cedula}
-            helperText={errors.cedula?.message}
-            required
-          />
-          <TextField
-            label="Teléfono"
-            size="small"
-            {...register('telefono')}
-            error={!!errors.telefono}
-            helperText={errors.telefono?.message}
-          />
+          <SectionTitle>Datos personales</SectionTitle>
+          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
+            <TextField label="Nombre" size="small" {...register('nombre')} error={!!errors.nombre} helperText={errors.nombre?.message} required />
+            <TextField label="Apellido" size="small" {...register('apellido')} error={!!errors.apellido} helperText={errors.apellido?.message} required />
+          </Box>
+          <TextField label="Cédula" size="small" {...register('cedula')} error={!!errors.cedula} helperText={errors.cedula?.message} required />
+          <TextField label="Teléfono" size="small" {...register('telefono')} error={!!errors.telefono} helperText={errors.telefono?.message} />
           <TextField
             label="Fecha de nacimiento"
             type="date"
@@ -448,11 +359,57 @@ export default function ColaboradorPerfil({ perfil }: ColaboradorPerfilProps) {
             )}
           />
 
+          <SectionTitle>Tarifa y tipo de pago</SectionTitle>
+          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
+            <TextField
+              label="Tarifa por hora"
+              type="number"
+              size="small"
+              {...register('tarifa_hora')}
+              slotProps={{
+                input: { startAdornment: <InputAdornment position="start">Bs.</InputAdornment> },
+                htmlInput: { min: 0.01, step: 0.01 },
+              }}
+              error={!!errors.tarifa_hora}
+              helperText={errors.tarifa_hora?.message}
+            />
+            <Controller
+              name="tipo_pago"
+              control={control}
+              render={({ field }) => (
+                <FormControl size="small">
+                  <InputLabel>Tipo de pago</InputLabel>
+                  <Select {...field} value={field.value ?? ''} label="Tipo de pago">
+                    <MenuItem value=""><em>Sin definir</em></MenuItem>
+                    <MenuItem value="SEMANAL">Semanal</MenuItem>
+                    <MenuItem value="QUINCENAL">Quincenal</MenuItem>
+                    <MenuItem value="MENSUAL">Mensual</MenuItem>
+                  </Select>
+                </FormControl>
+              )}
+            />
+          </Box>
+
+          <SectionTitle>Plantilla de horario</SectionTitle>
+          <Controller
+            name="plantilla_horario_id"
+            control={control}
+            render={({ field }) => (
+              <FormControl size="small" fullWidth>
+                <InputLabel>Plantilla de horario</InputLabel>
+                <Select {...field} value={field.value ?? ''} label="Plantilla de horario">
+                  <MenuItem value=""><em>Sin plantilla</em></MenuItem>
+                  {plantillasDisponibles.map((p) => (
+                    <MenuItem key={p.id} value={p.id}>{p.nombre}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            )}
+          />
+
           {localCodigos.length > 0 && (
             <>
-              <Typography variant="subtitle2" sx={{ fontWeight: 600, mt: 1 }}>
-                Códigos biométricos
-              </Typography>
+              <SectionTitle>Códigos biométricos</SectionTitle>
               {localCodigos.map((c) => (
                 <TextField
                   key={c.id}
@@ -460,7 +417,7 @@ export default function ColaboradorPerfil({ perfil }: ColaboradorPerfilProps) {
                   size="small"
                   value={worknos[c.id] ?? ''}
                   onChange={(e) => setWorknos((prev) => ({ ...prev, [c.id]: e.target.value }))}
-                  helperText={`Dispositivo: ${c.dispositivo.nombre} (S/N: ${c.dispositivo.numero_serie})`}
+                  helperText={`S/N: ${c.dispositivo.numero_serie}`}
                 />
               ))}
             </>
@@ -483,61 +440,23 @@ export default function ColaboradorPerfil({ perfil }: ColaboradorPerfilProps) {
         </Box>
       ) : (
         <>
+          {/* ── View mode ── */}
+          <SectionTitle>Datos personales</SectionTitle>
           <Row label="Cédula" value={data.cedula} />
-          <Row label="Teléfono" value={data.telefono ?? '—'} />
-          <Row
-            label="Fecha de nacimiento"
-            value={data.fecha_nacimiento ? formatDate(data.fecha_nacimiento) : '—'}
-          />
-          <Row
-            label="Supervisor"
-            value={data.supervisor ? `${data.supervisor.nombre} ${data.supervisor.apellido}` : 'Sin supervisor'}
-          />
+          <Row label="Teléfono" value={data.telefono} />
+          <Row label="Fecha de nacimiento" value={data.fecha_nacimiento ? formatDate(data.fecha_nacimiento) : null} />
+          <Row label="Supervisor" value={data.supervisor ? `${data.supervisor.nombre} ${data.supervisor.apellido}` : 'Sin supervisor'} />
           <Row label="Registrado el" value={new Date(perfil.creado_en).toLocaleDateString('es-VE')} />
-        </>
-      )}
 
-      {/* ── Tarifa salarial ── */}
-      {!isEditing && (
-        <>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 3, mb: 1 }}>
-            <Typography variant="subtitle1" sx={{ fontWeight: 500 }}>Tarifa salarial</Typography>
-            <Button size="small" onClick={openTarifaDialog} sx={{ ml: 'auto' }}>
-              Editar tarifa
-            </Button>
-          </Box>
-          <Divider sx={{ mb: 1 }} />
+          <SectionTitle>Tarifa y tipo de pago</SectionTitle>
           {tarifaHora !== null ? (
             <Row label="Tarifa por hora" value={`${tarifaHora.toLocaleString('es-VE')} Bs./h`} />
           ) : (
-            <Alert severity="warning" sx={{ mt: 1 }}>Sin tarifa configurada — el colaborador no generará valor en las liquidaciones hasta que se asigne una tarifa.</Alert>
+            <Alert severity="warning" sx={{ mt: 1, mb: 1 }}>Sin tarifa configurada — el colaborador no generará valor en las liquidaciones.</Alert>
           )}
+          <Row label="Tipo de pago" value={tipoPago ? TIPO_PAGO_LABEL[tipoPago] : null} />
 
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', py: 1, alignItems: 'center' }}>
-            <Typography variant="body2" color="text.secondary" sx={{ minWidth: 180 }}>Tipo de pago</Typography>
-            <FormControl size="small" sx={{ minWidth: 160 }}>
-              <Select
-                value={tipoPago ?? ''}
-                onChange={(e) => handleTipoPagoChange((e.target.value as TipoPago) || null)}
-                displayEmpty
-                disabled={savingTipoPago}
-              >
-                <MenuItem value=""><em>Sin definir</em></MenuItem>
-                <MenuItem value="SEMANAL">Semanal</MenuItem>
-                <MenuItem value="QUINCENAL">Quincenal</MenuItem>
-                <MenuItem value="MENSUAL">Mensual</MenuItem>
-              </Select>
-            </FormControl>
-          </Box>
-
-          {/* ── Plantilla de horario ── */}
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 3, mb: 1 }}>
-            <Typography variant="subtitle1" sx={{ fontWeight: 500 }}>Plantilla de horario</Typography>
-            <Button size="small" onClick={openPlantillaDialog} sx={{ ml: 'auto' }}>
-              {plantilla ? 'Cambiar' : 'Asignar'}
-            </Button>
-          </Box>
-          <Divider sx={{ mb: 1 }} />
+          <SectionTitle>Plantilla de horario</SectionTitle>
           {plantilla ? (
             <>
               <Row label="Plantilla" value={plantilla.nombre} />
@@ -548,9 +467,7 @@ export default function ColaboradorPerfil({ perfil }: ColaboradorPerfilProps) {
             <Alert severity="info" sx={{ mt: 1 }}>Sin plantilla asignada — no se detectarán atrasos en las liquidaciones.</Alert>
           )}
 
-          {/* ── Códigos biométricos ── */}
-          <Typography variant="subtitle1" sx={{ fontWeight: 500, mt: 3, mb: 1 }}>Códigos biométricos</Typography>
-          <Divider sx={{ mb: 1 }} />
+          <SectionTitle>Códigos biométricos</SectionTitle>
           {localCodigos.length === 0 ? (
             <Alert severity="warning">Sin código biométrico asignado. El colaborador no puede resolver marcajes.</Alert>
           ) : (
@@ -566,81 +483,17 @@ export default function ColaboradorPerfil({ perfil }: ColaboradorPerfilProps) {
         </>
       )}
 
-      {/* ── Tarifa edit dialog ── */}
-      <Dialog open={tarifaDialogOpen} onClose={() => setTarifaDialogOpen(false)} maxWidth="xs" fullWidth>
-        <DialogTitle>Editar tarifa por hora</DialogTitle>
-        <DialogContent sx={{ pt: 2 }}>
-          {tarifaError && <Alert severity="error" sx={{ mb: 2 }}>{tarifaError}</Alert>}
-          <TextField
-            label="Tarifa (Bs./h)"
-            type="number"
-            size="small"
-            fullWidth
-            value={tarifaInput}
-            onChange={(e) => setTarifaInput(e.target.value)}
-            slotProps={{ htmlInput: { min: 0.01, step: 0.01 } }}
-            autoFocus
-          />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setTarifaDialogOpen(false)} disabled={tarifaSubmitting}>Cancelar</Button>
-          <Button
-            variant="contained"
-            onClick={handleTarifaSave}
-            disabled={tarifaSubmitting}
-            startIcon={tarifaSubmitting ? <CircularProgress size={14} /> : undefined}
-          >
-            Guardar
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* ── Plantilla selector dialog ── */}
-      <Dialog open={plantillaDialogOpen} onClose={() => setPlantillaDialogOpen(false)} maxWidth="xs" fullWidth>
-        <DialogTitle>Asignar plantilla de horario</DialogTitle>
-        <DialogContent sx={{ pt: 2 }}>
-          {plantillaLoading ? (
-            <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
-              <CircularProgress size={24} />
-            </Box>
-          ) : (
-            <FormControl size="small" fullWidth>
-              <InputLabel>Plantilla</InputLabel>
-              <Select
-                value={plantillaSeleccionada}
-                onChange={(e) => setPlantillaSeleccionada(e.target.value)}
-                label="Plantilla"
-              >
-                <MenuItem value=""><em>Sin plantilla</em></MenuItem>
-                {plantillasDisponibles.map((p) => (
-                  <MenuItem key={p.id} value={p.id}>{p.nombre}</MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-          )}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setPlantillaDialogOpen(false)}>Cancelar</Button>
-          <Button variant="contained" onClick={handlePlantillaSave} disabled={plantillaLoading}>
-            Guardar
-          </Button>
-        </DialogActions>
-      </Dialog>
-
       {/* ── Baja dialog ── */}
       <Dialog open={bajaDialogOpen} onClose={() => setBajaDialogOpen(false)} maxWidth="xs" fullWidth>
         <DialogTitle>Dar de baja al colaborador</DialogTitle>
         <DialogContent>
           <Typography variant="body2">
             ¿Está seguro de que desea dar de baja a <strong>{data.nombre} {data.apellido}</strong>?
-            El colaborador pasará a estado inactivo y dejará de aparecer en las listas por defecto.
-            Sus datos históricos se conservarán íntegramente.
+            El colaborador pasará a estado inactivo. Sus datos históricos se conservarán íntegramente.
           </Typography>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setBajaDialogOpen(false)} disabled={bajaLoading}>
-            Cancelar
-          </Button>
+          <Button onClick={() => setBajaDialogOpen(false)} disabled={bajaLoading}>Cancelar</Button>
           <Button
             onClick={handleBajaConfirm}
             color="error"
