@@ -1,18 +1,21 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import Box from '@mui/material/Box';
 import Chip from '@mui/material/Chip';
-import Collapse from '@mui/material/Collapse';
+import CircularProgress from '@mui/material/CircularProgress';
 import IconButton from '@mui/material/IconButton';
+import MenuItem from '@mui/material/MenuItem';
+import Select from '@mui/material/Select';
 import TableCell from '@mui/material/TableCell';
 import TableRow from '@mui/material/TableRow';
+import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import TuneIcon from '@mui/icons-material/Tune';
+import CheckIcon from '@mui/icons-material/Check';
+import UndoIcon from '@mui/icons-material/Undo';
 import type { DiaLiquidacionData, TotalesData } from '@/stores/liquidacion.store';
 import { MarcacionesEditor } from './MarcacionesEditor';
-import { InlineDiaEditor } from './InlineDiaEditor';
 
 interface Props {
   dia: DiaLiquidacionData;
@@ -25,6 +28,14 @@ const DIAS_CORTO: Record<number, string> = {
   0: 'Dom', 1: 'Lun', 2: 'Mar', 3: 'Mié', 4: 'Jue', 5: 'Vie', 6: 'Sáb',
 };
 
+const TIPOS = [
+  { value: 'BONO_HORAS_EXTRAS', label: 'Bono Horas Extras' },
+  { value: 'BONO_FIJO',         label: 'Bono Fijo' },
+  { value: 'DESCUENTO',         label: 'Descuento' },
+] as const;
+
+type TipoAjuste = typeof TIPOS[number]['value'] | '';
+
 function formatFecha(iso: string) {
   const d = new Date(iso + 'T12:00:00Z');
   const dd = String(d.getUTCDate()).padStart(2, '0');
@@ -34,114 +45,191 @@ function formatFecha(iso: string) {
 
 function estadoChip(estado: string) {
   switch (estado) {
-    case 'APROBADO':
-      return <Chip label="Aprobado" size="small" color="success" />;
-    case 'CON_AJUSTE_HORAS':
-      return <Chip label="H. ajust." size="small" color="info" />;
-    case 'CON_DESCUENTO':
-      return <Chip label="Con ajuste" size="small" color="warning" />;
-    case 'CON_AJUSTE_Y_DESCUENTO':
-      return <Chip label="H. + ajuste" size="small" color="warning" />;
-    default:
-      return <Chip label="Sin rev." size="small" variant="outlined" />;
+    case 'APROBADO':          return <Chip label="Aprobado" size="small" color="success" />;
+    case 'CON_AJUSTE_HORAS':  return <Chip label="H. ajust." size="small" color="info" />;
+    case 'CON_DESCUENTO':     return <Chip label="Con ajuste" size="small" color="warning" />;
+    case 'CON_AJUSTE_Y_DESCUENTO': return <Chip label="H. + ajuste" size="small" color="warning" />;
+    default:                  return <Chip label="Sin rev." size="small" variant="outlined" />;
   }
 }
 
-function ajusteChip(tipo: string | null, valor: number | null, descripcion: string | null) {
-  if (!tipo || valor === null) return null;
-  const isDescuento = tipo === 'DESCUENTO';
-  const label = isDescuento
-    ? `−${valor.toFixed(2)} Bs.`
-    : tipo === 'BONO_HORAS_EXTRAS'
-    ? `+${valor.toFixed(2)} Bs. HE`
-    : `+${valor.toFixed(2)} Bs.`;
-  return (
-    <Tooltip title={descripcion ?? tipo}>
-      <Chip
-        label={label}
-        size="small"
-        color={isDescuento ? 'warning' : 'success'}
-        sx={{ mt: 0.25, fontWeight: 600 }}
-      />
-    </Tooltip>
-  );
+function tipoLabel(tipo: string | null) {
+  return TIPOS.find((t) => t.value === tipo)?.label ?? null;
 }
 
-export function PlanillaDiaRow({ dia, isReadOnly, tarifaHora, onDiaUpdate }: Props) {
-  const [ajusteExpanded, setAjusteExpanded] = useState(false);
-
-  const displayHoras = dia.horasAjustadasSupervisor ?? dia.horasParejadas ?? dia.horasCalculadas;
-  const isAjustado = dia.horasAjustadasSupervisor !== null && dia.horasAjustadasSupervisor !== undefined;
+export function PlanillaDiaRow({ dia, isReadOnly, onDiaUpdate }: Props) {
   const cellReadOnly = isReadOnly || dia.estadoDia === 'APROBADO';
 
-  const handleSaved = (updatedDia: DiaLiquidacionData, updatedTotales: TotalesData) => {
-    onDiaUpdate(updatedDia, updatedTotales);
-    setAjusteExpanded(false);
+  // ── Inline ajuste state ────────────────────────────────────────────
+  const [tipo, setTipo] = useState<TipoAjuste>((dia.ajusteTipo as TipoAjuste) ?? '');
+  const [motivo, setMotivo] = useState<string>(dia.ajusteDescripcion ?? '');
+  const [dirty, setDirty] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleTipoChange = (value: TipoAjuste) => {
+    setTipo(value);
+    if (!value) setMotivo('');
+    setDirty(true);
+    setError(null);
   };
 
+  const handleMotivoChange = (value: string) => {
+    setMotivo(value);
+    setDirty(true);
+    setError(null);
+  };
+
+  const revert = useCallback(() => {
+    setTipo((dia.ajusteTipo as TipoAjuste) ?? '');
+    setMotivo(dia.ajusteDescripcion ?? '');
+    setDirty(false);
+    setError(null);
+  }, [dia]);
+
+  const save = useCallback(async () => {
+    if (tipo && !motivo.trim()) {
+      setError('El motivo es requerido');
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      const body: Record<string, unknown> = tipo
+        ? { ajusteTipo: tipo, ajusteDescripcion: motivo.trim(), ajusteValor: dia.ajusteValor ?? null }
+        : { ajusteTipo: null };
+
+      const res = await fetch(`/api/dias-liquidacion/${dia.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({})) as { message?: string };
+        setError(err.message ?? `Error ${res.status}`);
+        return;
+      }
+      const data = await res.json() as { dia: DiaLiquidacionData; totales: TotalesData };
+      setDirty(false);
+      onDiaUpdate(data.dia, data.totales);
+    } catch {
+      setError('Error de conexión');
+    } finally {
+      setSaving(false);
+    }
+  }, [dia.id, dia.ajusteValor, tipo, motivo, onDiaUpdate]);
+
+  // ── Display values ─────────────────────────────────────────────────
+  const displayHoras = dia.horasAjustadasSupervisor ?? dia.horasParejadas ?? dia.horasCalculadas;
+  const isAjustado = dia.horasAjustadasSupervisor != null;
+
   return (
-    <>
-      <TableRow sx={{ '& > td': { borderBottom: ajusteExpanded ? 'none' : undefined } }}>
-        {/* Fecha */}
-        <TableCell sx={{ whiteSpace: 'nowrap', fontWeight: 500, width: 90, verticalAlign: 'top', pt: 1.25 }}>
-          {formatFecha(dia.fecha)}
-        </TableCell>
+    <TableRow>
+      {/* Fecha */}
+      <TableCell sx={{ whiteSpace: 'nowrap', fontWeight: 500, verticalAlign: 'middle' }}>
+        {formatFecha(dia.fecha)}
+      </TableCell>
 
-        {/* Marcaciones — always editable pairs */}
-        <TableCell sx={{ verticalAlign: 'top', pt: 1 }}>
-          <MarcacionesEditor dia={dia} isReadOnly={cellReadOnly} onSaved={onDiaUpdate} />
-        </TableCell>
+      {/* Marcaciones */}
+      <TableCell sx={{ verticalAlign: 'top', pt: 1 }}>
+        <MarcacionesEditor dia={dia} isReadOnly={cellReadOnly} onSaved={onDiaUpdate} />
+      </TableCell>
 
-        {/* Horas efectivas */}
-        <TableCell sx={{ width: 110, verticalAlign: 'top', pt: 1.25 }}>
-          <Typography variant="body2" sx={{ fontWeight: 500 }}>{displayHoras.toFixed(2)} h</Typography>
-          {isAjustado && dia.marcacionesManuales == null && (
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.25 }}>
-              <Chip label="Ajust." size="small" color="info" />
-              <Typography variant="caption" color="text.secondary">
-                orig: {(dia.horasParejadas ?? dia.horasCalculadas).toFixed(2)}
-              </Typography>
-            </Box>
-          )}
-          {ajusteChip(dia.ajusteTipo, dia.ajusteValor ?? null, dia.ajusteDescripcion ?? null)}
-        </TableCell>
+      {/* Horas */}
+      <TableCell sx={{ verticalAlign: 'middle' }}>
+        <Typography variant="body2" sx={{ fontWeight: 500 }}>
+          {Number(displayHoras).toFixed(2)} h
+        </Typography>
+        {isAjustado && (
+          <Typography variant="caption" color="text.secondary">
+            orig: {(dia.horasParejadas ?? dia.horasCalculadas).toFixed(2)}
+          </Typography>
+        )}
+      </TableCell>
 
-        {/* Estado */}
-        <TableCell sx={{ width: 110, verticalAlign: 'top', pt: 1.25 }}>
-          {estadoChip(dia.estadoDia)}
-        </TableCell>
+      {/* Tipo ajuste */}
+      <TableCell sx={{ verticalAlign: 'middle' }}>
+        {cellReadOnly ? (
+          tipo ? (
+            <Chip
+              label={tipoLabel(tipo)}
+              size="small"
+              color={tipo === 'DESCUENTO' ? 'warning' : 'success'}
+              variant="outlined"
+            />
+          ) : <Typography variant="body2" color="text.disabled">—</Typography>
+        ) : (
+          <Select
+            size="small"
+            value={tipo}
+            onChange={(e) => handleTipoChange(e.target.value as TipoAjuste)}
+            displayEmpty
+            disabled={saving}
+            sx={{ fontSize: '0.8rem', minWidth: 155 }}
+          >
+            <MenuItem value=""><em>Sin ajuste</em></MenuItem>
+            {TIPOS.map((t) => (
+              <MenuItem key={t.value} value={t.value} sx={{ fontSize: '0.8rem' }}>
+                {t.label}
+              </MenuItem>
+            ))}
+          </Select>
+        )}
+      </TableCell>
 
-        {/* Ajuste toggle (tipo de ajuste / motivo) */}
-        <TableCell sx={{ width: 40, px: 0.5, verticalAlign: 'top', pt: 0.75 }}>
-          {!cellReadOnly && (
-            <Tooltip title={ajusteExpanded ? 'Cerrar ajuste' : 'Tipo de ajuste'}>
-              <IconButton
-                size="small"
-                onClick={() => setAjusteExpanded((v) => !v)}
-                color={ajusteExpanded ? 'primary' : (dia.ajusteTipo === 'DESCUENTO' ? 'warning' : dia.ajusteTipo ? 'success' : 'default')}
-              >
-                <TuneIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
-          )}
-        </TableCell>
-      </TableRow>
+      {/* Motivo */}
+      <TableCell sx={{ verticalAlign: 'middle' }}>
+        {cellReadOnly ? (
+          <Typography variant="body2" color={motivo ? 'text.primary' : 'text.disabled'}>
+            {motivo || '—'}
+          </Typography>
+        ) : (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+            <TextField
+              size="small"
+              placeholder={tipo ? 'Motivo...' : '—'}
+              value={motivo}
+              onChange={(e) => handleMotivoChange(e.target.value)}
+              disabled={saving || !tipo}
+              error={!!error}
+              sx={{ '& .MuiInputBase-input': { fontSize: '0.8rem', py: '5px' } }}
+              slotProps={{ htmlInput: { maxLength: 120 } }}
+            />
+            {dirty && (
+              <>
+                <Tooltip title="Guardar">
+                  <span>
+                    <IconButton
+                      size="small"
+                      color="primary"
+                      onClick={save}
+                      disabled={saving || (!!tipo && !motivo.trim())}
+                      sx={{ p: 0.25 }}
+                    >
+                      {saving ? <CircularProgress size={14} /> : <CheckIcon sx={{ fontSize: 16 }} />}
+                    </IconButton>
+                  </span>
+                </Tooltip>
+                <Tooltip title="Descartar">
+                  <IconButton size="small" onClick={revert} disabled={saving} sx={{ p: 0.25 }}>
+                    <UndoIcon sx={{ fontSize: 16 }} />
+                  </IconButton>
+                </Tooltip>
+              </>
+            )}
+          </Box>
+        )}
+        {error && (
+          <Typography variant="caption" color="error" sx={{ display: 'block', mt: 0.25 }}>
+            {error}
+          </Typography>
+        )}
+      </TableCell>
 
-      {/* Ajuste panel (tipo + motivo) */}
-      {!cellReadOnly && (
-        <TableRow>
-          <TableCell colSpan={5} sx={{ py: 0, borderBottom: ajusteExpanded ? undefined : 'none' }}>
-            <Collapse in={ajusteExpanded} unmountOnExit>
-              <InlineDiaEditor
-                dia={dia}
-                tarifaHora={tarifaHora}
-                onSaved={handleSaved}
-                onCancel={() => setAjusteExpanded(false)}
-              />
-            </Collapse>
-          </TableCell>
-        </TableRow>
-      )}
-    </>
+      {/* Estado */}
+      <TableCell sx={{ verticalAlign: 'middle' }}>
+        {estadoChip(dia.estadoDia)}
+      </TableCell>
+    </TableRow>
   );
 }
