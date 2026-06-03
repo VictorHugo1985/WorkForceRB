@@ -55,9 +55,13 @@ function initJornadas(dia: DiaLiquidacionData): Jornada[] {
   return base.length > 0 ? base : [{ entrada: '', salida: '' }];
 }
 
+function hasIncomplete(jornadas: Jornada[]): boolean {
+  return jornadas.some((j) => (j.entrada && !j.salida) || (!j.entrada && j.salida));
+}
+
 export function MarcacionesEditor({ dia, isReadOnly, onSaved }: Props) {
   const [jornadas, setJornadas] = useState<Jornada[]>(() => initJornadas(dia));
-  const [dirty, setDirty] = useState(false);
+  const [dirty, setDirty] = useState(() => hasIncomplete(initJornadas(dia)));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -112,46 +116,42 @@ export function MarcacionesEditor({ dia, isReadOnly, onSaved }: Props) {
   }, [dia.id, jornadas, onSaved]);
 
   const computed = totalHoras(jornadas);
-  const hasIncompleteRow = jornadas.some((j) => (j.entrada && !j.salida) || (!j.entrada && j.salida));
+  const hasIncompleteRow = hasIncomplete(jornadas);
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
       {jornadas.map((j, i) => {
         const h = shiftHours(j.entrada, j.salida);
-        const salidaIncompleta = j.entrada !== '' && j.salida === '';
+        const entradaPendiente = !j.entrada && j.salida !== '';
+        const salidaPendiente  = j.entrada !== '' && !j.salida;
+        const pendienteSx = {
+          '& .MuiOutlinedInput-notchedOutline': { borderColor: 'warning.main', borderWidth: 2 },
+          '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: 'warning.dark' },
+        };
         return (
           <Box key={i} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-            <TextField
-              size="small"
-              type="time"
-              value={j.entrada}
-              onChange={(e) => update(i, 'entrada', e.target.value)}
-              disabled={isReadOnly || saving}
-              sx={{ width: 108 }}
-              slotProps={{
-                htmlInput: { step: 60, style: { fontSize: '0.8rem', padding: '4px 6px' } },
-              }}
-            />
+            <Tooltip title={entradaPendiente ? 'Entrada pendiente' : ''} placement="top">
+              <TextField
+                size="small"
+                type="time"
+                value={j.entrada}
+                onChange={(e) => update(i, 'entrada', e.target.value)}
+                disabled={isReadOnly || saving}
+                sx={{ width: 108, ...(entradaPendiente && pendienteSx) }}
+                slotProps={{
+                  htmlInput: { step: 60, style: { fontSize: '0.8rem', padding: '4px 6px' } },
+                }}
+              />
+            </Tooltip>
             <Typography variant="caption" color="text.secondary" sx={{ userSelect: 'none' }}>→</Typography>
-            <Tooltip title={salidaIncompleta ? 'Salida pendiente' : ''} placement="top">
+            <Tooltip title={salidaPendiente ? 'Salida pendiente' : ''} placement="top">
               <TextField
                 size="small"
                 type="time"
                 value={j.salida}
                 onChange={(e) => update(i, 'salida', e.target.value)}
                 disabled={isReadOnly || saving}
-                sx={{
-                  width: 108,
-                  ...(salidaIncompleta && {
-                    '& .MuiOutlinedInput-notchedOutline': {
-                      borderColor: 'warning.main',
-                      borderWidth: 2,
-                    },
-                    '&:hover .MuiOutlinedInput-notchedOutline': {
-                      borderColor: 'warning.dark',
-                    },
-                  }),
-                }}
+                sx={{ width: 108, ...(salidaPendiente && pendienteSx) }}
                 slotProps={{
                   htmlInput: { step: 60, style: { fontSize: '0.8rem', padding: '4px 6px' } },
                 }}
@@ -190,7 +190,7 @@ export function MarcacionesEditor({ dia, isReadOnly, onSaved }: Props) {
 
           {dirty && (
             <>
-              <Tooltip title="Guardar marcaciones">
+              <Tooltip title={hasIncompleteRow ? 'Completar entrada/salida pendiente' : 'Guardar marcaciones'}>
                 <span>
                   <IconButton
                     size="small"
