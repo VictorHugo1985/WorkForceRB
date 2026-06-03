@@ -11,7 +11,7 @@ const jornadaManualSchema = z.object({
 const PatchSchema = z.object({
   horasAjustadasSupervisor: z.number().min(0).optional(),
   motivoAjuste: z.string().optional(),
-  ajusteTipo: z.enum(['BONO_HORAS_EXTRAS', 'BONO_FIJO', 'DESCUENTO']).nullable().optional(),
+  ajusteTipo: z.enum(['BONO_HORAS_EXTRAS', 'BONO_TRANSPORTE', 'ESTIPENDIO', 'DESCUENTO']).nullable().optional(),
   ajusteValor: z.number().positive().optional(),
   ajusteDescripcion: z.string().optional(),
   aprobar: z.boolean().optional(),

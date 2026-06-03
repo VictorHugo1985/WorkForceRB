@@ -30,7 +30,8 @@ const DIAS_CORTO: Record<number, string> = {
 
 const TIPOS = [
   { value: 'BONO_HORAS_EXTRAS', label: 'Bono Horas Extras' },
-  { value: 'BONO_FIJO',         label: 'Bono Fijo' },
+  { value: 'BONO_TRANSPORTE',   label: 'Bono Transporte' },
+  { value: 'ESTIPENDIO',        label: 'Estipendio' },
   { value: 'DESCUENTO',         label: 'Descuento' },
 ] as const;
 
@@ -62,41 +63,42 @@ export function PlanillaDiaRow({ dia, isReadOnly, onDiaUpdate }: Props) {
 
   // ── Inline ajuste state ────────────────────────────────────────────
   const [tipo, setTipo] = useState<TipoAjuste>((dia.ajusteTipo as TipoAjuste) ?? '');
-  const [motivo, setMotivo] = useState<string>(dia.ajusteDescripcion ?? '');
+  const [monto, setMonto] = useState<string>(dia.ajusteValor != null ? String(dia.ajusteValor) : '');
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleTipoChange = (value: TipoAjuste) => {
     setTipo(value);
-    if (!value) setMotivo('');
+    if (!value) setMonto('');
     setDirty(true);
     setError(null);
   };
 
-  const handleMotivoChange = (value: string) => {
-    setMotivo(value);
+  const handleMontoChange = (value: string) => {
+    setMonto(value);
     setDirty(true);
     setError(null);
   };
 
   const revert = useCallback(() => {
     setTipo((dia.ajusteTipo as TipoAjuste) ?? '');
-    setMotivo(dia.ajusteDescripcion ?? '');
+    setMonto(dia.ajusteValor != null ? String(dia.ajusteValor) : '');
     setDirty(false);
     setError(null);
   }, [dia]);
 
   const save = useCallback(async () => {
-    if (tipo && !motivo.trim()) {
-      setError('El motivo es requerido');
+    const montoNum = monto ? Number(monto) : null;
+    if (tipo && (montoNum === null || isNaN(montoNum) || montoNum <= 0)) {
+      setError('Ingrese un monto válido');
       return;
     }
     setSaving(true);
     setError(null);
     try {
       const body: Record<string, unknown> = tipo
-        ? { ajusteTipo: tipo, ajusteDescripcion: motivo.trim(), ajusteValor: dia.ajusteValor ?? null }
+        ? { ajusteTipo: tipo, ajusteValor: montoNum, ajusteDescripcion: dia.ajusteDescripcion ?? null }
         : { ajusteTipo: null };
 
       const res = await fetch(`/api/dias-liquidacion/${dia.id}`, {
@@ -117,7 +119,7 @@ export function PlanillaDiaRow({ dia, isReadOnly, onDiaUpdate }: Props) {
     } finally {
       setSaving(false);
     }
-  }, [dia.id, dia.ajusteValor, tipo, motivo, onDiaUpdate]);
+  }, [dia.id, dia.ajusteDescripcion, tipo, monto, onDiaUpdate]);
 
   // ── Display values ─────────────────────────────────────────────────
   const displayHoras = dia.horasAjustadasSupervisor ?? dia.horasParejadas ?? dia.horasCalculadas;
@@ -177,23 +179,24 @@ export function PlanillaDiaRow({ dia, isReadOnly, onDiaUpdate }: Props) {
         )}
       </TableCell>
 
-      {/* Motivo */}
+      {/* Monto Ajuste */}
       <TableCell sx={{ verticalAlign: 'middle' }}>
         {cellReadOnly ? (
-          <Typography variant="body2" color={motivo ? 'text.primary' : 'text.disabled'}>
-            {motivo || '—'}
+          <Typography variant="body2" sx={{ fontWeight: monto ? 500 : undefined, color: monto ? (tipo === 'DESCUENTO' ? 'warning.main' : 'success.main') : 'text.disabled' }}>
+            {monto ? `${tipo === 'DESCUENTO' ? '−' : '+'}${Number(monto).toFixed(2)} Bs.` : '—'}
           </Typography>
         ) : (
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
             <TextField
               size="small"
-              placeholder={tipo ? 'Motivo...' : '—'}
-              value={motivo}
-              onChange={(e) => handleMotivoChange(e.target.value)}
+              type="number"
+              placeholder={tipo ? '0.00' : '—'}
+              value={monto}
+              onChange={(e) => handleMontoChange(e.target.value)}
               disabled={saving || !tipo}
               error={!!error}
-              sx={{ '& .MuiInputBase-input': { fontSize: '0.8rem', py: '5px' } }}
-              slotProps={{ htmlInput: { maxLength: 120 } }}
+              sx={{ width: 100, '& .MuiInputBase-input': { fontSize: '0.8rem', py: '5px' } }}
+              slotProps={{ htmlInput: { min: 0.01, step: 0.01 } }}
             />
             {dirty && (
               <>
@@ -203,7 +206,7 @@ export function PlanillaDiaRow({ dia, isReadOnly, onDiaUpdate }: Props) {
                       size="small"
                       color="primary"
                       onClick={save}
-                      disabled={saving || (!!tipo && !motivo.trim())}
+                      disabled={saving || (!!tipo && (!monto || Number(monto) <= 0))}
                       sx={{ p: 0.25 }}
                     >
                       {saving ? <CircularProgress size={14} /> : <CheckIcon sx={{ fontSize: 16 }} />}

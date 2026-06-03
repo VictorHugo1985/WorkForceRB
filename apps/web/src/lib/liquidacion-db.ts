@@ -198,7 +198,7 @@ export async function calcularTotales(client: PoolClient, liquidacionId: string)
     horasOrdinarias += horas;
     valorHorasOrdinarias += Math.round(horas * tarifa * 100) / 100;
 
-    if ((dia.ajuste_tipo === 'BONO_HORAS_EXTRAS' || dia.ajuste_tipo === 'BONO_FIJO') && dia.ajuste_valor !== null) {
+    if (dia.ajuste_tipo !== null && dia.ajuste_tipo !== 'DESCUENTO' && dia.ajuste_valor !== null) {
       totalBonosDia += Number(dia.ajuste_valor);
     } else if (dia.ajuste_tipo === 'DESCUENTO' && dia.ajuste_valor !== null) {
       totalDescuentos += Number(dia.ajuste_valor);

@@ -20,7 +20,8 @@ import type { DiaLiquidacionData, TotalesData } from '@/stores/liquidacion.store
 
 const TIPOS = [
   { value: 'BONO_HORAS_EXTRAS', label: 'Bono Horas Extras', color: 'success' },
-  { value: 'BONO_FIJO',         label: 'Bono Fijo',         color: 'success' },
+  { value: 'BONO_TRANSPORTE',   label: 'Bono Transporte',   color: 'success' },
+  { value: 'ESTIPENDIO',        label: 'Estipendio',        color: 'success' },
   { value: 'DESCUENTO',         label: 'Descuento',         color: 'warning' },
 ] as const;
 
