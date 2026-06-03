@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import Box from '@mui/material/Box';
 import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
@@ -46,11 +46,11 @@ function formatFecha(iso: string) {
 
 function estadoChip(estado: string) {
   switch (estado) {
-    case 'APROBADO':          return <Chip label="Aprobado" size="small" color="success" />;
-    case 'CON_AJUSTE_HORAS':  return <Chip label="H. ajust." size="small" color="info" />;
-    case 'CON_DESCUENTO':     return <Chip label="Con ajuste" size="small" color="warning" />;
+    case 'APROBADO':               return <Chip label="Aprobado" size="small" color="success" />;
+    case 'CON_AJUSTE_HORAS':       return <Chip label="H. ajust." size="small" color="info" />;
+    case 'CON_DESCUENTO':          return <Chip label="Con ajuste" size="small" color="warning" />;
     case 'CON_AJUSTE_Y_DESCUENTO': return <Chip label="H. + ajuste" size="small" color="warning" />;
-    default:                  return <Chip label="Sin rev." size="small" variant="outlined" />;
+    default:                       return <Chip label="Sin rev." size="small" variant="outlined" />;
   }
 }
 
@@ -58,10 +58,64 @@ function tipoLabel(tipo: string | null) {
   return TIPOS.find((t) => t.value === tipo)?.label ?? null;
 }
 
+function effectiveHoras(dia: DiaLiquidacionData): number {
+  return dia.horasAjustadasSupervisor ?? dia.horasParejadas ?? dia.horasCalculadas;
+}
+
 export function PlanillaDiaRow({ dia, isReadOnly, onDiaUpdate }: Props) {
   const cellReadOnly = isReadOnly || dia.estadoDia === 'APROBADO';
 
-  // ── Inline ajuste state ────────────────────────────────────────────
+  // ── Horas inline edit ──────────────────────────────────────────────
+  const [horas, setHoras] = useState<string>(String(effectiveHoras(dia)));
+  const [horasDirty, setHorasDirty] = useState(false);
+  const [horasSaving, setHorasSaving] = useState(false);
+  const [horasError, setHorasError] = useState<string | null>(null);
+
+  // Sync when dia updates externally (e.g. marcaciones edit re-calculates hours)
+  useEffect(() => {
+    if (!horasDirty) setHoras(String(effectiveHoras(dia)));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dia.horasAjustadasSupervisor, dia.horasParejadas, dia.horasCalculadas]);
+
+  const handleHorasChange = (value: string) => {
+    setHoras(value);
+    setHorasDirty(true);
+    setHorasError(null);
+  };
+
+  const revertHoras = useCallback(() => {
+    setHoras(String(effectiveHoras(dia)));
+    setHorasDirty(false);
+    setHorasError(null);
+  }, [dia]);
+
+  const saveHoras = useCallback(async () => {
+    const horasNum = parseFloat(horas);
+    if (isNaN(horasNum) || horasNum < 0) { setHorasError('Valor inválido'); return; }
+    setHorasSaving(true);
+    setHorasError(null);
+    try {
+      const res = await fetch(`/api/dias-liquidacion/${dia.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ horasAjustadasSupervisor: horasNum }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({})) as { message?: string };
+        setHorasError(err.message ?? `Error ${res.status}`);
+        return;
+      }
+      const data = await res.json() as { dia: DiaLiquidacionData; totales: TotalesData };
+      setHorasDirty(false);
+      onDiaUpdate(data.dia, data.totales);
+    } catch {
+      setHorasError('Error de conexión');
+    } finally {
+      setHorasSaving(false);
+    }
+  }, [dia.id, horas, onDiaUpdate]);
+
+  // ── Ajuste tipo / monto inline edit ────────────────────────────────
   const [tipo, setTipo] = useState<TipoAjuste>((dia.ajusteTipo as TipoAjuste) ?? '');
   const [monto, setMonto] = useState<string>(dia.ajusteValor != null ? String(dia.ajusteValor) : '');
   const [dirty, setDirty] = useState(false);
@@ -100,7 +154,6 @@ export function PlanillaDiaRow({ dia, isReadOnly, onDiaUpdate }: Props) {
       const body: Record<string, unknown> = tipo
         ? { ajusteTipo: tipo, ajusteValor: montoNum }
         : { ajusteTipo: null };
-
       const res = await fetch(`/api/dias-liquidacion/${dia.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -121,9 +174,8 @@ export function PlanillaDiaRow({ dia, isReadOnly, onDiaUpdate }: Props) {
     }
   }, [dia.id, tipo, monto, onDiaUpdate]);
 
-  // ── Display values ─────────────────────────────────────────────────
-  const displayHoras = dia.horasAjustadasSupervisor ?? dia.horasParejadas ?? dia.horasCalculadas;
   const isAjustado = dia.horasAjustadasSupervisor != null;
+  const horasOrig  = (dia.horasParejadas ?? dia.horasCalculadas);
 
   return (
     <TableRow>
@@ -139,13 +191,58 @@ export function PlanillaDiaRow({ dia, isReadOnly, onDiaUpdate }: Props) {
 
       {/* Horas */}
       <TableCell sx={{ verticalAlign: 'middle' }}>
-        <Typography variant="body2" sx={{ fontWeight: 500 }}>
-          {Number(displayHoras).toFixed(2)} h
-        </Typography>
-        {isAjustado && (
-          <Typography variant="caption" color="text.secondary">
-            orig: {(dia.horasParejadas ?? dia.horasCalculadas).toFixed(2)}
-          </Typography>
+        {cellReadOnly ? (
+          <Box>
+            <Typography variant="body2" sx={{ fontWeight: 500 }}>
+              {effectiveHoras(dia).toFixed(2)} h
+            </Typography>
+            {isAjustado && (
+              <Typography variant="caption" color="text.secondary">
+                orig: {horasOrig.toFixed(2)}
+              </Typography>
+            )}
+          </Box>
+        ) : (
+          <Box>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              <TextField
+                size="small"
+                type="number"
+                value={horas}
+                onChange={(e) => handleHorasChange(e.target.value)}
+                disabled={horasSaving}
+                error={!!horasError}
+                sx={{ width: 82, '& .MuiInputBase-input': { fontSize: '0.8rem', py: '5px' } }}
+                slotProps={{ htmlInput: { min: 0, step: 0.25 } }}
+              />
+              {horasDirty && (
+                <>
+                  <Tooltip title="Confirmar">
+                    <span>
+                      <IconButton size="small" color="primary" onClick={saveHoras} disabled={horasSaving} sx={{ p: 0.25 }}>
+                        {horasSaving ? <CircularProgress size={14} /> : <CheckIcon sx={{ fontSize: 16 }} />}
+                      </IconButton>
+                    </span>
+                  </Tooltip>
+                  <Tooltip title="Descartar">
+                    <IconButton size="small" onClick={revertHoras} disabled={horasSaving} sx={{ p: 0.25 }}>
+                      <UndoIcon sx={{ fontSize: 16 }} />
+                    </IconButton>
+                  </Tooltip>
+                </>
+              )}
+            </Box>
+            {horasError && (
+              <Typography variant="caption" color="error" sx={{ display: 'block', mt: 0.25 }}>
+                {horasError}
+              </Typography>
+            )}
+            {isAjustado && !horasDirty && (
+              <Typography variant="caption" color="text.secondary">
+                orig: {horasOrig.toFixed(2)}
+              </Typography>
+            )}
+          </Box>
         )}
       </TableCell>
 
