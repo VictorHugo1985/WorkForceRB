@@ -122,7 +122,6 @@ export function MarcacionesEditor({ dia, isReadOnly, onSaved }: Props) {
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
       {jornadas.map((j, i) => {
-        const h = shiftHours(j.entrada, j.salida);
         const entradaPendiente = !j.entrada && j.salida !== '';
         const salidaPendiente  = j.entrada !== '' && !j.salida;
         const pendienteSx = {
@@ -158,11 +157,6 @@ export function MarcacionesEditor({ dia, isReadOnly, onSaved }: Props) {
                 }}
               />
             </Tooltip>
-            {h > 0 && (
-              <Typography variant="caption" color="text.secondary" sx={{ minWidth: 36 }}>
-                {h.toFixed(1)}h
-              </Typography>
-            )}
             {!isReadOnly && (
               <>
                 <Tooltip title="Quitar turno">

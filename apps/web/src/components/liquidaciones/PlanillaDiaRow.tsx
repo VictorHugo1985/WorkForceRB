@@ -124,9 +124,6 @@ export function PlanillaDiaRow({ dia, isReadOnly, onDiaUpdate }: Props) {
     }
   }, [dia.id, tipo, monto, onDiaUpdate]);
 
-  const isAjustado = dia.horasAjustadasSupervisor != null;
-  const horasOrig  = (dia.horasParejadas ?? dia.horasCalculadas);
-
   return (
     <TableRow>
       {/* Fecha */}
@@ -141,16 +138,9 @@ export function PlanillaDiaRow({ dia, isReadOnly, onDiaUpdate }: Props) {
 
       {/* Horas */}
       <TableCell sx={{ verticalAlign: 'middle' }}>
-        <Box>
-          <Typography variant="body2" sx={{ fontWeight: 500 }}>
-            {effectiveHoras(dia).toFixed(2)} h
-          </Typography>
-          {isAjustado && (
-            <Typography variant="caption" color="text.secondary">
-              orig: {horasOrig.toFixed(2)}
-            </Typography>
-          )}
-        </Box>
+        <Typography variant="body2" sx={{ fontWeight: 500 }}>
+          {effectiveHoras(dia).toFixed(2)} h
+        </Typography>
       </TableCell>
 
       {/* Tipo ajuste */}
