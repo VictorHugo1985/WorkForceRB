@@ -28,9 +28,12 @@ export async function GET(req: NextRequest) {
   try {
     const res = await client.query(
       `SELECT sl.id, sl.fecha_inicio, sl.fecha_fin, sl.estado, sl.tipo_periodo, sl.creado_en,
-              u.nombre AS creado_por_nombre, u.apellido AS creado_por_apellido
+              sl.cerrada_en, sl.monto_total_pagado, sl.cantidad_colaboradores_pagados,
+              uc.nombre AS creado_por_nombre, uc.apellido AS creado_por_apellido,
+              ux.nombre AS cerrado_por_nombre, ux.apellido AS cerrado_por_apellido
        FROM semanas_laborales sl
-       LEFT JOIN usuarios u ON u.id = sl.creado_por
+       LEFT JOIN usuarios uc ON uc.id = sl.creado_por
+       LEFT JOIN usuarios ux ON ux.id = sl.cerrada_por
        ORDER BY sl.fecha_inicio DESC`,
     );
     return NextResponse.json(res.rows.map((r) => ({
@@ -40,9 +43,11 @@ export async function GET(req: NextRequest) {
       estado: r.estado,
       tipo_periodo: r.tipo_periodo ?? null,
       creado_en: r.creado_en,
-      creado_por: r.creado_por_nombre
-        ? `${r.creado_por_nombre} ${r.creado_por_apellido}`
-        : null,
+      creado_por: r.creado_por_nombre ? `${r.creado_por_nombre} ${r.creado_por_apellido}` : null,
+      cerrada_en: r.cerrada_en ?? null,
+      cerrado_por: r.cerrado_por_nombre ? `${r.cerrado_por_nombre} ${r.cerrado_por_apellido}` : null,
+      monto_total_pagado: r.monto_total_pagado !== null ? Number(r.monto_total_pagado) : null,
+      cantidad_colaboradores_pagados: r.cantidad_colaboradores_pagados ?? null,
     })));
   } finally {
     client.release();
