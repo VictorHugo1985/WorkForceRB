@@ -82,8 +82,9 @@ export function MarcacionesEditor({ dia, isReadOnly, onSaved }: Props) {
   }, []);
 
   const revert = useCallback(() => {
-    setJornadas(initJornadas(dia));
-    setDirty(false);
+    const initial = initJornadas(dia);
+    setJornadas(initial);
+    setDirty(hasIncomplete(initial));
     setError(null);
   }, [dia]);
 
@@ -163,11 +164,18 @@ export function MarcacionesEditor({ dia, isReadOnly, onSaved }: Props) {
               </Typography>
             )}
             {!isReadOnly && (
-              <Tooltip title="Quitar turno">
-                <IconButton size="small" onClick={() => removeJornada(i)} disabled={saving} sx={{ p: 0.25 }}>
-                  <RemoveCircleIcon sx={{ fontSize: 16 }} color="disabled" />
-                </IconButton>
-              </Tooltip>
+              <>
+                <Tooltip title="Quitar turno">
+                  <IconButton size="small" onClick={() => removeJornada(i)} disabled={saving} sx={{ p: 0.25 }}>
+                    <RemoveCircleIcon sx={{ fontSize: 16 }} color="disabled" />
+                  </IconButton>
+                </Tooltip>
+                <Tooltip title="Agregar turno">
+                  <IconButton size="small" onClick={addJornada} disabled={saving} sx={{ p: 0.25 }}>
+                    <AddIcon sx={{ fontSize: 16 }} />
+                  </IconButton>
+                </Tooltip>
+              </>
             )}
           </Box>
         );
@@ -176,12 +184,6 @@ export function MarcacionesEditor({ dia, isReadOnly, onSaved }: Props) {
       {/* Controls row */}
       {!isReadOnly && (
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mt: 0.25 }}>
-          <Tooltip title="Agregar turno">
-            <IconButton size="small" onClick={addJornada} disabled={saving} sx={{ p: 0.25 }}>
-              <AddIcon sx={{ fontSize: 16 }} />
-            </IconButton>
-          </Tooltip>
-
           {computed > 0 && (
             <Typography variant="caption" color="text.secondary">
               {computed.toFixed(2)} h

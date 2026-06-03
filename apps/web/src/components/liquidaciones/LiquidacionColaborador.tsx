@@ -40,29 +40,6 @@ interface Props {
   onEstadoChange: (liquidacionId: string, estado: EstadoLiquidacion) => void;
 }
 
-// ── Avatar ────────────────────────────────────────────────────────────────────
-
-function Avatar({ nombre, apellido, estado }: { nombre: string; apellido: string; estado: EstadoLiquidacion | null }) {
-  const initials = `${apellido[0] ?? ''}${nombre[0] ?? ''}`.toUpperCase();
-  const bgMap: Record<EstadoLiquidacion, string> = {
-    BORRADOR: '#1976d2',
-    APROBADO: '#2e7d32',
-    PAGADO:   '#6a1b9a',
-  };
-  const bg = estado ? bgMap[estado] : '#616161';
-  return (
-    <Box
-      sx={{
-        width: 38, height: 38, borderRadius: '50%', bgcolor: bg,
-        display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-      }}
-    >
-      <Typography variant="body2" sx={{ color: 'white', fontWeight: 700, fontSize: '0.8rem', letterSpacing: 0.5 }}>
-        {initials}
-      </Typography>
-    </Box>
-  );
-}
 
 // ── Tarifa editor ─────────────────────────────────────────────────────────────
 
@@ -368,14 +345,13 @@ export function LiquidacionColaborador({
     >
       {/* ── Header row 1: identity + status ── */}
       <Box sx={{ px: 2, pt: 1.5, pb: 0.75, display: 'flex', alignItems: 'center', gap: 1.5 }}>
-        <Avatar nombre={nombre} apellido={apellido} estado={estado} />
-        <Box sx={{ flex: 1 }}>
+        <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
           <Typography sx={{ fontWeight: 700, fontSize: '0.97rem', lineHeight: 1.2 }}>
             {apellido}, {nombre}
           </Typography>
-          {estado === 'BORRADOR' && <Chip label="Borrador" size="small" color="default" variant="outlined" sx={{ mt: 0.25 }} />}
-          {estado === 'APROBADO' && <Chip label="✓ Aprobado" size="small" color="success" sx={{ mt: 0.25 }} />}
-          {estado === 'PAGADO'   && <Chip label="💰 Pagado" size="small" color="secondary" sx={{ mt: 0.25 }} />}
+          {estado === 'BORRADOR' && <Chip label="Borrador" size="small" color="default" variant="outlined" />}
+          {estado === 'APROBADO' && <Chip label="✓ Aprobado" size="small" color="success" />}
+          {estado === 'PAGADO'   && <Chip label="💰 Pagado" size="small" color="secondary" />}
         </Box>
 
         {/* Action zone */}
