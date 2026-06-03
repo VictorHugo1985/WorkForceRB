@@ -31,8 +31,8 @@ export async function GET(req: NextRequest) {
 
     const [diasRes, bonosRes] = await Promise.all([
       client.query(
-        `SELECT id, fecha, horas_calculadas, horas_ajustadas_supervisor, atraso_detectado,
-                estado_dia, motivo_ajuste, ajuste_tipo, ajuste_valor, ajuste_descripcion
+        `SELECT id, fecha, horas_calculadas, horas_ajustadas_supervisor,
+                estado_dia, ajuste_tipo, ajuste_valor
          FROM dias_liquidacion WHERE liquidacion_id = $1 ORDER BY fecha`,
         [liq.id],
       ),

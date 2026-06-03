@@ -10,10 +10,8 @@ const jornadaManualSchema = z.object({
 
 const PatchSchema = z.object({
   horasAjustadasSupervisor: z.number().min(0).optional(),
-  motivoAjuste: z.string().optional(),
   ajusteTipo: z.enum(['BONO_HORAS_EXTRAS', 'BONO_TRANSPORTE', 'ESTIPENDIO', 'DESCUENTO']).nullable().optional(),
   ajusteValor: z.number().positive().optional(),
-  ajusteDescripcion: z.string().optional(),
   aprobar: z.boolean().optional(),
   marcacionesExcluidas: z.array(z.string()).optional(),
   marcacionesManuales: z.array(jornadaManualSchema).nullable().optional(),
@@ -80,25 +78,20 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (dto.marcacionesManuales !== undefined) {
       const manuales = dto.marcacionesManuales;
       if (manuales === null || manuales.length === 0) {
-        // Clear manual overrides — revert to biometric
         sets.push(`marcaciones_manuales = ${push(null)}`);
         sets.push(`horas_ajustadas_supervisor = ${push(null)}`);
-        sets.push(`motivo_ajuste = ${push(null)}`);
       } else {
         const horasComputadas = computeHorasFromJornadas(manuales);
         sets.push(`marcaciones_manuales = ${push(JSON.stringify(manuales))}`);
         sets.push(`horas_ajustadas_supervisor = ${push(horasComputadas)}`);
-        sets.push(`motivo_ajuste = ${push('Marcaciones editadas manualmente')}`);
       }
     } else if (dto.horasAjustadasSupervisor !== undefined) {
       sets.push(`horas_ajustadas_supervisor = ${push(dto.horasAjustadasSupervisor)}`);
-      sets.push(`motivo_ajuste = ${push(dto.motivoAjuste ?? null)}`);
     }
 
     if (dto.ajusteTipo !== undefined) {
       sets.push(`ajuste_tipo = ${push(dto.ajusteTipo)}`);
       sets.push(`ajuste_valor = ${push(dto.ajusteValor ?? null)}`);
-      sets.push(`ajuste_descripcion = ${push(dto.ajusteDescripcion ?? null)}`);
     }
     if (dto.marcacionesExcluidas !== undefined) {
       sets.push(`marcaciones_excluidas = ${push(JSON.stringify(dto.marcacionesExcluidas))}`);
@@ -192,12 +185,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       horasCalculadas: Number(updDia.horas_calculadas),
       horasAjustadasSupervisor: updDia.horas_ajustadas_supervisor != null
         ? Number(updDia.horas_ajustadas_supervisor) : null,
-      atrasoDetectado: Boolean(updDia.atraso_detectado),
       estadoDia: updDia.estado_dia,
-      motivoAjuste: updDia.motivo_ajuste ?? null,
       ajusteTipo: updDia.ajuste_tipo ?? null,
       ajusteValor: updDia.ajuste_valor != null ? Number(updDia.ajuste_valor) : null,
-      ajusteDescripcion: updDia.ajuste_descripcion ?? null,
       ...jornadaFields,
     };
 

@@ -17,17 +17,13 @@ interface Props {
 export function InlineHorasCell({ diaId, currentHoras, isReadOnly, onSaved }: Props) {
   const [editing, setEditing] = useState(false);
   const [draftHoras, setDraftHoras] = useState('');
-  const [draftMotivo, setDraftMotivo] = useState('');
   const [saving, setSaving] = useState(false);
-  const [motivoError, setMotivoError] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const escPressed = useRef(false);
 
   const startEdit = () => {
     if (isReadOnly) return;
     setDraftHoras(String(currentHoras));
-    setDraftMotivo('');
-    setMotivoError(false);
     setSaveError(null);
     escPressed.current = false;
     setEditing(true);
@@ -36,25 +32,17 @@ export function InlineHorasCell({ diaId, currentHoras, isReadOnly, onSaved }: Pr
   const cancelEdit = () => {
     escPressed.current = true;
     setEditing(false);
-    setMotivoError(false);
     setSaveError(null);
   };
 
   const save = async () => {
-    if (!draftMotivo.trim()) {
-      setMotivoError(true);
-      return;
-    }
     setSaving(true);
     setSaveError(null);
     try {
       const res = await fetch(`/api/dias-liquidacion/${diaId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          horasAjustadasSupervisor: parseFloat(draftHoras),
-          motivoAjuste: draftMotivo.trim(),
-        }),
+        body: JSON.stringify({ horasAjustadasSupervisor: parseFloat(draftHoras) }),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({})) as { message?: string };
@@ -71,12 +59,7 @@ export function InlineHorasCell({ diaId, currentHoras, isReadOnly, onSaved }: Pr
     }
   };
 
-  const handleHorasKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') { e.preventDefault(); save(); }
-    if (e.key === 'Escape') { e.preventDefault(); cancelEdit(); }
-  };
-
-  const handleMotivoKeyDown = (e: React.KeyboardEvent) => {
+  const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') { e.preventDefault(); save(); }
     if (e.key === 'Escape') { e.preventDefault(); cancelEdit(); }
   };
@@ -100,27 +83,16 @@ export function InlineHorasCell({ diaId, currentHoras, isReadOnly, onSaved }: Pr
   }
 
   return (
-    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'nowrap' }}>
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
       <TextField
         autoFocus
         size="small"
         type="number"
         value={draftHoras}
         onChange={(e) => setDraftHoras(e.target.value)}
-        onKeyDown={handleHorasKeyDown}
+        onKeyDown={handleKeyDown}
         slotProps={{ htmlInput: { step: 0.25, min: 0, style: { width: 64 } } }}
         sx={{ width: 80 }}
-        disabled={saving}
-      />
-      <TextField
-        size="small"
-        label="Motivo"
-        value={draftMotivo}
-        onChange={(e) => { setDraftMotivo(e.target.value); if (motivoError) setMotivoError(false); }}
-        onKeyDown={handleMotivoKeyDown}
-        error={motivoError}
-        helperText={motivoError ? 'Requerido' : undefined}
-        sx={{ width: 160 }}
         disabled={saving}
       />
       {saving && <CircularProgress size={16} />}

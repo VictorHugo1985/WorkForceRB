@@ -18,12 +18,9 @@ export interface DiaLiquidacionData {
   fecha: string;
   horasCalculadas: number;
   horasAjustadasSupervisor: number | null;
-  atrasoDetectado: boolean;
   estadoDia: string;
-  motivoAjuste: string | null;
   ajusteTipo: string | null;
   ajusteValor: number | null;
-  ajusteDescripcion: string | null;
   jornadas?: Jornada[];
   horasParejadas?: number;
   marcacionSuelta?: string | null;

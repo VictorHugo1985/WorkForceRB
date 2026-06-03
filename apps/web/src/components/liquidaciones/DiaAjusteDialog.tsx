@@ -25,34 +25,17 @@ import { DiaLiquidacionData, useLiquidacionStore } from '@/stores/liquidacion.st
 const schema = z
   .object({
     horasAjustadasSupervisor: z.union([z.number().min(0), z.literal('')]).optional(),
-    motivoAjuste: z.string().optional(),
     ajusteTipo: z.string().optional(),
     ajusteValor: z.union([z.number().positive(), z.literal('')]).optional(),
-    ajusteDescripcion: z.string().optional(),
     aprobar: z.boolean().optional(),
   })
   .superRefine((data, ctx) => {
-    const horas = data.horasAjustadasSupervisor;
-    if (horas !== '' && horas !== undefined && !data.motivoAjuste) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'Motivo requerido si se ajustan las horas',
-        path: ['motivoAjuste'],
-      });
-    }
     if (data.ajusteTipo && data.ajusteTipo !== '') {
       if (!data.ajusteValor && data.ajusteValor !== 0) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           message: 'Valor requerido si se aplica un ajuste',
           path: ['ajusteValor'],
-        });
-      }
-      if (!data.ajusteDescripcion) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: 'Descripción requerida si se aplica un ajuste',
-          path: ['ajusteDescripcion'],
         });
       }
     }
@@ -87,10 +70,8 @@ export function DiaAjusteDialog({ dia, open, onClose }: Props) {
     resolver: zodResolver(schema),
     defaultValues: {
       horasAjustadasSupervisor: dia.horasAjustadasSupervisor ?? '',
-      motivoAjuste: dia.motivoAjuste ?? '',
       ajusteTipo: (dia.ajusteTipo as FormValues['ajusteTipo']) ?? '',
       ajusteValor: dia.ajusteValor ?? '',
-      ajusteDescripcion: dia.ajusteDescripcion ?? '',
       aprobar: false,
     },
   });
@@ -104,12 +85,10 @@ export function DiaAjusteDialog({ dia, open, onClose }: Props) {
     const body: Record<string, unknown> = {};
     if (values.horasAjustadasSupervisor !== '' && values.horasAjustadasSupervisor !== undefined) {
       body.horasAjustadasSupervisor = values.horasAjustadasSupervisor;
-      body.motivoAjuste = values.motivoAjuste;
     }
     if (values.ajusteTipo && values.ajusteTipo !== '') {
       body.ajusteTipo = values.ajusteTipo;
       body.ajusteValor = values.ajusteValor;
-      body.ajusteDescripcion = values.ajusteDescripcion;
     }
     if (values.aprobar) body.aprobar = true;
 
@@ -117,12 +96,10 @@ export function DiaAjusteDialog({ dia, open, onClose }: Props) {
       ...dia,
       ...(body.horasAjustadasSupervisor !== undefined && {
         horasAjustadasSupervisor: body.horasAjustadasSupervisor as number,
-        motivoAjuste: body.motivoAjuste as string,
       }),
       ...(body.ajusteTipo !== undefined && {
         ajusteTipo: body.ajusteTipo as string,
         ajusteValor: body.ajusteValor as number,
-        ajusteDescripcion: body.ajusteDescripcion as string,
       }),
     };
     applyOptimisticDia(optimisticDia);
@@ -174,7 +151,6 @@ export function DiaAjusteDialog({ dia, open, onClose }: Props) {
                     variant="outlined"
                     onClick={() => {
                       setValue('horasAjustadasSupervisor', dia.horasParejadas ?? 0);
-                      setValue('motivoAjuste', 'Marcación suelta excluida del cálculo');
                     }}
                   >
                     Excluir marcación suelta
@@ -197,16 +173,6 @@ export function DiaAjusteDialog({ dia, open, onClose }: Props) {
               error={!!errors.horasAjustadasSupervisor}
               helperText={errors.horasAjustadasSupervisor?.message}
             />
-
-            {(horasField !== '' && horasField !== undefined) && (
-              <TextField
-                label="Motivo del ajuste"
-                size="small"
-                {...register('motivoAjuste')}
-                error={!!errors.motivoAjuste}
-                helperText={errors.motivoAjuste?.message}
-              />
-            )}
 
             <Controller
               name="ajusteTipo"
@@ -236,13 +202,6 @@ export function DiaAjusteDialog({ dia, open, onClose }: Props) {
                   {...register('ajusteValor', { valueAsNumber: true })}
                   error={!!errors.ajusteValor}
                   helperText={errors.ajusteValor?.message}
-                />
-                <TextField
-                  label="Descripción del ajuste"
-                  size="small"
-                  {...register('ajusteDescripcion')}
-                  error={!!errors.ajusteDescripcion}
-                  helperText={errors.ajusteDescripcion?.message}
                 />
               </>
             )}

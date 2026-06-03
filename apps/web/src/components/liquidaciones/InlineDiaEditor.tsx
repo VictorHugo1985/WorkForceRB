@@ -28,14 +28,10 @@ const TIPOS = [
 const schema = z.object({
   ajusteTipo: z.string().optional(),
   ajusteValor: z.union([z.number().positive(), z.literal('')]).optional(),
-  ajusteDescripcion: z.string().optional(),
 }).superRefine((data, ctx) => {
   if (data.ajusteTipo && data.ajusteTipo !== '') {
     if (!data.ajusteValor && data.ajusteValor !== 0) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Requerido', path: ['ajusteValor'] });
-    }
-    if (!data.ajusteDescripcion?.trim()) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Requerido', path: ['ajusteDescripcion'] });
     }
   }
 });
@@ -58,7 +54,6 @@ export function InlineDiaEditor({ dia, tarifaHora, onSaved, onCancel }: Props) {
       defaultValues: {
         ajusteTipo: dia.ajusteTipo ?? '',
         ajusteValor: dia.ajusteValor ?? '',
-        ajusteDescripcion: dia.ajusteDescripcion ?? '',
       },
     });
 
@@ -73,7 +68,6 @@ export function InlineDiaEditor({ dia, tarifaHora, onSaved, onCancel }: Props) {
     if (values.ajusteTipo && values.ajusteTipo !== '') {
       body.ajusteTipo = values.ajusteTipo;
       body.ajusteValor = values.ajusteValor;
-      body.ajusteDescripcion = values.ajusteDescripcion?.trim();
     } else if (dia.ajusteTipo) {
       body.ajusteTipo = null;
     }
@@ -150,14 +144,6 @@ export function InlineDiaEditor({ dia, tarifaHora, onSaved, onCancel }: Props) {
                   ),
                 },
               }}
-            />
-            <TextField
-              size="small"
-              label="Motivo"
-              {...register('ajusteDescripcion')}
-              error={!!errors.ajusteDescripcion}
-              helperText={errors.ajusteDescripcion?.message}
-              sx={{ flex: 1, minWidth: 180 }}
             />
           </>
         )}

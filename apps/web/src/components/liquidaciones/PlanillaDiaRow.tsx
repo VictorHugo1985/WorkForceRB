@@ -98,7 +98,7 @@ export function PlanillaDiaRow({ dia, isReadOnly, onDiaUpdate }: Props) {
     setError(null);
     try {
       const body: Record<string, unknown> = tipo
-        ? { ajusteTipo: tipo, ajusteValor: montoNum, ajusteDescripcion: dia.ajusteDescripcion ?? null }
+        ? { ajusteTipo: tipo, ajusteValor: montoNum }
         : { ajusteTipo: null };
 
       const res = await fetch(`/api/dias-liquidacion/${dia.id}`, {
@@ -119,7 +119,7 @@ export function PlanillaDiaRow({ dia, isReadOnly, onDiaUpdate }: Props) {
     } finally {
       setSaving(false);
     }
-  }, [dia.id, dia.ajusteDescripcion, tipo, monto, onDiaUpdate]);
+  }, [dia.id, tipo, monto, onDiaUpdate]);
 
   // ── Display values ─────────────────────────────────────────────────
   const displayHoras = dia.horasAjustadasSupervisor ?? dia.horasParejadas ?? dia.horasCalculadas;

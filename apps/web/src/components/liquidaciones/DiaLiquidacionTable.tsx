@@ -102,7 +102,7 @@ export function DiaLiquidacionTable() {
     }
   };
 
-  const COL_COUNT = 8;
+  const COL_COUNT = 7;
 
   return (
     <Box sx={{ overflowX: 'auto' }}>
@@ -113,7 +113,6 @@ export function DiaLiquidacionTable() {
             <TableCell>Fecha</TableCell>
             <TableCell>Horas Acumuladas</TableCell>
             <TableCell>Horas Ajust.</TableCell>
-            <TableCell>Atraso</TableCell>
             <TableCell>Ajuste</TableCell>
             <TableCell>Estado</TableCell>
             <TableCell />
@@ -151,11 +150,6 @@ export function DiaLiquidacionTable() {
                       {dia.horasAjustadasSupervisor != null
                         ? Number(dia.horasAjustadasSupervisor).toFixed(2)
                         : '—'}
-                    </TableCell>
-                    <TableCell>
-                      {dia.atrasoDetectado ? (
-                        <Chip label="Atraso" size="small" color="error" />
-                      ) : null}
                     </TableCell>
                     <TableCell>
                       {ajusteLabel(dia.ajusteTipo, dia.ajusteValor)}

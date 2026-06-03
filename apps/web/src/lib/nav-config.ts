@@ -8,9 +8,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: 'Inicio',               href: '/dashboard',     roles: ['ADMINISTRADOR', 'SUPERVISOR', 'CAJERO', 'COLABORADOR'] },
   { label: 'Colaboradores',        href: '/colaboradores', roles: ['ADMINISTRADOR'] },
   { label: 'Configuración',        href: '/configuracion', roles: ['ADMINISTRADOR'] },
-  { label: 'Semanas Laborales',    href: '/semanas-laborales', roles: ['ADMINISTRADOR', 'SUPERVISOR'] },
   { label: 'Liquidaciones',        href: '/liquidaciones', roles: ['ADMINISTRADOR', 'SUPERVISOR'] },
-  { label: 'Cola de Pagos',        href: '/pagos',         roles: ['ADMINISTRADOR', 'SUPERVISOR', 'CAJERO'] },
   { label: 'Eventos Biométricos',  href: '/eventos',       roles: ['ADMINISTRADOR', 'SUPERVISOR'] },
   { label: 'Usuarios del Sistema', href: '/usuarios',      roles: ['ADMINISTRADOR'] },
 ];
