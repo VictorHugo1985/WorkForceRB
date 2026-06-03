@@ -22,9 +22,13 @@ import TableCell from '@mui/material/TableCell';
 import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import TextField from '@mui/material/TextField';
+import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import AddIcon from '@mui/icons-material/Add';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import CheckIcon from '@mui/icons-material/Check';
+import CloseIcon from '@mui/icons-material/Close';
+import EditIcon from '@mui/icons-material/Edit';
 import { LiquidacionColaborador, type EstadoLiquidacion } from './LiquidacionColaborador';
 
 interface SemanaLaboral {
@@ -102,7 +106,6 @@ function CrearPeriodoDialog({ open, onClose, onCreated }: CrearPeriodoDialogProp
 
   const handleTipoChange = (nuevoTipo: TipoPeriodo) => {
     setTipo(nuevoTipo);
-    setFechaFinManual('');
   };
 
   const handleFechaInicioChange = (v: string) => {
@@ -283,12 +286,59 @@ function HistoricoGrid({ semanas, onSelect, onNuevoPeriodo }: HistoricoGridProps
 interface DetailViewProps {
   semana: SemanaLaboral;
   onBack: () => void;
+  onUpdate: (semana: SemanaLaboral) => void;
 }
 
-function DetailView({ semana, onBack }: DetailViewProps) {
+function DetailView({ semana, onBack, onUpdate }: DetailViewProps) {
   const [roster, setRoster] = useState<RosterEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // ── Inline date/tipo editing ────────────────────────────────────────
+  const [editing, setEditing] = useState(false);
+  const [editInicio, setEditInicio] = useState('');
+  const [editFin, setEditFin] = useState('');
+  const [editTipo, setEditTipo] = useState<TipoPeriodo | ''>('');
+  const [editSaving, setEditSaving] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+
+  const startEdit = () => {
+    setEditInicio(semana.fecha_inicio.slice(0, 10));
+    setEditFin(semana.fecha_fin.slice(0, 10));
+    setEditTipo((semana.tipo_periodo as TipoPeriodo) ?? '');
+    setEditError(null);
+    setEditing(true);
+  };
+
+  const cancelEdit = () => { setEditing(false); setEditError(null); };
+
+  const saveEdit = async () => {
+    if (!editInicio || !editFin) { setEditError('Las fechas son requeridas'); return; }
+    if (editFin < editInicio) { setEditError('La fecha fin debe ser posterior al inicio'); return; }
+    setEditSaving(true);
+    setEditError(null);
+    try {
+      const res = await fetch(`/api/semanas-laborales/${semana.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fechaInicio: editInicio, fechaFin: editFin, tipoPeriodo: editTipo || null }),
+      });
+      const json = await res.json();
+      if (!res.ok) { setEditError(json?.message ?? `Error ${res.status}`); return; }
+      onUpdate({
+        ...semana,
+        fecha_inicio: json.fecha_inicio,
+        fecha_fin: json.fecha_fin,
+        tipo_periodo: json.tipo_periodo ?? null,
+      });
+      setEditing(false);
+    } catch {
+      setEditError('Error de conexión');
+    } finally {
+      setEditSaving(false);
+    }
+  };
+
+  // ── Roster ─────────────────────────────────────────────────────────
   useEffect(() => {
     setLoading(true);
     setRoster([]);
@@ -312,14 +362,82 @@ function DetailView({ semana, onBack }: DetailViewProps) {
         <IconButton size="small" onClick={onBack} aria-label="Volver a períodos">
           <ArrowBackIcon fontSize="small" />
         </IconButton>
-        <Box sx={{ flex: 1 }}>
-          <Typography variant="h6" sx={{ fontWeight: 600 }}>{formatRangoFecha(semana)}</Typography>
-          <Box sx={{ display: 'flex', gap: 0.75, mt: 0.25, flexWrap: 'wrap' }}>
-            {semana.tipo_periodo && <Chip label={semana.tipo_periodo} size="small" variant="outlined" />}
-            {estadoChip(semana.estado)}
-            {allDone && <Chip label="Período completo" size="small" color="info" />}
+
+        {editing ? (
+          /* ── Edit mode ─────────────────────────────────────── */
+          <Box sx={{ flex: 1, display: 'flex', flexWrap: 'wrap', gap: 1.5, alignItems: 'flex-start' }}>
+            <TextField
+              label="Fecha inicio"
+              type="date"
+              size="small"
+              value={editInicio}
+              onChange={(e) => { setEditInicio(e.target.value); setEditError(null); }}
+              disabled={editSaving}
+              slotProps={{ inputLabel: { shrink: true } }}
+              sx={{ width: 160 }}
+            />
+            <TextField
+              label="Fecha fin"
+              type="date"
+              size="small"
+              value={editFin}
+              onChange={(e) => { setEditFin(e.target.value); setEditError(null); }}
+              disabled={editSaving}
+              slotProps={{ inputLabel: { shrink: true } }}
+              sx={{ width: 160 }}
+            />
+            <FormControl size="small" sx={{ width: 160 }}>
+              <InputLabel>Tipo de período</InputLabel>
+              <Select
+                value={editTipo}
+                label="Tipo de período"
+                onChange={(e) => setEditTipo(e.target.value as TipoPeriodo | '')}
+                disabled={editSaving}
+              >
+                <MenuItem value=""><em>Sin tipo</em></MenuItem>
+                <MenuItem value="SEMANAL">Semanal</MenuItem>
+                <MenuItem value="QUINCENAL">Quincenal</MenuItem>
+                <MenuItem value="MENSUAL">Mensual</MenuItem>
+              </Select>
+            </FormControl>
+            <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center', mt: 0.5 }}>
+              <Tooltip title="Guardar">
+                <span>
+                  <IconButton size="small" color="primary" onClick={saveEdit} disabled={editSaving}>
+                    {editSaving ? <CircularProgress size={16} /> : <CheckIcon fontSize="small" />}
+                  </IconButton>
+                </span>
+              </Tooltip>
+              <Tooltip title="Cancelar">
+                <IconButton size="small" onClick={cancelEdit} disabled={editSaving}>
+                  <CloseIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            </Box>
+            {editError && (
+              <Typography variant="caption" color="error" sx={{ width: '100%', mt: -0.5 }}>
+                {editError}
+              </Typography>
+            )}
           </Box>
-        </Box>
+        ) : (
+          /* ── Read mode ─────────────────────────────────────── */
+          <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Box sx={{ flex: 1 }}>
+              <Typography variant="h6" sx={{ fontWeight: 600 }}>{formatRangoFecha(semana)}</Typography>
+              <Box sx={{ display: 'flex', gap: 0.75, mt: 0.25, flexWrap: 'wrap' }}>
+                {semana.tipo_periodo && <Chip label={semana.tipo_periodo} size="small" variant="outlined" />}
+                {estadoChip(semana.estado)}
+                {allDone && <Chip label="Período completo" size="small" color="info" />}
+              </Box>
+            </Box>
+            <Tooltip title="Editar fechas">
+              <IconButton size="small" onClick={startEdit}>
+                <EditIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          </Box>
+        )}
       </Box>
 
       {/* Roster */}
@@ -378,6 +496,14 @@ export function PlanillaView() {
     setDialogOpen(false);
   }, []);
 
+  const handlePeriodoUpdated = useCallback((semana: SemanaLaboral) => {
+    setSemanas((prev) =>
+      prev.map((s) => s.id === semana.id ? semana : s)
+        .sort((a, b) => b.fecha_inicio.localeCompare(a.fecha_inicio)),
+    );
+    setSelected(semana);
+  }, []);
+
   if (loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', mt: 8 }}>
@@ -389,7 +515,7 @@ export function PlanillaView() {
   if (selected) {
     return (
       <>
-        <DetailView semana={selected} onBack={() => setSelected(null)} />
+        <DetailView semana={selected} onBack={() => setSelected(null)} onUpdate={handlePeriodoUpdated} />
         <CrearPeriodoDialog open={dialogOpen} onClose={() => setDialogOpen(false)} onCreated={handlePeriodoCreado} />
       </>
     );
