@@ -6,6 +6,7 @@ import Button from '@mui/material/Button';
 import Checkbox from '@mui/material/Checkbox';
 import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
+import Collapse from '@mui/material/Collapse';
 import Divider from '@mui/material/Divider';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import IconButton from '@mui/material/IconButton';
@@ -23,6 +24,7 @@ import Typography from '@mui/material/Typography';
 import CheckIcon from '@mui/icons-material/Check';
 import CloseIcon from '@mui/icons-material/Close';
 import EditIcon from '@mui/icons-material/Edit';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import PaymentsIcon from '@mui/icons-material/Payments';
 import VerifiedIcon from '@mui/icons-material/Verified';
 import type { DiaLiquidacionData, LiquidacionData, TotalesData } from '@/stores/liquidacion.store';
@@ -283,6 +285,7 @@ export function LiquidacionColaborador({
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [localTarifa, setLocalTarifa] = useState<number | null>(tarifaHora);
+  const [collapsed, setCollapsed] = useState(false);
 
   useEffect(() => {
     fetch(`/api/liquidaciones/${liquidacionId}`)
@@ -344,6 +347,14 @@ export function LiquidacionColaborador({
     >
       {/* ── Header row 1: identity + status ── */}
       <Box sx={{ px: 2, pt: 1.5, pb: 0.75, display: 'flex', alignItems: 'center', gap: 1.5 }}>
+        <Tooltip title={collapsed ? 'Expandir' : 'Colapsar'}>
+          <IconButton size="small" onClick={() => setCollapsed((v) => !v)} sx={{ p: 0.25 }}>
+            <ExpandMoreIcon
+              fontSize="small"
+              sx={{ transform: collapsed ? 'rotate(-90deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}
+            />
+          </IconButton>
+        </Tooltip>
         <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
           <Typography sx={{ fontWeight: 700, fontSize: '0.97rem', lineHeight: 1.2 }}>
             {apellido}, {nombre}
@@ -370,7 +381,7 @@ export function LiquidacionColaborador({
         )}
       </Box>
 
-      {/* ── Header row 2: stats ── */}
+      {/* ── Header row 2: stats (always visible) ── */}
       {loading && (
         <Box sx={{ px: 2, pb: 1.25, display: 'flex', gap: 2 }}>
           {[80, 60, 80, 80, 100].map((w, i) => (
@@ -425,44 +436,46 @@ export function LiquidacionColaborador({
         <Typography color="error" variant="body2" sx={{ px: 2, pb: 1.5 }}>{fetchError}</Typography>
       )}
 
-      <Divider />
+      {/* ── Collapsible: days table ── */}
+      <Collapse in={!collapsed} unmountOnExit={false}>
+        <Divider />
 
-      {/* ── Days table ── */}
-      {loading && (
-        <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 1 }}>
-          {[1, 2, 3, 4, 5].map((i) => <Skeleton key={i} variant="rounded" height={40} />)}
-        </Box>
-      )}
-      {liquidacion && liquidacion.dias.length > 0 && (
-        <Table size="small" sx={{ tableLayout: 'fixed' }}>
-          <TableHead>
-            <TableRow sx={{ bgcolor: 'action.hover' }}>
-              <TableCell sx={{ fontWeight: 600, width: 90, color: 'text.secondary', fontSize: '0.75rem' }}>Fecha</TableCell>
-              <TableCell sx={{ fontWeight: 600, color: 'text.secondary', fontSize: '0.75rem' }}>Marcaciones</TableCell>
-              <TableCell sx={{ fontWeight: 600, width: 100, color: 'text.secondary', fontSize: '0.75rem' }}>Horas</TableCell>
-              <TableCell sx={{ fontWeight: 600, width: 200, color: 'text.secondary', fontSize: '0.75rem' }}>Tipo ajuste</TableCell>
-              <TableCell sx={{ fontWeight: 600, width: 140, color: 'text.secondary', fontSize: '0.75rem' }}>Monto ajuste</TableCell>
-              <TableCell sx={{ fontWeight: 600, width: 110, color: 'text.secondary', fontSize: '0.75rem' }}>Estado</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {liquidacion.dias.map((dia) => (
-              <PlanillaDiaRow
-                key={dia.id}
-                dia={dia}
-                isReadOnly={isLocked}
-                tarifaHora={localTarifa}
-                onDiaUpdate={handleDiaUpdate}
-              />
-            ))}
-          </TableBody>
-        </Table>
-      )}
-      {liquidacion && liquidacion.dias.length === 0 && (
-        <Typography variant="body2" color="text.secondary" sx={{ px: 2, py: 2 }}>
-          Sin días registrados esta semana.
-        </Typography>
-      )}
+        {loading && (
+          <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 1 }}>
+            {[1, 2, 3, 4, 5].map((i) => <Skeleton key={i} variant="rounded" height={40} />)}
+          </Box>
+        )}
+        {liquidacion && liquidacion.dias.length > 0 && (
+          <Table size="small" sx={{ tableLayout: 'fixed' }}>
+            <TableHead>
+              <TableRow sx={{ bgcolor: 'action.hover' }}>
+                <TableCell sx={{ fontWeight: 600, width: 90, color: 'text.secondary', fontSize: '0.75rem' }}>Fecha</TableCell>
+                <TableCell sx={{ fontWeight: 600, color: 'text.secondary', fontSize: '0.75rem' }}>Marcaciones</TableCell>
+                <TableCell sx={{ fontWeight: 600, width: 100, color: 'text.secondary', fontSize: '0.75rem' }}>Horas</TableCell>
+                <TableCell sx={{ fontWeight: 600, width: 200, color: 'text.secondary', fontSize: '0.75rem' }}>Tipo ajuste</TableCell>
+                <TableCell sx={{ fontWeight: 600, width: 140, color: 'text.secondary', fontSize: '0.75rem' }}>Monto ajuste</TableCell>
+                <TableCell sx={{ fontWeight: 600, width: 110, color: 'text.secondary', fontSize: '0.75rem' }}>Estado</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {liquidacion.dias.map((dia) => (
+                <PlanillaDiaRow
+                  key={dia.id}
+                  dia={dia}
+                  isReadOnly={isLocked}
+                  tarifaHora={localTarifa}
+                  onDiaUpdate={handleDiaUpdate}
+                />
+              ))}
+            </TableBody>
+          </Table>
+        )}
+        {liquidacion && liquidacion.dias.length === 0 && (
+          <Typography variant="body2" color="text.secondary" sx={{ px: 2, py: 2 }}>
+            Sin días registrados esta semana.
+          </Typography>
+        )}
+      </Collapse>
     </Paper>
   );
 }

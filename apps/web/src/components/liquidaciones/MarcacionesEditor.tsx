@@ -122,7 +122,6 @@ export function MarcacionesEditor({ dia, isReadOnly, onSaved }: Props) {
     }
   }, [dia.id, jornadas, onSaved]);
 
-  const computed = totalHoras(jornadas);
   const hasIncompleteRow = hasIncomplete(jornadas);
 
   return (
@@ -184,12 +183,6 @@ export function MarcacionesEditor({ dia, isReadOnly, onSaved }: Props) {
       {/* Controls row */}
       {!isReadOnly && (
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mt: 0.25 }}>
-          {computed > 0 && (
-            <Typography variant="caption" color="text.secondary">
-              {computed.toFixed(2)} h
-            </Typography>
-          )}
-
           {dirty && (
             <>
               <Tooltip title={hasIncompleteRow ? 'Completar horario pendiente' : 'Guardar marcaciones'}>
