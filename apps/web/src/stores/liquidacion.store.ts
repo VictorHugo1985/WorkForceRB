@@ -6,6 +6,8 @@ export interface Jornada {
   horas: number;
   entradaRaw: string;
   salidaRaw: string;
+  tipoEntrada?: string;
+  tipoSalida?: string;
 }
 
 export interface ExcludedPunch {

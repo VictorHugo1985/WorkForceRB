@@ -42,6 +42,8 @@ export function buildJornadas(
       horas: Math.round(((s.time.getTime() - e.time.getTime()) / 3_600_000) * 100) / 100,
       entradaRaw: e.time.toISOString(),
       salidaRaw: s.time.toISOString(),
+      tipoEntrada: e.tipo,
+      tipoSalida: s.tipo,
     });
   }
 
