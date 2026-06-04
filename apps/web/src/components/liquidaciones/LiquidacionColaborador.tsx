@@ -285,7 +285,7 @@ export function LiquidacionColaborador({
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [localTarifa, setLocalTarifa] = useState<number | null>(tarifaHora);
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(true);
 
   useEffect(() => {
     fetch(`/api/liquidaciones/${liquidacionId}`)
