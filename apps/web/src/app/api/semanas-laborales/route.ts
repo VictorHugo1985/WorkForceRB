@@ -91,7 +91,7 @@ export async function POST(req: NextRequest) {
     const semana = res.rows[0];
 
     try {
-      await generarBorradoresSemana(client, semana.id as string, fechaInicio, fechaFin);
+      await generarBorradoresSemana(client, semana.id as string, fechaInicio, fechaFin, tipoPeriodo ?? null);
     } catch { /* non-critical */ }
 
     return NextResponse.json({

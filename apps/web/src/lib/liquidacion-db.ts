@@ -439,9 +439,13 @@ export async function generarBorradoresSemana(
   semanaId: string,
   fechaInicio: string,
   fechaFin: string,
+  tipoPeriodo?: string | null,
 ): Promise<void> {
   const colabsRes = await client.query(
-    `SELECT id FROM colaboradores WHERE activo = true`,
+    tipoPeriodo
+      ? `SELECT id FROM colaboradores WHERE activo = true AND tipo_pago = $1`
+      : `SELECT id FROM colaboradores WHERE activo = true`,
+    tipoPeriodo ? [tipoPeriodo] : [],
   );
   if (colabsRes.rows.length === 0) return;
 
