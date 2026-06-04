@@ -71,15 +71,15 @@ export async function fetchPunchMap(
   fechaFin: string,
 ): Promise<Map<string, PunchEntry[]>> {
   const res = await client.query(
-    `SELECT ebd.checktime::date AS fecha,
+    `SELECT (ebd.checktime - INTERVAL '4 hours')::date AS fecha,
             array_agg(ebd.checktime ORDER BY ebd.checktime) AS marcaciones,
             array_agg(COALESCE(ebd.tipo_evento, 'ENTRADA') ORDER BY ebd.checktime) AS tipos
      FROM eventos_biometricos_desglosados ebd
      JOIN codigos_colaborador cc
           ON cc.codigo_biometrico = ebd.employee_workno AND cc.activo = true
      WHERE cc.colaborador_id = $1
-       AND ebd.checktime::date BETWEEN $2 AND $3
-     GROUP BY ebd.checktime::date`,
+       AND (ebd.checktime - INTERVAL '4 hours')::date BETWEEN $2 AND $3
+     GROUP BY (ebd.checktime - INTERVAL '4 hours')::date`,
     [colaboradorId, fechaInicio, fechaFin],
   );
   const map = new Map<string, PunchEntry[]>();
@@ -559,13 +559,13 @@ export async function generarBorradoresSemana(
   const eventosRes = await client.query(
     `SELECT
        cc.colaborador_id,
-       ebd.checktime::date AS fecha,
+       (ebd.checktime - INTERVAL '4 hours')::date AS fecha,
        array_agg(ebd.checktime ORDER BY ebd.checktime) AS marcaciones
      FROM eventos_biometricos_desglosados ebd
      JOIN codigos_colaborador cc
           ON cc.codigo_biometrico = ebd.employee_workno AND cc.activo = true
-     WHERE ebd.checktime::date BETWEEN $1 AND $2
-     GROUP BY cc.colaborador_id, ebd.checktime::date`,
+     WHERE (ebd.checktime - INTERVAL '4 hours')::date BETWEEN $1 AND $2
+     GROUP BY cc.colaborador_id, (ebd.checktime - INTERVAL '4 hours')::date`,
     [fechaInicio, fechaFin],
   );
 

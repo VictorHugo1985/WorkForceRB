@@ -67,7 +67,7 @@ function hasIncomplete(jornadas: Jornada[]): boolean {
 
 export function MarcacionesEditor({ dia, isReadOnly, onSaved }: Props) {
   const [jornadas, setJornadas] = useState<Jornada[]>(() => initJornadas(dia));
-  const [dirty, setDirty] = useState(() => hasIncomplete(initJornadas(dia)));
+  const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

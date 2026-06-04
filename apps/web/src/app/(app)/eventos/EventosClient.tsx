@@ -87,9 +87,9 @@ function todayGMTMinus4(): string {
 }
 
 function formatChecktime(iso: string): string {
-  const d = new Date(iso);
+  const gmt4 = new Date(new Date(iso).getTime() - 4 * 3600000);
   const pad = (n: number) => String(n).padStart(2, '0');
-  return `${pad(d.getUTCDate())}/${pad(d.getUTCMonth() + 1)}/${d.getUTCFullYear()} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`;
+  return `${pad(gmt4.getUTCDate())}/${pad(gmt4.getUTCMonth() + 1)}/${gmt4.getUTCFullYear()} ${pad(gmt4.getUTCHours())}:${pad(gmt4.getUTCMinutes())}`;
 }
 
 export function EventosClient({ dispositivos }: { dispositivos: Dispositivo[] }) {
