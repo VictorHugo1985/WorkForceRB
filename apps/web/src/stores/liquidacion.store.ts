@@ -25,6 +25,7 @@ export interface DiaLiquidacionData {
   horasParejadas?: number;
   marcacionSuelta?: string | null;
   marcacionSueltaRaw?: string | null;
+  marcacionSueltaEsSalida?: boolean;
   tieneInconsistencia?: boolean;
   marcacionesExcluidas?: string[];
   excludedPunchDisplay?: ExcludedPunch[];

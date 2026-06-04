@@ -48,9 +48,15 @@ function initJornadas(dia: DiaLiquidacionData): Jornada[] {
   }
   // Fall back to biometric jornadas
   const base = (dia.jornadas ?? []).map((j) => ({ entrada: j.entrada, salida: j.salida }));
-  // Include unpaired punch as a partial row so supervisor can complete it
+  // Include unpaired punch as a partial row so supervisor can complete it.
+  // If the orphan punch is a SALIDA event, place it in the salida slot so the
+  // supervisor fills in the missing entrada instead of adding a second salida.
   if (dia.marcacionSuelta) {
-    base.push({ entrada: dia.marcacionSuelta, salida: '' });
+    if (dia.marcacionSueltaEsSalida) {
+      base.push({ entrada: '', salida: dia.marcacionSuelta });
+    } else {
+      base.push({ entrada: dia.marcacionSuelta, salida: '' });
+    }
   }
   return base.length > 0 ? base : [{ entrada: '', salida: '' }];
 }
@@ -186,7 +192,7 @@ export function MarcacionesEditor({ dia, isReadOnly, onSaved }: Props) {
 
           {dirty && (
             <>
-              <Tooltip title={hasIncompleteRow ? 'Completar entrada/salida pendiente' : 'Guardar marcaciones'}>
+              <Tooltip title={hasIncompleteRow ? 'Completar horario pendiente' : 'Guardar marcaciones'}>
                 <span>
                   <IconButton
                     size="small"

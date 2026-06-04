@@ -140,6 +140,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         horasParejadas,
         marcacionSuelta: null,
         marcacionSueltaRaw: null,
+        marcacionSueltaEsSalida: false,
         tieneInconsistencia: false,
         marcacionesExcluidas: [],
         excludedPunchDisplay: [],
@@ -160,15 +161,16 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
           (fecha_inicio as string).slice(0, 10),
           (fecha_fin as string).slice(0, 10),
         );
-        const punches = punchMap.get(fechaStr) ?? [];
+        const entries = punchMap.get(fechaStr) ?? [];
         const excluded: string[] = Array.isArray(updDia.marcaciones_excluidas)
           ? updDia.marcaciones_excluidas : [];
-        const jd = buildJornadas(punches, excluded);
+        const jd = buildJornadas(entries, excluded);
         jornadaFields = {
           jornadas: jd.jornadas,
           horasParejadas: jd.horasParejadas,
           marcacionSuelta: jd.marcacionSuelta,
           marcacionSueltaRaw: jd.marcacionSueltaRaw,
+          marcacionSueltaEsSalida: jd.marcacionSueltaEsSalida,
           tieneInconsistencia: jd.tieneInconsistencia,
           marcacionesExcluidas: excluded,
           excludedPunchDisplay: jd.excludedPunchDisplay,

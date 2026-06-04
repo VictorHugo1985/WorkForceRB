@@ -13,57 +13,67 @@ function toHHMM(d: Date): string {
 // ─── Shift pairing algorithm ──────────────────────────────────────────────────
 
 export function buildJornadas(
-  punches: Date[],
+  punches: Date[] | PunchEntry[],
   excludedIso: string[],
 ): {
   jornadas: Jornada[];
   horasParejadas: number;
   marcacionSuelta: string | null;
   marcacionSueltaRaw: string | null;
+  marcacionSueltaEsSalida: boolean;
   tieneInconsistencia: boolean;
   excludedPunchDisplay: ExcludedPunch[];
 } {
+  // Normalise to PunchEntry[] — plain Date[] treated as ENTRADA by default
+  const entries: PunchEntry[] = (punches as Array<Date | PunchEntry>).map((p) =>
+    p instanceof Date ? { time: p, tipo: 'ENTRADA' } : p,
+  );
+
   const excludedSet = new Set(excludedIso);
-  const excluded = punches.filter((p) => excludedSet.has(p.toISOString()));
-  const active = punches.filter((p) => !excludedSet.has(p.toISOString()));
+  const excluded = entries.filter((e) => excludedSet.has(e.time.toISOString()));
+  const active  = entries.filter((e) => !excludedSet.has(e.time.toISOString()));
 
   const jornadas: Jornada[] = [];
   for (let i = 0; i + 1 < active.length; i += 2) {
     const e = active[i], s = active[i + 1];
     jornadas.push({
-      entrada: toHHMM(e),
-      salida: toHHMM(s),
-      horas: Math.round(((s.getTime() - e.getTime()) / 3_600_000) * 100) / 100,
-      entradaRaw: e.toISOString(),
-      salidaRaw: s.toISOString(),
+      entrada: toHHMM(e.time),
+      salida: toHHMM(s.time),
+      horas: Math.round(((s.time.getTime() - e.time.getTime()) / 3_600_000) * 100) / 100,
+      entradaRaw: e.time.toISOString(),
+      salidaRaw: s.time.toISOString(),
     });
   }
 
   const horasParejadas = Math.round(jornadas.reduce((s, j) => s + j.horas, 0) * 100) / 100;
   const tieneInconsistencia = active.length % 2 !== 0;
-  const lastActive = active.length > 0 ? active[active.length - 1] : null;
+  const lastEntry = active.length > 0 ? active[active.length - 1] : null;
 
   return {
     jornadas,
     horasParejadas,
-    marcacionSuelta: tieneInconsistencia && lastActive ? toHHMM(lastActive) : null,
-    marcacionSueltaRaw: tieneInconsistencia && lastActive ? lastActive.toISOString() : null,
+    marcacionSuelta: tieneInconsistencia && lastEntry ? toHHMM(lastEntry.time) : null,
+    marcacionSueltaRaw: tieneInconsistencia && lastEntry ? lastEntry.time.toISOString() : null,
+    marcacionSueltaEsSalida: tieneInconsistencia && lastEntry ? lastEntry.tipo === 'SALIDA' : false,
     tieneInconsistencia,
-    excludedPunchDisplay: excluded.map((p) => ({ iso: p.toISOString(), hhmm: toHHMM(p) })),
+    excludedPunchDisplay: excluded.map((e) => ({ iso: e.time.toISOString(), hhmm: toHHMM(e.time) })),
   };
 }
 
 // ─── Batch punch query ────────────────────────────────────────────────────────
+
+export interface PunchEntry { time: Date; tipo: string }
 
 export async function fetchPunchMap(
   client: PoolClient,
   colaboradorId: string,
   fechaInicio: string,
   fechaFin: string,
-): Promise<Map<string, Date[]>> {
+): Promise<Map<string, PunchEntry[]>> {
   const res = await client.query(
     `SELECT ebd.checktime::date AS fecha,
-            array_agg(ebd.checktime ORDER BY ebd.checktime) AS marcaciones
+            array_agg(ebd.checktime ORDER BY ebd.checktime) AS marcaciones,
+            array_agg(COALESCE(ebd.tipo_evento, 'ENTRADA') ORDER BY ebd.checktime) AS tipos
      FROM eventos_biometricos_desglosados ebd
      JOIN codigos_colaborador cc
           ON cc.codigo_biometrico = ebd.employee_workno AND cc.activo = true
@@ -72,10 +82,12 @@ export async function fetchPunchMap(
      GROUP BY ebd.checktime::date`,
     [colaboradorId, fechaInicio, fechaFin],
   );
-  const map = new Map<string, Date[]>();
+  const map = new Map<string, PunchEntry[]>();
   for (const row of res.rows) {
     const key = (row.fecha as Date).toISOString().slice(0, 10);
-    map.set(key, row.marcaciones as Date[]);
+    const times = row.marcaciones as Date[];
+    const tipos = row.tipos as string[];
+    map.set(key, times.map((t, i) => ({ time: t, tipo: tipos[i] ?? 'ENTRADA' })));
   }
   return map;
 }
@@ -268,8 +280,8 @@ async function calcularDiasDesdeEventos(
   const punchMap = await fetchPunchMap(client, colaboradorId, fechaInicio, fechaFin);
   if (punchMap.size === 0) return;
 
-  for (const [fecha, punches] of punchMap) {
-    const { horasParejadas } = buildJornadas(punches, []);
+  for (const [fecha, entries] of punchMap) {
+    const { horasParejadas } = buildJornadas(entries, []);
 
     await client.query(
       `INSERT INTO liquidacion_jornada
@@ -342,7 +354,7 @@ export async function getLiquidacionDetail(
     ),
     semanaFechas.fechaInicio
       ? fetchPunchMap(client, colaboradorId, semanaFechas.fechaInicio, semanaFechas.fechaFin)
-      : Promise.resolve(new Map<string, Date[]>()),
+      : Promise.resolve(new Map<string, PunchEntry[]>()),
   ]);
 
   // Self-correct SIN_REVISION days whose stored horas_calculadas differ from paired-shift sum
@@ -350,9 +362,9 @@ export async function getLiquidacionDetail(
   for (const d of diasRes.rows) {
     if (d.estado_dia !== 'SIN_REVISION') continue;
     const fecha = (d.fecha as string).slice(0, 10);
-    const punches = punchMap.get(fecha) ?? [];
+    const entries = punchMap.get(fecha) ?? [];
     const excluded: string[] = Array.isArray(d.marcaciones_excluidas) ? d.marcaciones_excluidas : [];
-    const { horasParejadas } = buildJornadas(punches, excluded);
+    const { horasParejadas } = buildJornadas(entries, excluded);
     if (Math.abs(horasParejadas - Number(d.horas_calculadas)) > 0.009) {
       await client.query(
         `UPDATE liquidacion_jornada SET horas_calculadas = $1 WHERE id = $2`,
@@ -429,6 +441,7 @@ export async function getLiquidacionDetail(
         horasParejadas: number;
         marcacionSuelta: string | null;
         marcacionSueltaRaw: string | null;
+        marcacionSueltaEsSalida: boolean;
         tieneInconsistencia: boolean;
         marcacionesExcluidas: string[];
         excludedPunchDisplay: import('@/stores/liquidacion.store').ExcludedPunch[];
@@ -455,20 +468,22 @@ export async function getLiquidacionDetail(
           horasParejadas,
           marcacionSuelta: null,
           marcacionSueltaRaw: null,
+          marcacionSueltaEsSalida: false,
           tieneInconsistencia: false,
           marcacionesExcluidas: [],
           excludedPunchDisplay: [],
           marcacionesManuales: manuales,
         };
       } else {
-        const punches = punchMap.get(fecha) ?? [];
+        const entries = punchMap.get(fecha) ?? [];
         const excluded: string[] = Array.isArray(d.marcaciones_excluidas) ? d.marcaciones_excluidas : [];
-        const jd = buildJornadas(punches, excluded);
+        const jd = buildJornadas(entries, excluded);
         jornadaFields = {
           jornadas: jd.jornadas,
           horasParejadas: jd.horasParejadas,
           marcacionSuelta: jd.marcacionSuelta,
           marcacionSueltaRaw: jd.marcacionSueltaRaw,
+          marcacionSueltaEsSalida: jd.marcacionSueltaEsSalida,
           tieneInconsistencia: jd.tieneInconsistencia,
           marcacionesExcluidas: excluded,
           excludedPunchDisplay: jd.excludedPunchDisplay,
