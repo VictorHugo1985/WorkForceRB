@@ -104,7 +104,7 @@ export async function checkLiquidacionRole(
 
 export async function assertEditable(client: PoolClient, liquidacionId: string) {
   const r = await client.query(
-    `SELECT estado FROM liquidaciones_semanales WHERE id = $1`,
+    `SELECT estado FROM liquidacion_colaborador WHERE id = $1`,
     [liquidacionId],
   );
   if (r.rows.length === 0) throw { status: 404, message: 'Liquidación no encontrada' };
@@ -128,13 +128,13 @@ export async function findOrCreateBorrador(
   semanaId: string,
 ): Promise<string> {
   await client.query(
-    `INSERT INTO liquidaciones_semanales (id, colaborador_id, semana_id, estado)
+    `INSERT INTO liquidacion_colaborador (id, colaborador_id, semana_id, estado)
      VALUES (gen_random_uuid(), $1, $2, 'BORRADOR')
      ON CONFLICT (colaborador_id, semana_id) DO NOTHING`,
     [colaboradorId, semanaId],
   );
   const r = await client.query(
-    `SELECT id FROM liquidaciones_semanales WHERE colaborador_id = $1 AND semana_id = $2`,
+    `SELECT id FROM liquidacion_colaborador WHERE colaborador_id = $1 AND semana_id = $2`,
     [colaboradorId, semanaId],
   );
   return r.rows[0].id as string;
@@ -154,10 +154,22 @@ export function deriveEstadoDia(
   return 'SIN_REVISION';
 }
 
-export async function calcularTotales(client: PoolClient, liquidacionId: string) {
+// computeTotales: queries jornadas+bonos, computes values, returns them WITHOUT writing to DB
+export async function computeTotales(
+  client: PoolClient,
+  liquidacionId: string,
+): Promise<{
+  horasOrdinarias: number;
+  horasExtra: number;
+  valorHorasOrdinarias: number;
+  valorHorasExtra: number;
+  totalBonos: number;
+  totalDescuentos: number;
+  totalPago: number;
+}> {
   const liqRes = await client.query(
     `SELECT ls.id, ls.colaborador_id, ls.semana_id, c.tarifa_hora
-     FROM liquidaciones_semanales ls
+     FROM liquidacion_colaborador ls
      JOIN colaboradores c ON c.id = ls.colaborador_id
      WHERE ls.id = $1`,
     [liquidacionId],
@@ -168,7 +180,7 @@ export async function calcularTotales(client: PoolClient, liquidacionId: string)
 
   const diasRes = await client.query(
     `SELECT id, fecha, horas_calculadas, horas_ajustadas_supervisor, ajuste_tipo, ajuste_valor
-     FROM dias_liquidacion WHERE liquidacion_id = $1`,
+     FROM liquidacion_jornada WHERE liquidacion_id = $1`,
     [liquidacionId],
   );
 
@@ -201,19 +213,47 @@ export async function calcularTotales(client: PoolClient, liquidacionId: string)
     (bonosRes.rows.reduce((s: number, b: { monto: string }) => s + Number(b.monto), 0) + totalBonosDia) * 100,
   ) / 100;
   const totalPago = Math.max(0, Math.round((valorHorasOrdinarias + totalBonos - totalDescuentos) * 100) / 100);
-  const calculadoEn = new Date();
 
+  return {
+    horasOrdinarias,
+    horasExtra: 0,
+    valorHorasOrdinarias,
+    valorHorasExtra: 0,
+    totalBonos,
+    totalDescuentos,
+    totalPago,
+  };
+}
+
+// guardarSnapshot: writes computed totals to snapshot_ columns (used on APROBAR)
+export async function guardarSnapshot(
+  client: PoolClient,
+  liquidacionId: string,
+  totales: {
+    horasOrdinarias: number;
+    horasExtra: number;
+    valorHorasOrdinarias: number;
+    valorHorasExtra: number;
+    totalBonos: number;
+    totalDescuentos: number;
+    totalPago: number;
+  },
+): Promise<void> {
   await client.query(
-    `UPDATE liquidaciones_semanales SET
-       horas_ordinarias = $1, horas_extra = 0,
-       valor_horas_ordinarias = $2, valor_horas_extra = 0,
-       total_bonos = $3, total_descuentos = $4, total_pago = $5, calculado_en = $6
-     WHERE id = $7`,
-    [horasOrdinarias, valorHorasOrdinarias, totalBonos, totalDescuentos, totalPago, calculadoEn, liquidacionId],
+    `UPDATE liquidacion_colaborador SET
+       snapshot_horas_ordinarias = $1, snapshot_horas_extra = 0,
+       snapshot_valor_horas_ordinarias = $2, snapshot_valor_horas_extra = 0,
+       snapshot_total_bonos = $3, snapshot_total_descuentos = $4, snapshot_total_pago = $5
+     WHERE id = $6`,
+    [
+      totales.horasOrdinarias,
+      totales.valorHorasOrdinarias,
+      totales.totalBonos,
+      totales.totalDescuentos,
+      totales.totalPago,
+      liquidacionId,
+    ],
   );
-
-  return { horasOrdinarias, horasExtra: 0, valorHorasOrdinarias, valorHorasExtra: 0,
-    totalBonos, totalDescuentos, totalPago, calculadoEn };
 }
 
 // ─── Biometric hours calculator (single collaborator) ────────────────────────
@@ -232,15 +272,14 @@ async function calcularDiasDesdeEventos(
     const { horasParejadas } = buildJornadas(punches, []);
 
     await client.query(
-      `INSERT INTO dias_liquidacion
+      `INSERT INTO liquidacion_jornada
          (id, liquidacion_id, fecha, horas_calculadas, estado_dia)
        VALUES (gen_random_uuid(), $1, $2, $3, 'SIN_REVISION')
        ON CONFLICT (liquidacion_id, fecha) DO NOTHING`,
       [liquidacionId, fecha, horasParejadas],
     );
   }
-
-  try { await calcularTotales(client, liquidacionId); } catch { /* ignore */ }
+  // No totals computed during initial borrador creation
 }
 
 // ─── Detail loader ────────────────────────────────────────────────────────────
@@ -256,13 +295,13 @@ export async function getLiquidacionDetail(
   const [liqRes, semanaRes] = await Promise.all([
     client.query(
       `SELECT id, colaborador_id, semana_id, estado,
-              horas_ordinarias, horas_extra, valor_horas_ordinarias, valor_horas_extra,
-              total_bonos, total_descuentos, total_pago, calculado_en, aprobado_por, aprobada_en
-       FROM liquidaciones_semanales WHERE colaborador_id = $1 AND semana_id = $2`,
+              snapshot_horas_ordinarias, snapshot_horas_extra, snapshot_valor_horas_ordinarias, snapshot_valor_horas_extra,
+              snapshot_total_bonos, snapshot_total_descuentos, snapshot_total_pago, aprobado_por, aprobada_en
+       FROM liquidacion_colaborador WHERE colaborador_id = $1 AND semana_id = $2`,
       [colaboradorId, semanaId],
     ),
     client.query(
-      `SELECT fecha_inicio::text, fecha_fin::text FROM semanas_laborales WHERE id = $1`,
+      `SELECT fecha_inicio::text, fecha_fin::text FROM liquidacion_periodo WHERE id = $1`,
       [semanaId],
     ),
   ]);
@@ -277,7 +316,7 @@ export async function getLiquidacionDetail(
 
   // If no dias yet, calculate them from biometric events
   const diasCount = await client.query(
-    `SELECT COUNT(*) AS n FROM dias_liquidacion WHERE liquidacion_id = $1`,
+    `SELECT COUNT(*) AS n FROM liquidacion_jornada WHERE liquidacion_id = $1`,
     [liq.id],
   );
   if (Number(diasCount.rows[0].n) === 0 && semanaFechas.fechaInicio) {
@@ -293,7 +332,7 @@ export async function getLiquidacionDetail(
       `SELECT id, fecha::text, horas_calculadas, horas_ajustadas_supervisor,
               estado_dia, ajuste_tipo, ajuste_valor,
               marcaciones_excluidas, marcaciones_manuales
-       FROM dias_liquidacion WHERE liquidacion_id = $1 ORDER BY fecha`,
+       FROM liquidacion_jornada WHERE liquidacion_id = $1 ORDER BY fecha`,
       [liq.id],
     ),
     client.query(
@@ -316,39 +355,69 @@ export async function getLiquidacionDetail(
     const { horasParejadas } = buildJornadas(punches, excluded);
     if (Math.abs(horasParejadas - Number(d.horas_calculadas)) > 0.009) {
       await client.query(
-        `UPDATE dias_liquidacion SET horas_calculadas = $1 WHERE id = $2`,
+        `UPDATE liquidacion_jornada SET horas_calculadas = $1 WHERE id = $2`,
         [horasParejadas, d.id],
       );
       d.horas_calculadas = horasParejadas;
       needsTotalesRecalc = true;
     }
   }
-  if (needsTotalesRecalc) {
-    try { await calcularTotales(client, liq.id as string); } catch { /* ignore */ }
-  }
 
-  // Re-read updated totals after possible recalculation
-  const liqUpdated = await client.query(
-    `SELECT horas_ordinarias, horas_extra, valor_horas_ordinarias, valor_horas_extra,
-            total_bonos, total_descuentos, total_pago, calculado_en
-     FROM liquidaciones_semanales WHERE id = $1`,
-    [liq.id],
-  );
-  const totals = liqUpdated.rows[0] ?? liq;
+  // Determine totals based on estado
+  let totalsData: {
+    horasOrdinarias: number;
+    horasExtra: number;
+    valorHorasOrdinarias: number;
+    valorHorasExtra: number;
+    totalBonos: number;
+    totalDescuentos: number;
+    totalPago: number;
+  };
+
+  if (liq.estado === 'APROBADO' || liq.estado === 'PAGADO') {
+    // Read from snapshot_ columns (frozen record)
+    totalsData = {
+      horasOrdinarias: Number(liq.snapshot_horas_ordinarias),
+      horasExtra: Number(liq.snapshot_horas_extra),
+      valorHorasOrdinarias: Number(liq.snapshot_valor_horas_ordinarias),
+      valorHorasExtra: Number(liq.snapshot_valor_horas_extra),
+      totalBonos: Number(liq.snapshot_total_bonos),
+      totalDescuentos: Number(liq.snapshot_total_descuentos),
+      totalPago: Number(liq.snapshot_total_pago),
+    };
+  } else {
+    // BORRADOR: compute totals at runtime without writing to DB
+    try {
+      totalsData = await computeTotales(client, liq.id as string);
+      if (needsTotalesRecalc) {
+        // Re-compute after corrections (already done above)
+        totalsData = await computeTotales(client, liq.id as string);
+      }
+    } catch {
+      totalsData = {
+        horasOrdinarias: 0,
+        horasExtra: 0,
+        valorHorasOrdinarias: 0,
+        valorHorasExtra: 0,
+        totalBonos: 0,
+        totalDescuentos: 0,
+        totalPago: 0,
+      };
+    }
+  }
 
   const data: LiquidacionData = {
     id: liq.id,
     colaboradorId: liq.colaborador_id,
     semanaId: liq.semana_id,
     estado: liq.estado,
-    horasOrdinarias: Number(totals.horas_ordinarias),
-    horasExtra: Number(totals.horas_extra),
-    valorHorasOrdinarias: Number(totals.valor_horas_ordinarias),
-    valorHorasExtra: Number(totals.valor_horas_extra),
-    totalBonos: Number(totals.total_bonos),
-    totalDescuentos: Number(totals.total_descuentos),
-    totalPago: Number(totals.total_pago),
-    calculadoEn: totals.calculado_en,
+    horasOrdinarias: totalsData.horasOrdinarias,
+    horasExtra: totalsData.horasExtra,
+    valorHorasOrdinarias: totalsData.valorHorasOrdinarias,
+    valorHorasExtra: totalsData.valorHorasExtra,
+    totalBonos: totalsData.totalBonos,
+    totalDescuentos: totalsData.totalDescuentos,
+    totalPago: totalsData.totalPago,
     aprobadoPor: liq.aprobado_por ?? null,
     aprobadaEn: liq.aprobada_en ?? null,
     dias: diasRes.rows.map((d) => {
@@ -456,7 +525,7 @@ export async function generarBorradoresSemana(
     .map((_, i) => `(gen_random_uuid(), $${i * 2 + 1}, $${i * 2 + 2}, 'BORRADOR')`)
     .join(', ');
   await client.query(
-    `INSERT INTO liquidaciones_semanales (id, colaborador_id, semana_id, estado)
+    `INSERT INTO liquidacion_colaborador (id, colaborador_id, semana_id, estado)
      VALUES ${insertVals}
      ON CONFLICT (colaborador_id, semana_id) DO NOTHING`,
     colaboradorIds.flatMap((id) => [id, semanaId]),
@@ -464,7 +533,7 @@ export async function generarBorradoresSemana(
 
   // Fetch resulting liquidacion IDs
   const liqRes = await client.query(
-    `SELECT id, colaborador_id FROM liquidaciones_semanales WHERE semana_id = $1`,
+    `SELECT id, colaborador_id FROM liquidacion_colaborador WHERE semana_id = $1`,
     [semanaId],
   );
   const liqByColab = new Map<string, string>(
@@ -485,7 +554,7 @@ export async function generarBorradoresSemana(
     [fechaInicio, fechaFin],
   );
 
-  // Insert one dia_liquidacion per (colaborador, date) with paired-shift hours
+  // Insert one liquidacion_jornada per (colaborador, date) with paired-shift hours
   for (const ev of eventosRes.rows) {
     const liquidacionId = liqByColab.get(ev.colaborador_id as string);
     if (!liquidacionId) continue;
@@ -494,16 +563,12 @@ export async function generarBorradoresSemana(
     const fecha: string = (ev.fecha as Date).toISOString().slice(0, 10);
 
     await client.query(
-      `INSERT INTO dias_liquidacion
+      `INSERT INTO liquidacion_jornada
          (id, liquidacion_id, fecha, horas_calculadas, estado_dia)
        VALUES (gen_random_uuid(), $1, $2, $3, 'SIN_REVISION')
        ON CONFLICT (liquidacion_id, fecha) DO NOTHING`,
       [liquidacionId, ev.fecha, horasParejadas],
     );
   }
-
-  // Recalculate totals for each liquidacion (ignore individual failures)
-  for (const liquidacionId of liqByColab.values()) {
-    try { await calcularTotales(client, liquidacionId); } catch { /* continue */ }
-  }
+  // No totals computed during borrador creation — computed at runtime on read
 }

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { pool } from '@/lib/auth-server';
-import { checkLiquidacionRole, assertEditable, assertScope, deriveEstadoDia, calcularTotales, buildJornadas, fetchPunchMap } from '@/lib/liquidacion-db';
+import { checkLiquidacionRole, assertEditable, assertScope, deriveEstadoDia, computeTotales, buildJornadas, fetchPunchMap } from '@/lib/liquidacion-db';
 
 const jornadaManualSchema = z.object({
   entrada: z.string(),
@@ -57,8 +57,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   try {
     const diaRes = await client.query(
       `SELECT d.*, ls.id AS liquidacion_id, ls.colaborador_id
-       FROM dias_liquidacion d
-       JOIN liquidaciones_semanales ls ON ls.id = d.liquidacion_id
+       FROM liquidacion_jornada d
+       JOIN liquidacion_colaborador ls ON ls.id = d.liquidacion_id
        WHERE d.id = $1`,
       [id],
     );
@@ -111,11 +111,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     sets.push(`estado_dia = ${push(estadoDia)}`);
 
     const updRes = await client.query(
-      `UPDATE dias_liquidacion SET ${sets.join(', ')} WHERE id = $1 RETURNING *`,
+      `UPDATE liquidacion_jornada SET ${sets.join(', ')} WHERE id = $1 RETURNING *`,
       queryParams,
     );
 
-    const totales = await calcularTotales(client, dia.liquidacion_id);
+    const totales = await computeTotales(client, dia.liquidacion_id);
 
     const updDia = updRes.rows[0];
     const fechaStr = (updDia.fecha as Date).toISOString().slice(0, 10);
@@ -148,8 +148,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     } else {
       const semanaRes = await client.query(
         `SELECT sl.fecha_inicio::text, sl.fecha_fin::text
-         FROM liquidaciones_semanales ls
-         JOIN semanas_laborales sl ON sl.id = ls.semana_id
+         FROM liquidacion_colaborador ls
+         JOIN liquidacion_periodo sl ON sl.id = ls.semana_id
          WHERE ls.id = $1`,
         [dia.liquidacion_id],
       );

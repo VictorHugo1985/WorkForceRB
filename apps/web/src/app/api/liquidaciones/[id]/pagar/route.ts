@@ -12,7 +12,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const client = await pool.connect();
   try {
     const liqRes = await client.query(
-      `SELECT id, colaborador_id, estado FROM liquidaciones_semanales WHERE id = $1`,
+      `SELECT id, colaborador_id, estado FROM liquidacion_colaborador WHERE id = $1`,
       [id],
     );
     if (liqRes.rows.length === 0) {
@@ -30,7 +30,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     await assertScope(client, userId, roles, liq.colaborador_id);
 
     await client.query(
-      `UPDATE liquidaciones_semanales SET estado = 'PAGADO', pagado_por = $1, pagada_en = NOW() WHERE id = $2`,
+      `UPDATE liquidacion_colaborador SET estado = 'PAGADO', pagado_por = $1, pagada_en = NOW() WHERE id = $2`,
       [userId, id],
     );
 

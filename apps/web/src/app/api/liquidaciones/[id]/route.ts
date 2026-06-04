@@ -11,7 +11,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const client = await pool.connect();
   try {
     const liqRes = await client.query(
-      `SELECT colaborador_id, semana_id FROM liquidaciones_semanales WHERE id = $1`,
+      `SELECT colaborador_id, semana_id FROM liquidacion_colaborador WHERE id = $1`,
       [id],
     );
     if (liqRes.rows.length === 0) {

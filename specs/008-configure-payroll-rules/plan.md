@@ -1,292 +1,113 @@
-# Implementation Plan: 008 — Configuración de Tarifa y Plantillas de Horario
+# Implementation Plan: [FEATURE]
 
-**Branch**: `008-configure-payroll-rules` | **Date**: 2026-06-01 | **Spec**: [spec.md](spec.md)
+**Branch**: `[###-feature-name]` | **Date**: [DATE] | **Spec**: [link]
 
-**Input**: Feature specification from `specs/008-configure-payroll-rules/spec.md`
+**Input**: Feature specification from `/specs/[###-feature-name]/spec.md`
+
+**Note**: This template is filled in by the `/speckit-plan` command. See `.specify/templates/plan-template.md` for the execution workflow.
 
 ## Summary
 
-Habilitar al administrador para (1) actualizar la tarifa horaria (Bs./h) directamente en el perfil del colaborador con log de auditoría, y (2) crear/gestionar plantillas de horario (nombre + días laborables + hora de entrada) para la detección automática de atrasos en liquidaciones. La tarifa usa la tabla `configuraciones_reglas` existente con effective dating. Las plantillas son una nueva tabla `plantillas_horario` con FK directa en `colaboradores`.
+[Extract from feature spec: primary requirement + technical approach from research]
 
 ## Technical Context
 
-**Language/Version**: TypeScript / Node.js 20 (Next.js 14 App Router)
+<!--
+  ACTION REQUIRED: Replace the content in this section with the technical details
+  for the project. The structure here is presented in advisory capacity to guide
+  the iteration process.
+-->
 
-**Primary Dependencies**: 
-- Next.js 14 (App Router, Route Handlers)
-- MUI v5 (Material UI) + Emotion
-- React Hook Form + Zod
-- pg (node-postgres pool) — conexión directa a PostgreSQL
-- Prisma (solo para schema reference; web app usa pg pool directo)
+**Language/Version**: [e.g., Python 3.11, Swift 5.9, Rust 1.75 or NEEDS CLARIFICATION]
 
-**Storage**: PostgreSQL via Supabase (Session Pooler)
+**Primary Dependencies**: [e.g., FastAPI, UIKit, LLVM or NEEDS CLARIFICATION]
 
-**Testing**: Manual (no test suite en web layer)
+**Storage**: [if applicable, e.g., PostgreSQL, CoreData, files or N/A]
 
-**Target Platform**: Web (Next.js, Vercel/Supabase)
+**Testing**: [e.g., pytest, XCTest, cargo test or NEEDS CLARIFICATION]
 
-**Project Type**: Web application — monorepo (`apps/web` es el scope de esta feature)
+**Target Platform**: [e.g., Linux server, iOS 15+, WASM or NEEDS CLARIFICATION]
 
-**Performance Goals**: Respuesta de endpoints < 500ms. Lista de colaboradores con tarifa usando subquery lateral.
+**Project Type**: [e.g., library/cli/web-service/mobile-app/compiler/desktop-app or NEEDS CLARIFICATION]
 
-**Constraints**: 
-- Solo ADMIN role puede acceder a estos endpoints
-- Tarifa `> 0`; días laborables array no vacío; hora_entrada válida HH:MM
-- No eliminar plantilla si tiene colaboradores asignados
+**Performance Goals**: [domain-specific, e.g., 1000 req/s, 10k lines/sec, 60 fps or NEEDS CLARIFICATION]
 
-**Scale/Scope**: ~30–100 colaboradores, ~5–10 plantillas de horario
+**Constraints**: [domain-specific, e.g., <200ms p95, <100MB memory, offline-capable or NEEDS CLARIFICATION]
+
+**Scale/Scope**: [domain-specific, e.g., 10k users, 1M LOC, 50 screens or NEEDS CLARIFICATION]
 
 ## Constitution Check
 
-| Principio | Evaluación | Notas |
-|-----------|-----------|-------|
-| I. Arquitectura basada en datos | ✅ PASS | Migración SQL define schema antes de implementar |
-| II. Código limpio y modular | ✅ PASS | Route handlers independientes, componentes con SRP |
-| III. Inmutabilidad biométrica | ✅ PASS | No toca `eventos_biometricos` |
-| IV. Cálculo determinístico y auditable | ✅ PASS | tarifa usa effective dating en `configuraciones_reglas`; audit log obligatorio |
-| V. Reglas de negocio configurables | ⚠️ JUSTIFIED | Plantilla sin effective dating — excepción documentada en research.md §Decision 2 |
-| VI. Ciclo semanal | N/A | No afecta ciclo de pago |
-| VII. Integración biométrica | N/A | No afecta integración |
-| VIII. RBAC | ✅ PASS | `checkAdminRole` en todos los endpoints nuevos |
-| IX. Trazabilidad de ajustes | ✅ PASS | FR-010: audit log en cada cambio de tarifa y plantilla |
-| X. Disponibilidad tiempo real | N/A | No afecta vistas en tiempo real |
-| XI. Seguridad y protección | ✅ PASS | Auth obligatoria, validación en backend |
+*GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-**Violations**: Ninguna. Principio V tiene excepción justificada (plantilla sin effective dating porque atraso_detectado ya se almacena en dias_liquidacion al calcular).
+[Gates determined based on constitution file]
 
 ## Project Structure
 
 ### Documentation (this feature)
 
 ```text
-specs/008-configure-payroll-rules/
-├── plan.md              ← este archivo
-├── research.md          ✅ creado
-├── data-model.md        ✅ creado
-├── contracts/
-│   └── api.md           ✅ creado
-└── tasks.md             (pendiente — /speckit-tasks)
+specs/[###-feature]/
+├── plan.md              # This file (/speckit-plan command output)
+├── research.md          # Phase 0 output (/speckit-plan command)
+├── data-model.md        # Phase 1 output (/speckit-plan command)
+├── quickstart.md        # Phase 1 output (/speckit-plan command)
+├── contracts/           # Phase 1 output (/speckit-plan command)
+└── tasks.md             # Phase 2 output (/speckit-tasks command - NOT created by /speckit-plan)
 ```
 
 ### Source Code (repository root)
+<!--
+  ACTION REQUIRED: Replace the placeholder tree below with the concrete layout
+  for this feature. Delete unused options and expand the chosen structure with
+  real paths (e.g., apps/admin, packages/something). The delivered plan must
+  not include Option labels.
+-->
 
 ```text
-apps/api/prisma/migrations/
-└── 20260601_008_schedule_templates/
-    └── migration.sql                          (NEW)
-
-packages/database/prisma/schema.prisma         (MOD — PlantillaHorario model, Colaborador.plantilla_horario_id)
-apps/api/prisma/schema.prisma                  (MOD — mismo cambio, spec mirror)
-
-apps/web/src/
-├── app/
-│   ├── (app)/
-│   │   └── horarios/
-│   │       └── page.tsx                       (NEW — Server Component, lista plantillas)
-│   └── api/
-│       ├── colaboradores/
-│       │   ├── route.ts                       (MOD — agregar tarifa_hora_valor al GET list)
-│       │   └── [id]/
-│       │       ├── route.ts                   (MOD — GET: agregar plantilla_horario; PATCH: agregar plantilla_horario_id)
-│       │       └── tarifa/
-│       │           └── route.ts               (NEW — PATCH: actualizar tarifa con effective dating)
-│       └── plantillas-horario/
-│           ├── route.ts                       (NEW — GET list, POST create)
-│           └── [id]/
-│               └── route.ts                   (NEW — GET detail, PATCH update, DELETE)
-├── components/
-│   ├── colaboradores/
-│   │   └── ColaboradorPerfil.tsx              (MOD — añadir TarifaEditDialog inline + sección plantilla)
-│   ├── horarios/
-│   │   ├── PlantillasHorarioList.tsx          (NEW — tabla con Create/Edit/Delete)
-│   │   └── PlantillaHorarioDialog.tsx         (NEW — dialog create/edit con form validado)
-│   └── layout/
-│       └── AppSidebar.tsx                     (MOD — añadir icono para /horarios)
+# [REMOVE IF UNUSED] Option 1: Single project (DEFAULT)
+src/
+├── models/
+├── services/
+├── cli/
 └── lib/
-    ├── liquidacion-db.ts                      (MOD — atraso_detectado desde plantilla)
-    └── nav-config.ts                          (MOD — añadir /horarios a NAV_ITEMS y ROUTE_ROLES)
+
+tests/
+├── contract/
+├── integration/
+└── unit/
+
+# [REMOVE IF UNUSED] Option 2: Web application (when "frontend" + "backend" detected)
+backend/
+├── src/
+│   ├── models/
+│   ├── services/
+│   └── api/
+└── tests/
+
+frontend/
+├── src/
+│   ├── components/
+│   ├── pages/
+│   └── services/
+└── tests/
+
+# [REMOVE IF UNUSED] Option 3: Mobile + API (when "iOS/Android" detected)
+api/
+└── [same as backend above]
+
+ios/ or android/
+└── [platform-specific structure: feature modules, UI flows, platform tests]
 ```
 
-## Phase 0: Research ✅ COMPLETE
-
-Ver `research.md` para todas las decisiones. Resumen de unknowns resueltos:
-
-1. ✅ Tarifa usa `configuraciones_reglas` existente — no nueva tabla
-2. ✅ Plantilla = nueva tabla `plantillas_horario` con FK directa en `colaboradores`
-3. ✅ Días laborables = `TEXT[]` PostgreSQL
-4. ✅ `atraso_detectado` calculado en `liquidacion-db.ts` al crear días
-5. ✅ UI: `/horarios` nueva página; tarifa en perfil con Dialog
-
-## Phase 1: Design & Contracts ✅ COMPLETE
-
-Ver `data-model.md` y `contracts/api.md`.
-
-## Implementation Notes
-
-### Tarea crítica: Migración DB
-
-Debe ejecutarse en Supabase antes de cualquier otra tarea. Usa Session Pooler `aws-1-us-east-1.pooler.supabase.com:5432` (el `aws-0` falla DNS).
-
-```sql
--- Crear tabla plantillas_horario
-CREATE TABLE plantillas_horario (
-  id                    UUID        NOT NULL DEFAULT gen_random_uuid(),
-  nombre                TEXT        NOT NULL,
-  dias_laborables       TEXT[]      NOT NULL,
-  hora_entrada_esperada TIME        NOT NULL,
-  creado_por            UUID        NOT NULL REFERENCES usuarios(id),
-  creado_en             TIMESTAMPTZ NOT NULL DEFAULT now(),
-  actualizado_en        TIMESTAMPTZ NOT NULL DEFAULT now(),
-  CONSTRAINT plantillas_horario_pkey PRIMARY KEY (id),
-  CONSTRAINT plantillas_horario_nombre_key UNIQUE (nombre)
-);
-
--- Agregar FK en colaboradores
-ALTER TABLE colaboradores 
-  ADD COLUMN plantilla_horario_id UUID REFERENCES plantillas_horario(id) ON DELETE SET NULL;
-```
-
-### Lógica de atraso_detectado
-
-En `liquidacion-db.ts`, la función que inserta días (`crearDiasParaLiquidacion` / `findOrCreateBorrador`) debe:
-
-```typescript
-// 1. Obtener plantilla del colaborador (una vez, fuera del loop de días)
-const plantillaRes = await client.query(
-  `SELECT ph.dias_laborables, ph.hora_entrada_esperada::text
-   FROM colaboradores c
-   LEFT JOIN plantillas_horario ph ON ph.id = c.plantilla_horario_id
-   WHERE c.id = $1`,
-  [colaboradorId]
-);
-const plantilla = plantillaRes.rows[0];
-
-// 2. Para cada día en el punch map:
-for (const [fecha, punches] of punchMap) {
-  let atrasoDetectado = false;
-  
-  if (plantilla?.dias_laborables && plantilla?.hora_entrada_esperada) {
-    const diaSemana = getDiaSemana(fecha); // 'LUNES', 'MARTES', etc.
-    if (plantilla.dias_laborables.includes(diaSemana)) {
-      const primeraEntrada = punches
-        .filter(p => p.tipo === 'ENTRADA')
-        .sort((a, b) => a.recibido_en < b.recibido_en ? -1 : 1)[0];
-      if (primeraEntrada) {
-        const horaEntrada = primeraEntrada.recibido_en.slice(11, 16); // 'HH:MM'
-        atrasoDetectado = horaEntrada > plantilla.hora_entrada_esperada.slice(0, 5);
-      }
-    }
-  }
-  
-  await client.query(
-    `INSERT INTO dias_liquidacion (id, liquidacion_id, fecha, horas_calculadas, atraso_detectado, estado_dia)
-     VALUES (gen_random_uuid(), $1, $2, $3, $4, 'SIN_REVISION')
-     ON CONFLICT (liquidacion_id, fecha) DO UPDATE SET atraso_detectado = EXCLUDED.atraso_detectado
-     WHERE dias_liquidacion.estado_dia = 'SIN_REVISION'`,
-    [liquidacionId, fecha, horasParejadas, atrasoDetectado]
-  );
-}
-```
-
-**Función helper** (agregar en `liquidacion-db.ts`):
-```typescript
-function getDiaSemana(fechaISO: string): string {
-  const dias = ['DOMINGO', 'LUNES', 'MARTES', 'MIERCOLES', 'JUEVES', 'VIERNES', 'SABADO'];
-  const d = new Date(fechaISO + 'T12:00:00Z'); // UTC noon to avoid DST issues
-  return dias[d.getUTCDay()];
-}
-```
-
-### Patrón de actualización de tarifa
-
-En `PATCH /api/colaboradores/[id]/tarifa/route.ts`:
-
-```typescript
-// 1. Fetch existing tarifa for audit log
-const existingRes = await client.query(
-  `SELECT id, valor FROM configuraciones_reglas 
-   WHERE colaborador_id = $1 AND tipo = 'TARIFA_HORA' AND vigente_hasta IS NULL
-   ORDER BY vigente_desde DESC LIMIT 1`,
-  [colaboradorId]
-);
-const existing = existingRes.rows[0] ?? null;
-
-// 2. Close existing record
-if (existing) {
-  await client.query(
-    `UPDATE configuraciones_reglas SET vigente_hasta = CURRENT_DATE - 1
-     WHERE id = $1`,
-    [existing.id]
-  );
-}
-
-// 3. Insert new record
-const insertRes = await client.query(
-  `INSERT INTO configuraciones_reglas 
-   (tipo, clave, valor, unidad, aplica_a, colaborador_id, vigente_desde, creado_por)
-   VALUES ('TARIFA_HORA', 'Tarifa hora ordinaria', $1, 'Bs.', 'COLABORADOR', $2, CURRENT_DATE, $3)
-   RETURNING id, valor, unidad, vigente_desde::text`,
-  [valor, colaboradorId, userId]
-);
-
-// 4. Audit log
-await client.query(
-  `INSERT INTO registros_auditoria 
-   (accion, entidad_tipo, entidad_id, usuario_id, descripcion, ip_origen, datos_anteriores, datos_nuevos)
-   VALUES ('TARIFA_HORA_ACTUALIZADA', 'Colaborador', $1, $2, $3, $4, $5, $6)`,
-  [colaboradorId, userId, `Actualización tarifa: ${existing?.valor ?? 'N/A'} → ${valor} Bs./h`,
-   ip, JSON.stringify({ valor: existing?.valor ?? null }), JSON.stringify({ valor })]
-);
-```
-
-### ColaboradorPerfil — TarifaEditDialog
-
-Añadir en la sección "Tarifa salarial" (línea ~394) un botón "Editar" que abre un Dialog con:
-- Campo `valor` (number, > 0) pre-rellenado con `tarifa_vigente.valor`
-- `POST PATCH /api/colaboradores/${perfil.id}/tarifa`
-- Al éxito: actualiza `tarifa_vigente` local en el estado del componente
-
-### ColaboradorPerfil — Sección Plantilla Horario
-
-Añadir sección "Plantilla de horario" con:
-- Selector de plantilla (fetches `/api/plantillas-horario` on open)
-- `PATCH /api/colaboradores/${perfil.id}` con `plantilla_horario_id`
-- Muestra nombre + días + hora_entrada de la plantilla activa (o "Sin plantilla")
-
-### PlantillaHorarioDialog
-
-Form fields:
-1. `nombre` — TextField
-2. `dias_laborables` — CheckboxGroup (LUNES–DOMINGO, mínimo 1 seleccionado)
-3. `hora_entrada_esperada` — TextField type="time"
-
-Validaciones Zod en frontend:
-```typescript
-const PlantillaSchema = z.object({
-  nombre: z.string().min(1, 'Requerido'),
-  dias_laborables: z.array(z.string()).min(1, 'Seleccione al menos un día'),
-  hora_entrada_esperada: z.string().regex(/^\d{2}:\d{2}$/, 'Formato HH:MM requerido'),
-});
-```
-
-### nav-config.ts
-
-Agregar entrada con rol ADMINISTRADOR:
-```typescript
-{ label: 'Horarios', href: '/horarios', roles: ['ADMINISTRADOR'] },
-```
-
-### AppSidebar.tsx
-
-Agregar icono para `/horarios` en `NAV_ICONS`:
-```typescript
-import ScheduleIcon from '@mui/icons-material/Schedule';
-// ...
-'/horarios': <ScheduleIcon fontSize="small" />,
-```
+**Structure Decision**: [Document the selected structure and reference the real
+directories captured above]
 
 ## Complexity Tracking
 
-| Item | Justificación |
-|------|---------------|
-| Plantilla sin effective dating | Excepción justificada: atraso_detectado ya almacenado en dias_liquidacion; no hay cálculo retroactivo que requiera saber la plantilla histórica |
+> **Fill ONLY if Constitution Check has violations that must be justified**
+
+| Violation | Why Needed | Simpler Alternative Rejected Because |
+|-----------|------------|-------------------------------------|
+| [e.g., 4th project] | [current need] | [why 3 projects insufficient] |
+| [e.g., Repository pattern] | [specific problem] | [why direct DB access insufficient] |

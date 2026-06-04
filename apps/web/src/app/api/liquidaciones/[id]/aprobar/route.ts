@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { pool } from '@/lib/auth-server';
-import { checkLiquidacionRole, assertScope, calcularTotales } from '@/lib/liquidacion-db';
+import { checkLiquidacionRole, assertScope, computeTotales, guardarSnapshot } from '@/lib/liquidacion-db';
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const auth = await checkLiquidacionRole(req);
@@ -12,7 +12,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const client = await pool.connect();
   try {
     const liqRes = await client.query(
-      `SELECT id, colaborador_id, estado FROM liquidaciones_semanales WHERE id = $1`,
+      `SELECT id, colaborador_id, estado FROM liquidacion_colaborador WHERE id = $1`,
       [id],
     );
     if (liqRes.rows.length === 0) {
@@ -26,18 +26,20 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     await assertScope(client, userId, roles, liq.colaborador_id);
 
-    const totales = await calcularTotales(client, id);
+    // Compute totals and write snapshot_ columns (freeze the record)
+    const totales = await computeTotales(client, id);
+    await guardarSnapshot(client, id, totales);
 
     await client.query(
-      `UPDATE liquidaciones_semanales SET estado = 'APROBADO', aprobado_por = $1, aprobada_en = NOW() WHERE id = $2`,
+      `UPDATE liquidacion_colaborador SET estado = 'APROBADO', aprobado_por = $1, aprobada_en = NOW() WHERE id = $2`,
       [userId, id],
     );
 
     const updRes = await client.query(
-      `SELECT id, colaborador_id, semana_id, estado, horas_ordinarias, horas_extra,
-              valor_horas_ordinarias, valor_horas_extra, total_bonos, total_descuentos,
-              total_pago, calculado_en, aprobado_por, aprobada_en
-       FROM liquidaciones_semanales WHERE id = $1`,
+      `SELECT id, colaborador_id, semana_id, estado, snapshot_horas_ordinarias, snapshot_horas_extra,
+              snapshot_valor_horas_ordinarias, snapshot_valor_horas_extra, snapshot_total_bonos, snapshot_total_descuentos,
+              snapshot_total_pago, aprobado_por, aprobada_en
+       FROM liquidacion_colaborador WHERE id = $1`,
       [id],
     );
 

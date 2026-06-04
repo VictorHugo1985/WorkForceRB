@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { pool } from '@/lib/auth-server';
-import { checkLiquidacionRole, assertEditable, assertScope, calcularTotales } from '@/lib/liquidacion-db';
+import { checkLiquidacionRole, assertEditable, assertScope, computeTotales } from '@/lib/liquidacion-db';
 
 const PatchBonoSchema = z.object({
   monto: z.number().positive().optional(),
@@ -27,7 +27,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   try {
     const bonoRes = await client.query(
       `SELECT b.*, ls.id AS liquidacion_id FROM bonos b
-       LEFT JOIN liquidaciones_semanales ls ON ls.colaborador_id = b.colaborador_id AND ls.semana_id = b.semana_id
+       LEFT JOIN liquidacion_colaborador ls ON ls.colaborador_id = b.colaborador_id AND ls.semana_id = b.semana_id
        WHERE b.id = $1`,
       [id],
     );
@@ -57,7 +57,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
     let totales = null;
     if (bono.liquidacion_id) {
-      totales = await calcularTotales(client, bono.liquidacion_id);
+      totales = await computeTotales(client, bono.liquidacion_id);
     }
 
     return NextResponse.json({ bono: updRes.rows[0], totales });
@@ -81,7 +81,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   try {
     const bonoRes = await client.query(
       `SELECT b.*, ls.id AS liquidacion_id FROM bonos b
-       LEFT JOIN liquidaciones_semanales ls ON ls.colaborador_id = b.colaborador_id AND ls.semana_id = b.semana_id
+       LEFT JOIN liquidacion_colaborador ls ON ls.colaborador_id = b.colaborador_id AND ls.semana_id = b.semana_id
        WHERE b.id = $1`,
       [id],
     );
@@ -97,7 +97,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
 
     let totales = null;
     if (bono.liquidacion_id) {
-      totales = await calcularTotales(client, bono.liquidacion_id);
+      totales = await computeTotales(client, bono.liquidacion_id);
     }
 
     return NextResponse.json({ totales });

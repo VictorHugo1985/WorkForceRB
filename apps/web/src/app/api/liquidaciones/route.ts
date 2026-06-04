@@ -19,9 +19,9 @@ export async function GET(req: NextRequest) {
 
     const liqRes = await client.query(
       `SELECT id, colaborador_id, semana_id, estado,
-              horas_ordinarias, horas_extra, valor_horas_ordinarias, valor_horas_extra,
-              total_bonos, total_descuentos, total_pago, calculado_en, aprobado_por, aprobada_en
-       FROM liquidaciones_semanales WHERE colaborador_id = $1 AND semana_id = $2`,
+              snapshot_horas_ordinarias, snapshot_horas_extra, snapshot_valor_horas_ordinarias, snapshot_valor_horas_extra,
+              snapshot_total_bonos, snapshot_total_descuentos, snapshot_total_pago, aprobado_por, aprobada_en
+       FROM liquidacion_colaborador WHERE colaborador_id = $1 AND semana_id = $2`,
       [colaboradorId, semanaId],
     );
     if (liqRes.rows.length === 0) {
@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
       client.query(
         `SELECT id, fecha, horas_calculadas, horas_ajustadas_supervisor,
                 estado_dia, ajuste_tipo, ajuste_valor
-         FROM dias_liquidacion WHERE liquidacion_id = $1 ORDER BY fecha`,
+         FROM liquidacion_jornada WHERE liquidacion_id = $1 ORDER BY fecha`,
         [liq.id],
       ),
       client.query(

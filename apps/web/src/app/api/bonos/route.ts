@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { pool } from '@/lib/auth-server';
-import { checkLiquidacionRole, assertScope, findOrCreateBorrador, calcularTotales } from '@/lib/liquidacion-db';
+import { checkLiquidacionRole, assertScope, findOrCreateBorrador, computeTotales } from '@/lib/liquidacion-db';
 
 const CreateBonoSchema = z.object({
   colaboradorId: z.string().uuid(),
@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
       [dto.colaboradorId, dto.semanaId, dto.fechaDia, dto.tipo, dto.monto, dto.comentario, userId],
     );
 
-    const totales = await calcularTotales(client, liquidacionId);
+    const totales = await computeTotales(client, liquidacionId);
     return NextResponse.json({ bono: res.rows[0], totales }, { status: 201 });
   } catch (err: unknown) {
     const e = err as { status?: number; message?: string };

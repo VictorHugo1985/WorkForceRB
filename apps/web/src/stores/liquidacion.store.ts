@@ -49,7 +49,6 @@ export interface TotalesData {
   totalBonos: number;
   totalDescuentos: number;
   totalPago: number;
-  calculadoEn: string;
 }
 
 export interface LiquidacionData {
@@ -64,7 +63,6 @@ export interface LiquidacionData {
   totalBonos: number;
   totalDescuentos: number;
   totalPago: number;
-  calculadoEn: string;
   aprobadoPor: string | null;
   aprobadaEn: string | null;
   dias: DiaLiquidacionData[];

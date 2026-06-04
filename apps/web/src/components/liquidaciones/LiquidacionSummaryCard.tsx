@@ -29,10 +29,6 @@ export function LiquidacionSummaryCard() {
     { label: 'Total descuentos', value: `−${bs(Number(liquidacion.totalDescuentos))}` },
   ];
 
-  const calculadoEn = liquidacion.calculadoEn
-    ? new Date(liquidacion.calculadoEn).toLocaleString('es-VE')
-    : null;
-
   return (
     <Card variant="outlined">
       <CardContent>
@@ -71,11 +67,6 @@ export function LiquidacionSummaryCard() {
           </Typography>
         </Box>
 
-        {calculadoEn && (
-          <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-            Calculado: {calculadoEn}
-          </Typography>
-        )}
       </CardContent>
     </Card>
   );

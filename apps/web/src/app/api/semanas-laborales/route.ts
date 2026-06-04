@@ -28,10 +28,10 @@ export async function GET(req: NextRequest) {
   try {
     const res = await client.query(
       `SELECT sl.id, sl.fecha_inicio, sl.fecha_fin, sl.estado, sl.tipo_periodo, sl.creado_en,
-              sl.cerrada_en, sl.monto_total_pagado, sl.cantidad_colaboradores_pagados,
+              sl.cerrada_en,
               uc.nombre AS creado_por_nombre, uc.apellido AS creado_por_apellido,
               ux.nombre AS cerrado_por_nombre, ux.apellido AS cerrado_por_apellido
-       FROM semanas_laborales sl
+       FROM liquidacion_periodo sl
        LEFT JOIN usuarios uc ON uc.id = sl.creado_por
        LEFT JOIN usuarios ux ON ux.id = sl.cerrada_por
        ORDER BY sl.fecha_inicio DESC`,
@@ -46,8 +46,8 @@ export async function GET(req: NextRequest) {
       creado_por: r.creado_por_nombre ? `${r.creado_por_nombre} ${r.creado_por_apellido}` : null,
       cerrada_en: r.cerrada_en ?? null,
       cerrado_por: r.cerrado_por_nombre ? `${r.cerrado_por_nombre} ${r.cerrado_por_apellido}` : null,
-      monto_total_pagado: r.monto_total_pagado !== null ? Number(r.monto_total_pagado) : null,
-      cantidad_colaboradores_pagados: r.cantidad_colaboradores_pagados ?? null,
+      monto_total_pagado: null,
+      cantidad_colaboradores_pagados: null,
     })));
   } finally {
     client.release();
@@ -75,7 +75,7 @@ export async function POST(req: NextRequest) {
   const client = await pool.connect();
   try {
     const dup = await client.query(
-      `SELECT id FROM semanas_laborales WHERE fecha_inicio = $1 LIMIT 1`,
+      `SELECT id FROM liquidacion_periodo WHERE fecha_inicio = $1 LIMIT 1`,
       [fechaInicio],
     );
     if (dup.rows.length > 0) {
@@ -83,7 +83,7 @@ export async function POST(req: NextRequest) {
     }
 
     const res = await client.query(
-      `INSERT INTO semanas_laborales (id, fecha_inicio, fecha_fin, estado, tipo_periodo, creado_por, creado_en)
+      `INSERT INTO liquidacion_periodo (id, fecha_inicio, fecha_fin, estado, tipo_periodo, creado_por, creado_en)
        VALUES (gen_random_uuid(), $1, $2, 'ABIERTA', $3, $4, now())
        RETURNING id, fecha_inicio, fecha_fin, estado, tipo_periodo, creado_en`,
       [fechaInicio, fechaFin, tipoPeriodo ?? null, userId],

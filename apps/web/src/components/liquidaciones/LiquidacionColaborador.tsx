@@ -305,7 +305,6 @@ export function LiquidacionColaborador({
         totalBonos: updatedTotales.totalBonos,
         totalDescuentos: updatedTotales.totalDescuentos,
         totalPago: updatedTotales.totalPago,
-        calculadoEn: updatedTotales.calculadoEn,
       };
     });
   }, []);

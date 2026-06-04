@@ -11,14 +11,14 @@ export async function GET(req: NextRequest) {
 
     if (!semanaId) {
       const r = await client.query(
-        `SELECT id FROM semanas_laborales WHERE estado = 'ABIERTA' ORDER BY fecha_inicio DESC LIMIT 1`,
+        `SELECT id FROM liquidacion_periodo WHERE estado = 'ABIERTA' ORDER BY fecha_inicio DESC LIMIT 1`,
       );
       if (r.rows.length === 0) return NextResponse.json({ semana: null, liquidaciones: [] });
       semanaId = r.rows[0].id as string;
     }
 
     const semanaRes = await client.query(
-      `SELECT id, fecha_inicio, fecha_fin, estado FROM semanas_laborales WHERE id = $1`,
+      `SELECT id, fecha_inicio, fecha_fin, estado FROM liquidacion_periodo WHERE id = $1`,
       [semanaId],
     );
     if (semanaRes.rows.length === 0) return NextResponse.json({ semana: null, liquidaciones: [] });
@@ -26,10 +26,10 @@ export async function GET(req: NextRequest) {
 
     const colaboradoresRes = await client.query(
       `SELECT c.id, c.nombre, c.apellido, a.nombre AS area_nombre,
-              ls.id AS liq_id, ls.estado AS liq_estado, ls.total_pago
+              ls.id AS liq_id, ls.estado AS liq_estado, ls.snapshot_total_pago
        FROM colaboradores c
        LEFT JOIN areas a ON a.id = c.area_id
-       LEFT JOIN liquidaciones_semanales ls ON ls.colaborador_id = c.id AND ls.semana_id = $1
+       LEFT JOIN liquidacion_colaborador ls ON ls.colaborador_id = c.id AND ls.semana_id = $1
        WHERE c.activo = true
        ORDER BY c.apellido, c.nombre`,
       [semanaId],
@@ -42,7 +42,7 @@ export async function GET(req: NextRequest) {
       area: r.area_nombre ?? null,
       liquidacionId: r.liq_id ?? null,
       estado: r.liq_estado ?? null,
-      totalPago: r.total_pago !== null ? Number(r.total_pago) : null,
+      totalPago: r.snapshot_total_pago !== null ? Number(r.snapshot_total_pago) : null,
     }));
 
     return NextResponse.json({ semana, liquidaciones });

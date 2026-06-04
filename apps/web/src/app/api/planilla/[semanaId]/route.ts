@@ -12,7 +12,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ sema
   try {
     const semanaRes = await client.query(
       `SELECT id, fecha_inicio::text, fecha_fin::text, estado, tipo_periodo
-       FROM semanas_laborales WHERE id = $1`,
+       FROM liquidacion_periodo WHERE id = $1`,
       [semanaId],
     );
     if (semanaRes.rows.length === 0) {
@@ -64,7 +64,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ sema
       .map((_, i) => `(gen_random_uuid(), $${i * 2 + 1}, $${i * 2 + 2}, 'BORRADOR')`)
       .join(', ');
     await client.query(
-      `INSERT INTO liquidaciones_semanales (id, colaborador_id, semana_id, estado)
+      `INSERT INTO liquidacion_colaborador (id, colaborador_id, semana_id, estado)
        VALUES ${insertVals}
        ON CONFLICT (colaborador_id, semana_id) DO NOTHING`,
       colaboradorIds.flatMap((id) => [id, semanaId]),
@@ -72,7 +72,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ sema
 
     const liqRes = await client.query(
       `SELECT id, colaborador_id, estado
-       FROM liquidaciones_semanales
+       FROM liquidacion_colaborador
        WHERE semana_id = $1 AND colaborador_id = ANY($2::uuid[])`,
       [semanaId, colaboradorIds],
     );
