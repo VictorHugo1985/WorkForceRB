@@ -3,11 +3,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyToken, isBlacklisted, COOKIE_NAME } from './auth-server';
 import { Jornada, ExcludedPunch, LiquidacionData } from '@/stores/liquidacion.store';
 
-// ─── GMT-4 time helper ────────────────────────────────────────────────────────
+// ─── Time helper — data is stored as local time (GMT-4) in a UTC column ───────
 
 function toHHMM(d: Date): string {
-  const gmt4 = new Date(d.getTime() - 4 * 3600000);
-  return `${String(gmt4.getUTCHours()).padStart(2, '0')}:${String(gmt4.getUTCMinutes()).padStart(2, '0')}`;
+  return `${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}`;
 }
 
 // ─── Shift pairing algorithm ──────────────────────────────────────────────────
@@ -73,15 +72,15 @@ export async function fetchPunchMap(
   fechaFin: string,
 ): Promise<Map<string, PunchEntry[]>> {
   const res = await client.query(
-    `SELECT (ebd.checktime - INTERVAL '4 hours')::date AS fecha,
+    `SELECT ebd.checktime::date AS fecha,
             array_agg(ebd.checktime ORDER BY ebd.checktime) AS marcaciones,
             array_agg(COALESCE(ebd.tipo_evento, 'ENTRADA') ORDER BY ebd.checktime) AS tipos
      FROM eventos_biometricos_desglosados ebd
      JOIN codigos_colaborador cc
           ON cc.codigo_biometrico = ebd.employee_workno AND cc.activo = true
      WHERE cc.colaborador_id = $1
-       AND (ebd.checktime - INTERVAL '4 hours')::date BETWEEN $2 AND $3
-     GROUP BY (ebd.checktime - INTERVAL '4 hours')::date`,
+       AND ebd.checktime::date BETWEEN $2 AND $3
+     GROUP BY ebd.checktime::date`,
     [colaboradorId, fechaInicio, fechaFin],
   );
   const map = new Map<string, PunchEntry[]>();
@@ -561,13 +560,13 @@ export async function generarBorradoresSemana(
   const eventosRes = await client.query(
     `SELECT
        cc.colaborador_id,
-       (ebd.checktime - INTERVAL '4 hours')::date AS fecha,
+       ebd.checktime::date AS fecha,
        array_agg(ebd.checktime ORDER BY ebd.checktime) AS marcaciones
      FROM eventos_biometricos_desglosados ebd
      JOIN codigos_colaborador cc
           ON cc.codigo_biometrico = ebd.employee_workno AND cc.activo = true
-     WHERE (ebd.checktime - INTERVAL '4 hours')::date BETWEEN $1 AND $2
-     GROUP BY cc.colaborador_id, (ebd.checktime - INTERVAL '4 hours')::date`,
+     WHERE ebd.checktime::date BETWEEN $1 AND $2
+     GROUP BY cc.colaborador_id, ebd.checktime::date`,
     [fechaInicio, fechaFin],
   );
 

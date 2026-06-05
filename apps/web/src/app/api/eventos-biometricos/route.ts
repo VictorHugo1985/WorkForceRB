@@ -118,8 +118,8 @@ function todayGMTMinus4(): string {
 }
 
 function buildDateRange(fecha_desde: string, fecha_hasta: string) {
-  const desde = new Date(`${fecha_desde}T00:00:00-04:00`);
-  const hasta = new Date(`${fecha_hasta}T00:00:00-04:00`);
-  hasta.setDate(hasta.getDate() + 1);
+  const desde = new Date(`${fecha_desde}T00:00:00Z`);
+  const hasta = new Date(`${fecha_hasta}T00:00:00Z`);
+  hasta.setUTCDate(hasta.getUTCDate() + 1);
   return { desde: desde.toISOString(), hasta: hasta.toISOString() };
 }
