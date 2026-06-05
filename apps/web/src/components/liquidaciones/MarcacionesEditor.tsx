@@ -17,8 +17,6 @@ import type { DiaLiquidacionData, TotalesData } from '@/stores/liquidacion.store
 interface Jornada {
   entrada: string;
   salida: string;
-  tipoEntrada?: string;
-  tipoSalida?: string;
 }
 
 interface Props {
@@ -27,65 +25,17 @@ interface Props {
   onSaved: (updatedDia: DiaLiquidacionData, updatedTotales: TotalesData) => void;
 }
 
-const TIME_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
-
-function timeToMinutes(t: string): number {
-  const [h, m] = t.split(':').map(Number);
-  return (h ?? 0) * 60 + (m ?? 0);
-}
-
-function shiftHours(entrada: string, salida: string): number {
-  if (!TIME_RE.test(entrada) || !TIME_RE.test(salida)) return 0;
-  const diff = timeToMinutes(salida) - timeToMinutes(entrada);
-  return diff > 0 ? Math.round(diff / 60 * 100) / 100 : 0;
-}
-
-function totalHoras(jornadas: Jornada[]): number {
-  return Math.round(jornadas.reduce((s, j) => s + shiftHours(j.entrada, j.salida), 0) * 100) / 100;
-}
-
 function initJornadas(dia: DiaLiquidacionData): Jornada[] {
   if (dia.marcacionesManuales && dia.marcacionesManuales.length > 0) {
     return dia.marcacionesManuales.map((j) => ({ entrada: j.entrada, salida: j.salida }));
   }
-  const base: Jornada[] = (dia.jornadas ?? []).map((j) => ({
-    entrada: j.entrada,
-    salida: j.salida,
-    tipoEntrada: j.tipoEntrada,
-    tipoSalida: j.tipoSalida,
-  }));
+  const base: Jornada[] = (dia.jornadas ?? []).map((j) => ({ entrada: j.entrada, salida: j.salida }));
   if (dia.marcacionSuelta) {
-    if (dia.marcacionSueltaEsSalida) {
-      base.push({ entrada: '', salida: dia.marcacionSuelta, tipoSalida: 'SALIDA' });
-    } else {
-      base.push({ entrada: dia.marcacionSuelta, salida: '', tipoEntrada: 'ENTRADA' });
-    }
+    base.push(dia.marcacionSueltaEsSalida
+      ? { entrada: '', salida: dia.marcacionSuelta }
+      : { entrada: dia.marcacionSuelta, salida: '' });
   }
   return base.length > 0 ? base : [{ entrada: '', salida: '' }];
-}
-
-function hasIncomplete(jornadas: Jornada[]): boolean {
-  return jornadas.some((j) => (j.entrada && !j.salida) || (!j.entrada && j.salida));
-}
-
-function TipoBadge({ tipo }: { tipo?: string }) {
-  if (!tipo) return null;
-  const isEntrada = tipo === 'ENTRADA';
-  return (
-    <Typography
-      variant="caption"
-      sx={{
-        fontSize: '0.6rem',
-        fontWeight: 700,
-        lineHeight: 1,
-        mb: 0.3,
-        color: isEntrada ? 'success.main' : 'warning.main',
-        letterSpacing: 0.2,
-      }}
-    >
-      {isEntrada ? '↑ ENT' : '↓ SAL'}
-    </Typography>
-  );
 }
 
 export function MarcacionesEditor({ dia, isReadOnly, onSaved }: Props) {
@@ -100,22 +50,17 @@ export function MarcacionesEditor({ dia, isReadOnly, onSaved }: Props) {
     setError(null);
   }, []);
 
-  const swapJornada = useCallback((i: number) => {
-    setJornadas((prev) => prev.map((j, idx) =>
-      idx === i
-        ? { entrada: j.salida, salida: j.entrada, tipoEntrada: j.tipoSalida, tipoSalida: j.tipoEntrada }
-        : j,
-    ));
+  const swap = useCallback((i: number) => {
+    setJornadas((prev) => prev.map((j, idx) => idx === i ? { entrada: j.salida, salida: j.entrada } : j));
     setDirty(true);
-    setError(null);
   }, []);
 
-  const addJornada = useCallback(() => {
+  const add = useCallback(() => {
     setJornadas((prev) => [...prev, { entrada: '', salida: '' }]);
     setDirty(true);
   }, []);
 
-  const removeJornada = useCallback((i: number) => {
+  const remove = useCallback((i: number) => {
     setJornadas((prev) => prev.length === 1 ? [{ entrada: '', salida: '' }] : prev.filter((_, idx) => idx !== i));
     setDirty(true);
   }, []);
@@ -128,8 +73,7 @@ export function MarcacionesEditor({ dia, isReadOnly, onSaved }: Props) {
 
   const save = useCallback(async () => {
     const complete = jornadas.filter((j) => j.entrada && j.salida);
-    const payload = complete.length > 0 ? complete.map(({ entrada, salida }) => ({ entrada, salida })) : null;
-
+    const payload = complete.length > 0 ? complete : null;
     setSaving(true);
     setError(null);
     try {
@@ -153,110 +97,66 @@ export function MarcacionesEditor({ dia, isReadOnly, onSaved }: Props) {
     }
   }, [dia.id, jornadas, onSaved]);
 
-  const hasCompleteRow = jornadas.some((j) => j.entrada && j.salida);
-
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-      {jornadas.map((j, i) => {
-        const entradaPendiente = !j.entrada && j.salida !== '';
-        const salidaPendiente  = j.entrada !== '' && !j.salida;
-        const pendienteSx = {
-          '& .MuiOutlinedInput-notchedOutline': { borderColor: 'warning.main', borderWidth: 2 },
-          '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: 'warning.dark' },
-        };
-
-        return (
-          <Box key={i} sx={{ display: 'flex', alignItems: 'flex-end', gap: 0.5 }}>
-            {/* Entrada field */}
-            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-              <TipoBadge tipo={j.tipoEntrada} />
-              <Tooltip title={entradaPendiente ? 'Entrada pendiente' : ''} placement="top">
-                <TextField
-                  size="small"
-                  type="time"
-                  value={j.entrada}
-                  onChange={(e) => update(i, 'entrada', e.target.value)}
-                  disabled={isReadOnly || saving}
-                  sx={{ width: 108, ...(entradaPendiente && pendienteSx) }}
-                  slotProps={{
-                    htmlInput: { step: 60, style: { fontSize: '0.8rem', padding: '4px 6px' } },
-                  }}
-                />
-              </Tooltip>
-            </Box>
-
-            <Typography variant="caption" color="text.secondary" sx={{ userSelect: 'none', pb: 0.5 }}>→</Typography>
-
-            {/* Salida field */}
-            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-              <TipoBadge tipo={j.tipoSalida} />
-              <Tooltip title={salidaPendiente ? 'Salida pendiente' : ''} placement="top">
-                <TextField
-                  size="small"
-                  type="time"
-                  value={j.salida}
-                  onChange={(e) => update(i, 'salida', e.target.value)}
-                  disabled={isReadOnly || saving}
-                  sx={{ width: 108, ...(salidaPendiente && pendienteSx) }}
-                  slotProps={{
-                    htmlInput: { step: 60, style: { fontSize: '0.8rem', padding: '4px 6px' } },
-                  }}
-                />
-              </Tooltip>
-            </Box>
-
-            {!isReadOnly && (
-              <>
-                <Tooltip title="Intercambiar entrada/salida">
-                  <IconButton size="small" onClick={() => swapJornada(i)} disabled={saving} sx={{ p: 0.25, pb: 0.5 }}>
-                    <SwapHorizIcon sx={{ fontSize: 16 }} />
-                  </IconButton>
-                </Tooltip>
-                <Tooltip title="Quitar turno">
-                  <IconButton size="small" onClick={() => removeJornada(i)} disabled={saving} sx={{ p: 0.25, pb: 0.5 }}>
-                    <RemoveCircleIcon sx={{ fontSize: 16 }} color="disabled" />
-                  </IconButton>
-                </Tooltip>
-                <Tooltip title="Agregar turno">
-                  <IconButton size="small" onClick={addJornada} disabled={saving} sx={{ p: 0.25, pb: 0.5 }}>
-                    <AddIcon sx={{ fontSize: 16 }} />
-                  </IconButton>
-                </Tooltip>
-              </>
-            )}
-          </Box>
-        );
-      })}
-
-      {/* Controls row */}
-      {!isReadOnly && (
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mt: 0.25 }}>
-          {dirty && (
+      {jornadas.map((j, i) => (
+        <Box key={i} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+          <TextField
+            size="small"
+            type="time"
+            value={j.entrada}
+            onChange={(e) => update(i, 'entrada', e.target.value)}
+            disabled={isReadOnly || saving}
+            sx={{ width: 108 }}
+            slotProps={{ htmlInput: { step: 60, style: { fontSize: '0.8rem', padding: '4px 6px' } } }}
+          />
+          <Typography variant="caption" color="text.secondary" sx={{ userSelect: 'none' }}>→</Typography>
+          <TextField
+            size="small"
+            type="time"
+            value={j.salida}
+            onChange={(e) => update(i, 'salida', e.target.value)}
+            disabled={isReadOnly || saving}
+            sx={{ width: 108 }}
+            slotProps={{ htmlInput: { step: 60, style: { fontSize: '0.8rem', padding: '4px 6px' } } }}
+          />
+          {!isReadOnly && (
             <>
-              <Tooltip title={hasCompleteRow ? 'Guardar marcaciones' : 'Complete al menos un par entrada/salida'}>
-                <span>
-                  <IconButton
-                    size="small"
-                    color="primary"
-                    onClick={save}
-                    disabled={saving || !hasCompleteRow}
-                    sx={{ p: 0.25 }}
-                  >
-                    {saving ? <CircularProgress size={14} /> : <CheckIcon sx={{ fontSize: 16 }} />}
-                  </IconButton>
-                </span>
+              <Tooltip title="Intercambiar">
+                <IconButton size="small" onClick={() => swap(i)} disabled={saving} sx={{ p: 0.25 }}>
+                  <SwapHorizIcon sx={{ fontSize: 16 }} />
+                </IconButton>
               </Tooltip>
-              <Tooltip title="Descartar cambios">
-                <IconButton size="small" onClick={revert} disabled={saving} sx={{ p: 0.25 }}>
-                  <UndoIcon sx={{ fontSize: 16 }} />
+              <Tooltip title="Quitar">
+                <IconButton size="small" onClick={() => remove(i)} disabled={saving} sx={{ p: 0.25 }}>
+                  <RemoveCircleIcon sx={{ fontSize: 16 }} color="disabled" />
+                </IconButton>
+              </Tooltip>
+              <Tooltip title="Agregar turno">
+                <IconButton size="small" onClick={add} disabled={saving} sx={{ p: 0.25 }}>
+                  <AddIcon sx={{ fontSize: 16 }} />
                 </IconButton>
               </Tooltip>
             </>
           )}
+        </Box>
+      ))}
 
-          {error && (
-            <Typography variant="caption" color="error">{error}</Typography>
-          )}
+      {!isReadOnly && dirty && (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mt: 0.25 }}>
+          <Tooltip title="Guardar">
+            <span>
+              <IconButton size="small" color="primary" onClick={save} disabled={saving} sx={{ p: 0.25 }}>
+                {saving ? <CircularProgress size={14} /> : <CheckIcon sx={{ fontSize: 16 }} />}
+              </IconButton>
+            </span>
+          </Tooltip>
+          <Tooltip title="Descartar">
+            <IconButton size="small" onClick={revert} disabled={saving} sx={{ p: 0.25 }}>
+              <UndoIcon sx={{ fontSize: 16 }} />
+            </IconButton>
+          </Tooltip>
+          {error && <Typography variant="caption" color="error">{error}</Typography>}
         </Box>
       )}
     </Box>
