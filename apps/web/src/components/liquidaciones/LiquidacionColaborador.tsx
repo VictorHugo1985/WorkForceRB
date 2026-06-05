@@ -450,7 +450,13 @@ export function LiquidacionColaborador({
             <TableHead>
               <TableRow sx={{ bgcolor: 'action.hover' }}>
                 <TableCell sx={{ fontWeight: 600, width: 90, color: 'text.secondary', fontSize: '0.75rem' }}>Fecha</TableCell>
-                <TableCell sx={{ fontWeight: 600, color: 'text.secondary', fontSize: '0.75rem' }}>Marcaciones</TableCell>
+                <TableCell sx={{ color: 'text.secondary', fontSize: '0.75rem', pt: 0.5, pb: 0.5 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                    <Box sx={{ width: 108, textAlign: 'center', fontWeight: 600 }}>Entrada</Box>
+                    <Box sx={{ width: 18 }} />
+                    <Box sx={{ width: 108, textAlign: 'center', fontWeight: 600 }}>Salida</Box>
+                  </Box>
+                </TableCell>
                 <TableCell sx={{ fontWeight: 600, width: 100, color: 'text.secondary', fontSize: '0.75rem' }}>Horas</TableCell>
                 <TableCell sx={{ fontWeight: 600, width: 200, color: 'text.secondary', fontSize: '0.75rem' }}>Tipo ajuste</TableCell>
                 <TableCell sx={{ fontWeight: 600, width: 140, color: 'text.secondary', fontSize: '0.75rem' }}>Monto ajuste</TableCell>

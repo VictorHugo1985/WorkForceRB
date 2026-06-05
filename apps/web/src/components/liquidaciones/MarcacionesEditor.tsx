@@ -31,9 +31,9 @@ function initJornadas(dia: DiaLiquidacionData): Jornada[] {
   }
   const base: Jornada[] = (dia.jornadas ?? []).map((j) => ({ entrada: j.entrada, salida: j.salida }));
   if (dia.marcacionSuelta) {
-    base.push(dia.marcacionSueltaEsSalida
-      ? { entrada: '', salida: dia.marcacionSuelta }
-      : { entrada: dia.marcacionSuelta, salida: '' });
+    // Orphan punch: positionally it's the first of its incomplete pair.
+    // Oldest available → entrada slot; missing partner → salida slot empty.
+    base.push({ entrada: dia.marcacionSuelta, salida: '' });
   }
   return base.length > 0 ? base : [{ entrada: '', salida: '' }];
 }
