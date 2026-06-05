@@ -31,8 +31,6 @@ function initJornadas(dia: DiaLiquidacionData): Jornada[] {
   }
   const base: Jornada[] = (dia.jornadas ?? []).map((j) => ({ entrada: j.entrada, salida: j.salida }));
   if (dia.marcacionSuelta) {
-    // Orphan punch: positionally it's the first of its incomplete pair.
-    // Oldest available → entrada slot; missing partner → salida slot empty.
     base.push({ entrada: dia.marcacionSuelta, salida: '' });
   }
   return base.length > 0 ? base : [{ entrada: '', salida: '' }];
@@ -52,35 +50,43 @@ export function MarcacionesEditor({ dia, isReadOnly, onSaved }: Props) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Refs so blur-timer callbacks always see the latest values
-  const saveRef    = useRef<() => Promise<void>>(async () => {});
-  const dirtyRef   = useRef(false);
-  const savingRef  = useRef(false);
-  const blurTimer  = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Refs so blur-timer callbacks always see the latest values without stale closures
+  const saveRef      = useRef<() => Promise<void>>(async () => {});
+  const jornadasRef  = useRef(jornadas);
+  const dirtyRef     = useRef(false);
+  const savingRef    = useRef(false);
+  const blurTimer    = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Track edit count so an in-flight save's setDirty(false) doesn't clobber a new edit
+  const editCountRef = useRef(0);
 
-  dirtyRef.current  = dirty;
-  savingRef.current = saving;
+  jornadasRef.current  = jornadas;
+  dirtyRef.current     = dirty;
+  savingRef.current    = saving;
 
   useEffect(() => () => { if (blurTimer.current) clearTimeout(blurTimer.current); }, []);
 
   const update = useCallback((i: number, field: 'entrada' | 'salida', value: string) => {
     setJornadas((prev) => prev.map((j, idx) => idx === i ? { ...j, [field]: value } : j));
+    editCountRef.current += 1;
     setDirty(true);
     setError(null);
   }, []);
 
   const swap = useCallback((i: number) => {
     setJornadas((prev) => prev.map((j, idx) => idx === i ? { entrada: j.salida, salida: j.entrada } : j));
+    editCountRef.current += 1;
     setDirty(true);
   }, []);
 
   const add = useCallback(() => {
     setJornadas((prev) => [...prev, { entrada: '', salida: '' }]);
+    editCountRef.current += 1;
     setDirty(true);
   }, []);
 
   const remove = useCallback((i: number) => {
     setJornadas((prev) => prev.length === 1 ? [{ entrada: '', salida: '' }] : prev.filter((_, idx) => idx !== i));
+    editCountRef.current += 1;
     setDirty(true);
   }, []);
 
@@ -91,6 +97,7 @@ export function MarcacionesEditor({ dia, isReadOnly, onSaved }: Props) {
   }, [dia]);
 
   const save = useCallback(async () => {
+    const countAtSave = editCountRef.current;
     const complete = jornadas.filter((j) => j.entrada && j.salida);
     const payload = complete.length > 0 ? complete : null;
     setSaving(true);
@@ -107,7 +114,10 @@ export function MarcacionesEditor({ dia, isReadOnly, onSaved }: Props) {
         return;
       }
       const data = await res.json() as { dia: DiaLiquidacionData; totales: TotalesData };
-      setDirty(false);
+      // Only mark clean if no new edits happened during the async fetch
+      if (editCountRef.current === countAtSave) {
+        setDirty(false);
+      }
       onSaved(data.dia, data.totales);
     } catch {
       setError('Error de conexión');
@@ -116,13 +126,16 @@ export function MarcacionesEditor({ dia, isReadOnly, onSaved }: Props) {
     }
   }, [dia.id, jornadas, onSaved]);
 
-  // Keep ref current so the timer always calls the latest version of save
   saveRef.current = save;
 
-  // Debounced auto-save on blur: 150 ms to let focus move between fields within this component
+  // Auto-save on blur.
+  // Guard: only fire if there is at least one complete entrada+salida pair — avoids
+  // saving null when the user is still in the middle of filling the second field.
   const handleBlur = useCallback(() => {
     blurTimer.current = setTimeout(() => {
-      if (dirtyRef.current && !savingRef.current) saveRef.current();
+      if (!dirtyRef.current || savingRef.current) return;
+      const hasComplete = jornadasRef.current.some((j) => j.entrada && j.salida);
+      if (hasComplete) saveRef.current();
     }, 150);
   }, []);
 
