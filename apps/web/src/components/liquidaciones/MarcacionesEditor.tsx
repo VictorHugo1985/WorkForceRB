@@ -98,7 +98,7 @@ export function MarcacionesEditor({ dia, isReadOnly, onSaved }: Props) {
 
   const save = useCallback(async () => {
     const countAtSave = editCountRef.current;
-    const complete = jornadas.filter((j) => j.entrada && j.salida);
+    const complete = jornadasRef.current.filter((j) => j.entrada && j.salida);
     const payload = complete.length > 0 ? complete : null;
     setSaving(true);
     setError(null);
@@ -124,7 +124,7 @@ export function MarcacionesEditor({ dia, isReadOnly, onSaved }: Props) {
     } finally {
       setSaving(false);
     }
-  }, [dia.id, jornadas, onSaved]);
+  }, [dia.id, onSaved]);
 
   saveRef.current = save;
 
