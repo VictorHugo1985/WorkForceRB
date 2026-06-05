@@ -100,6 +100,7 @@ export function MarcacionesEditor({ dia, isReadOnly, onSaved }: Props) {
     const countAtSave = editCountRef.current;
     const complete = jornadasRef.current.filter((j) => j.entrada && j.salida);
     const payload = complete.length > 0 ? complete : null;
+    console.log('[MarcacionesEditor] save fired — dia.id:', dia.id, 'jornadasRef:', JSON.stringify(jornadasRef.current), 'payload:', JSON.stringify(payload));
     setSaving(true);
     setError(null);
     try {
@@ -110,16 +111,19 @@ export function MarcacionesEditor({ dia, isReadOnly, onSaved }: Props) {
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({})) as { message?: string };
+        console.error('[MarcacionesEditor] save error:', res.status, err);
         setError(err.message ?? `Error ${res.status}`);
         return;
       }
       const data = await res.json() as { dia: DiaLiquidacionData; totales: TotalesData };
+      console.log('[MarcacionesEditor] save response — horasAjustadas:', data.dia.horasAjustadasSupervisor, 'horasOrdinarias:', data.totales.horasOrdinarias);
       // Only mark clean if no new edits happened during the async fetch
       if (editCountRef.current === countAtSave) {
         setDirty(false);
       }
       onSaved(data.dia, data.totales);
-    } catch {
+    } catch (e) {
+      console.error('[MarcacionesEditor] save exception:', e);
       setError('Error de conexión');
     } finally {
       setSaving(false);

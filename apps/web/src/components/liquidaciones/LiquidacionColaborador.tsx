@@ -296,6 +296,7 @@ export function LiquidacionColaborador({
   }, [liquidacionId]);
 
   const handleDiaUpdate = useCallback((updatedDia: DiaLiquidacionData, updatedTotales: TotalesData) => {
+    console.log('[LiquidacionColaborador] handleDiaUpdate — dia.id:', updatedDia.id, 'horasAjustadas:', updatedDia.horasAjustadasSupervisor, 'horasOrdinarias:', updatedTotales.horasOrdinarias);
     setLiquidacion((prev) => {
       if (!prev) return prev;
       return {
