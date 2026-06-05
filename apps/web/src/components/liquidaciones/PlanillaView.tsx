@@ -30,7 +30,6 @@ import CheckIcon from '@mui/icons-material/Check';
 import CloseIcon from '@mui/icons-material/Close';
 import EditIcon from '@mui/icons-material/Edit';
 import { LiquidacionColaborador, type EstadoLiquidacion } from './LiquidacionColaborador';
-import { LiquidacionColaborador2 } from './LiquidacionColaborador2';
 
 interface SemanaLaboral {
   id: string;
@@ -286,12 +285,11 @@ function HistoricoGrid({ semanas, onSelect, onNuevoPeriodo }: HistoricoGridProps
 
 interface DetailViewProps {
   semana: SemanaLaboral;
-  variant: 'default' | 'excel';
   onBack: () => void;
   onUpdate: (semana: SemanaLaboral) => void;
 }
 
-function DetailView({ semana, variant, onBack, onUpdate }: DetailViewProps) {
+function DetailView({ semana, onBack, onUpdate }: DetailViewProps) {
   const [roster, setRoster] = useState<RosterEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -451,22 +449,20 @@ function DetailView({ semana, variant, onBack, onUpdate }: DetailViewProps) {
         <Typography color="text.secondary">No hay registros de asistencia para este período.</Typography>
       ) : (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          {roster.map((entry) => {
-            if (!entry.liquidacionId) return null;
-            const sharedProps = {
-              key: entry.liquidacionId,
-              liquidacionId: entry.liquidacionId,
-              colaboradorId: entry.colaboradorId,
-              nombre: entry.nombre,
-              apellido: entry.apellido,
-              semanaId: semana.id,
-              tarifaHora: entry.tarifaHora,
-              onEstadoChange: handleEstadoChange,
-            };
-            return variant === 'excel'
-              ? <LiquidacionColaborador2 {...sharedProps} />
-              : <LiquidacionColaborador {...sharedProps} />;
-          })}
+          {roster.map((entry) =>
+            entry.liquidacionId ? (
+              <LiquidacionColaborador
+                key={entry.liquidacionId}
+                liquidacionId={entry.liquidacionId}
+                colaboradorId={entry.colaboradorId}
+                nombre={entry.nombre}
+                apellido={entry.apellido}
+                semanaId={semana.id}
+                tarifaHora={entry.tarifaHora}
+                onEstadoChange={handleEstadoChange}
+              />
+            ) : null,
+          )}
         </Box>
       )}
     </Box>
@@ -475,7 +471,7 @@ function DetailView({ semana, variant, onBack, onUpdate }: DetailViewProps) {
 
 // ── Main view ─────────────────────────────────────────────────────────────────
 
-export function PlanillaView({ variant = 'default' }: { variant?: 'default' | 'excel' }) {
+export function PlanillaView() {
   const [semanas, setSemanas] = useState<SemanaLaboral[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<SemanaLaboral | null>(null);
@@ -519,7 +515,7 @@ export function PlanillaView({ variant = 'default' }: { variant?: 'default' | 'e
   if (selected) {
     return (
       <>
-        <DetailView semana={selected} variant={variant} onBack={() => setSelected(null)} onUpdate={handlePeriodoUpdated} />
+        <DetailView semana={selected} onBack={() => setSelected(null)} onUpdate={handlePeriodoUpdated} />
         <CrearPeriodoDialog open={dialogOpen} onClose={() => setDialogOpen(false)} onCreated={handlePeriodoCreado} />
       </>
     );

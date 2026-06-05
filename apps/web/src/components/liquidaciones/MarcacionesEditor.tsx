@@ -22,7 +22,6 @@ interface Jornada {
 interface Props {
   dia: DiaLiquidacionData;
   isReadOnly: boolean;
-  highlightEmpty?: boolean;
   onSaved: (updatedDia: DiaLiquidacionData, updatedTotales: TotalesData) => void;
 }
 
@@ -39,7 +38,7 @@ function initJornadas(dia: DiaLiquidacionData): Jornada[] {
   return base.length > 0 ? base : [{ entrada: '', salida: '' }];
 }
 
-export function MarcacionesEditor({ dia, isReadOnly, highlightEmpty = false, onSaved }: Props) {
+export function MarcacionesEditor({ dia, isReadOnly, onSaved }: Props) {
   const [jornadas, setJornadas] = useState<Jornada[]>(() => initJornadas(dia));
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -108,13 +107,7 @@ export function MarcacionesEditor({ dia, isReadOnly, highlightEmpty = false, onS
             value={j.entrada}
             onChange={(e) => update(i, 'entrada', e.target.value)}
             disabled={isReadOnly || saving}
-            sx={{
-              width: 108,
-              ...(highlightEmpty && !j.entrada && {
-                '& .MuiOutlinedInput-notchedOutline': { borderColor: 'error.main', borderWidth: 2 },
-                '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: 'error.dark', borderWidth: 2 },
-              }),
-            }}
+            sx={{ width: 108 }}
             slotProps={{ htmlInput: { step: 60, style: { fontSize: '0.8rem', padding: '4px 6px' } } }}
           />
           <Typography variant="caption" color="text.secondary" sx={{ userSelect: 'none' }}>→</Typography>
@@ -124,13 +117,7 @@ export function MarcacionesEditor({ dia, isReadOnly, highlightEmpty = false, onS
             value={j.salida}
             onChange={(e) => update(i, 'salida', e.target.value)}
             disabled={isReadOnly || saving}
-            sx={{
-              width: 108,
-              ...(highlightEmpty && !j.salida && {
-                '& .MuiOutlinedInput-notchedOutline': { borderColor: 'error.main', borderWidth: 2 },
-                '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: 'error.dark', borderWidth: 2 },
-              }),
-            }}
+            sx={{ width: 108 }}
             slotProps={{ htmlInput: { step: 60, style: { fontSize: '0.8rem', padding: '4px 6px' } } }}
           />
           {!isReadOnly && (

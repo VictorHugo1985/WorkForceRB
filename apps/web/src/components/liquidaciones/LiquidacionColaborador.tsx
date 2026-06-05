@@ -52,7 +52,7 @@ interface TarifaEditorProps {
   onChange: (v: number) => void;
 }
 
-export function TarifaEditor({ colaboradorId, value, readOnly, onChange }: TarifaEditorProps) {
+function TarifaEditor({ colaboradorId, value, readOnly, onChange }: TarifaEditorProps) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
   const [saving, setSaving] = useState(false);
@@ -131,7 +131,7 @@ export function TarifaEditor({ colaboradorId, value, readOnly, onChange }: Tarif
 
 // ── Stat chip ─────────────────────────────────────────────────────────────────
 
-export function Stat({ label, value, color }: { label: string; value: string; color?: string }) {
+function Stat({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
     <Box sx={{ textAlign: 'center' }}>
       <Typography variant="caption" color="text.secondary" sx={{ display: 'block', lineHeight: 1.2 }}>
@@ -152,7 +152,7 @@ interface ConfirmarProps {
   onConfirmed: () => void;
 }
 
-export function ConfirmarButton({ liquidacionId, hasInconsistencias, onConfirmed }: ConfirmarProps) {
+function ConfirmarButton({ liquidacionId, hasInconsistencias, onConfirmed }: ConfirmarProps) {
   const [showWarn, setShowWarn] = useState(false);
   const [ack, setAck] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -219,7 +219,7 @@ interface PagarProps {
   onPagado: () => void;
 }
 
-export function PagarButton({ liquidacionId, onPagado }: PagarProps) {
+function PagarButton({ liquidacionId, onPagado }: PagarProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirm, setConfirm] = useState(false);

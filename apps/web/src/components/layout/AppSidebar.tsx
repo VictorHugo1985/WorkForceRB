@@ -18,7 +18,6 @@ import PeopleIcon from '@mui/icons-material/People';
 import SettingsIcon from '@mui/icons-material/Settings';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import FingerprintIcon from '@mui/icons-material/Fingerprint';
-import GridOnIcon from '@mui/icons-material/GridOn';
 import ManageAccountsIcon from '@mui/icons-material/ManageAccounts';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
@@ -34,8 +33,7 @@ const NAV_ICONS: Record<string, React.ReactNode> = {
   '/dashboard':     <DashboardIcon fontSize="small" />,
   '/colaboradores': <PeopleIcon fontSize="small" />,
   '/configuracion': <SettingsIcon fontSize="small" />,
-  '/liquidaciones':  <ReceiptLongIcon fontSize="small" />,
-  '/liquidaciones2': <GridOnIcon fontSize="small" />,
+  '/liquidaciones': <ReceiptLongIcon fontSize="small" />,
   '/eventos':       <FingerprintIcon fontSize="small" />,
   '/usuarios':      <ManageAccountsIcon fontSize="small" />,
 };

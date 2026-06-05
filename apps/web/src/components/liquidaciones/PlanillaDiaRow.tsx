@@ -21,7 +21,6 @@ interface Props {
   dia: DiaLiquidacionData;
   isReadOnly: boolean;
   tarifaHora: number | null;
-  highlightEmptyMarcaciones?: boolean;
   onDiaUpdate: (updatedDia: DiaLiquidacionData, updatedTotales: TotalesData) => void;
 }
 
@@ -63,7 +62,7 @@ function effectiveHoras(dia: DiaLiquidacionData): number {
   return dia.horasAjustadasSupervisor ?? dia.horasParejadas ?? dia.horasCalculadas;
 }
 
-export function PlanillaDiaRow({ dia, isReadOnly, highlightEmptyMarcaciones = false, onDiaUpdate }: Props) {
+export function PlanillaDiaRow({ dia, isReadOnly, onDiaUpdate }: Props) {
   const cellReadOnly = isReadOnly || dia.estadoDia === 'APROBADO';
 
   // ── Ajuste tipo / monto inline edit ────────────────────────────────
@@ -134,7 +133,7 @@ export function PlanillaDiaRow({ dia, isReadOnly, highlightEmptyMarcaciones = fa
 
       {/* Marcaciones */}
       <TableCell sx={{ verticalAlign: 'top', pt: 1 }}>
-        <MarcacionesEditor dia={dia} isReadOnly={cellReadOnly} highlightEmpty={highlightEmptyMarcaciones} onSaved={onDiaUpdate} />
+        <MarcacionesEditor dia={dia} isReadOnly={cellReadOnly} onSaved={onDiaUpdate} />
       </TableCell>
 
       {/* Horas */}
