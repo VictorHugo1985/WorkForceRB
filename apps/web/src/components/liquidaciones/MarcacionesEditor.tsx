@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
 import IconButton from '@mui/material/IconButton';
@@ -38,11 +38,30 @@ function initJornadas(dia: DiaLiquidacionData): Jornada[] {
   return base.length > 0 ? base : [{ entrada: '', salida: '' }];
 }
 
+function emptyBorder(empty: boolean) {
+  if (!empty) return {};
+  return {
+    '& .MuiOutlinedInput-notchedOutline': { borderColor: 'error.main', borderWidth: 2 },
+    '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: 'error.dark', borderWidth: 2 },
+  };
+}
+
 export function MarcacionesEditor({ dia, isReadOnly, onSaved }: Props) {
   const [jornadas, setJornadas] = useState<Jornada[]>(() => initJornadas(dia));
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Refs so blur-timer callbacks always see the latest values
+  const saveRef    = useRef<() => Promise<void>>(async () => {});
+  const dirtyRef   = useRef(false);
+  const savingRef  = useRef(false);
+  const blurTimer  = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  dirtyRef.current  = dirty;
+  savingRef.current = saving;
+
+  useEffect(() => () => { if (blurTimer.current) clearTimeout(blurTimer.current); }, []);
 
   const update = useCallback((i: number, field: 'entrada' | 'salida', value: string) => {
     setJornadas((prev) => prev.map((j, idx) => idx === i ? { ...j, [field]: value } : j));
@@ -97,6 +116,23 @@ export function MarcacionesEditor({ dia, isReadOnly, onSaved }: Props) {
     }
   }, [dia.id, jornadas, onSaved]);
 
+  // Keep ref current so the timer always calls the latest version of save
+  saveRef.current = save;
+
+  // Debounced auto-save on blur: 150 ms to let focus move between fields within this component
+  const handleBlur = useCallback(() => {
+    blurTimer.current = setTimeout(() => {
+      if (dirtyRef.current && !savingRef.current) saveRef.current();
+    }, 150);
+  }, []);
+
+  const handleFocus = useCallback(() => {
+    if (blurTimer.current !== null) {
+      clearTimeout(blurTimer.current);
+      blurTimer.current = null;
+    }
+  }, []);
+
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
       {jornadas.map((j, i) => (
@@ -106,8 +142,10 @@ export function MarcacionesEditor({ dia, isReadOnly, onSaved }: Props) {
             type="time"
             value={j.entrada}
             onChange={(e) => update(i, 'entrada', e.target.value)}
+            onBlur={isReadOnly ? undefined : handleBlur}
+            onFocus={isReadOnly ? undefined : handleFocus}
             disabled={isReadOnly || saving}
-            sx={{ width: 108 }}
+            sx={{ width: 108, ...emptyBorder(!isReadOnly && !j.entrada) }}
             slotProps={{ htmlInput: { step: 60, style: { fontSize: '0.8rem', padding: '4px 6px' } } }}
           />
           <Typography variant="caption" color="text.secondary" sx={{ userSelect: 'none' }}>→</Typography>
@@ -116,8 +154,10 @@ export function MarcacionesEditor({ dia, isReadOnly, onSaved }: Props) {
             type="time"
             value={j.salida}
             onChange={(e) => update(i, 'salida', e.target.value)}
+            onBlur={isReadOnly ? undefined : handleBlur}
+            onFocus={isReadOnly ? undefined : handleFocus}
             disabled={isReadOnly || saving}
-            sx={{ width: 108 }}
+            sx={{ width: 108, ...emptyBorder(!isReadOnly && !j.salida) }}
             slotProps={{ htmlInput: { step: 60, style: { fontSize: '0.8rem', padding: '4px 6px' } } }}
           />
           {!isReadOnly && (
