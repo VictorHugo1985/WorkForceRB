@@ -47,10 +47,10 @@ function formatFecha(iso: string) {
 function estadoChip(estado: string) {
   switch (estado) {
     case 'APROBADO':               return <Chip label="Aprobado" size="small" color="success" />;
-    case 'CON_AJUSTE_HORAS':       return <Chip label="H. ajust." size="small" color="info" />;
-    case 'CON_DESCUENTO':          return <Chip label="Con ajuste" size="small" color="warning" />;
-    case 'CON_AJUSTE_Y_DESCUENTO': return <Chip label="H. + ajuste" size="small" color="warning" />;
-    default:                       return <Chip label="Sin rev." size="small" variant="outlined" />;
+    case 'CON_AJUSTE_HORAS':       return <Chip label="Con Ajuste Horario" size="small" color="info" />;
+    case 'CON_DESCUENTO':          return <Chip label="Con Descuento" size="small" color="warning" />;
+    case 'CON_AJUSTE_Y_DESCUENTO': return <Chip label="Ajuste + Descuento" size="small" color="warning" />;
+    default:                       return <Chip label="Sin Obs." size="small" variant="outlined" />;
   }
 }
 
