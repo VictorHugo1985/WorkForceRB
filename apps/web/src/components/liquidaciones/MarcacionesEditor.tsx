@@ -9,15 +9,9 @@ import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import AddIcon from '@mui/icons-material/Add';
 import CheckIcon from '@mui/icons-material/Check';
-import RemoveCircleIcon from '@mui/icons-material/RemoveCircle';
-import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
+import CloseIcon from '@mui/icons-material/Close';
 import UndoIcon from '@mui/icons-material/Undo';
 import type { DiaLiquidacionData, TotalesData } from '@/stores/liquidacion.store';
-
-interface Jornada {
-  entrada: string;
-  salida: string;
-}
 
 interface Props {
   dia: DiaLiquidacionData;
@@ -25,82 +19,76 @@ interface Props {
   onSaved: (updatedDia: DiaLiquidacionData, updatedTotales: TotalesData) => void;
 }
 
-function initJornadas(dia: DiaLiquidacionData): Jornada[] {
+// Flatten biometric jornadas or manual pairs to a simple ordered list of HH:MM times
+function initFlat(dia: DiaLiquidacionData): string[] {
   if (dia.marcacionesManuales && dia.marcacionesManuales.length > 0) {
-    return dia.marcacionesManuales.map((j) => ({ entrada: j.entrada, salida: j.salida }));
+    return dia.marcacionesManuales.flatMap((j) => [j.entrada, j.salida]);
   }
-  const base: Jornada[] = (dia.jornadas ?? []).map((j) => ({ entrada: j.entrada, salida: j.salida }));
-  if (dia.marcacionSuelta) {
-    base.push({ entrada: dia.marcacionSuelta, salida: '' });
-  }
-  return base.length > 0 ? base : [{ entrada: '', salida: '' }];
+  const flat: string[] = (dia.jornadas ?? []).flatMap((j) => [j.entrada, j.salida]);
+  if (dia.marcacionSuelta) flat.push(dia.marcacionSuelta);
+  return flat.length > 0 ? flat : [''];
 }
 
-function emptyBorder(empty: boolean) {
-  if (!empty) return {};
-  return {
-    '& .MuiOutlinedInput-notchedOutline': { borderColor: 'error.main', borderWidth: 2 },
-    '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: 'error.dark', borderWidth: 2 },
-  };
+// Group flat times into entrada/salida pairs for the API
+function flatToPairs(times: string[]): Array<{ entrada: string; salida: string }> | null {
+  const filled = times.filter(Boolean);
+  if (filled.length === 0) return null;
+  const pairs: Array<{ entrada: string; salida: string }> = [];
+  for (let i = 0; i + 1 < filled.length; i += 2) {
+    pairs.push({ entrada: filled[i], salida: filled[i + 1] });
+  }
+  return pairs.length > 0 ? pairs : null;
 }
 
 export function MarcacionesEditor({ dia, isReadOnly, onSaved }: Props) {
-  const [jornadas, setJornadas] = useState<Jornada[]>(() => initJornadas(dia));
+  const [times, setTimes] = useState<string[]>(() => initFlat(dia));
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Refs so blur-timer callbacks always see the latest values without stale closures
-  const saveRef      = useRef<() => Promise<void>>(async () => {});
-  const jornadasRef  = useRef(jornadas);
-  const dirtyRef     = useRef(false);
-  const savingRef    = useRef(false);
-  const blurTimer    = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Track edit count so an in-flight save's setDirty(false) doesn't clobber a new edit
+  const timesRef    = useRef(times);
+  const dirtyRef    = useRef(false);
+  const savingRef   = useRef(saving);
   const editCountRef = useRef(0);
+  const blurTimer   = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  jornadasRef.current  = jornadas;
-  dirtyRef.current     = dirty;
-  savingRef.current    = saving;
+  timesRef.current  = times;
+  dirtyRef.current  = dirty;
+  savingRef.current = saving;
 
   useEffect(() => () => { if (blurTimer.current) clearTimeout(blurTimer.current); }, []);
 
-  const update = useCallback((i: number, field: 'entrada' | 'salida', value: string) => {
-    setJornadas((prev) => prev.map((j, idx) => idx === i ? { ...j, [field]: value } : j));
+  const update = useCallback((i: number, value: string) => {
+    setTimes((prev) => prev.map((t, idx) => idx === i ? value : t));
     editCountRef.current += 1;
     setDirty(true);
     setError(null);
   }, []);
 
-  const swap = useCallback((i: number) => {
-    setJornadas((prev) => prev.map((j, idx) => idx === i ? { entrada: j.salida, salida: j.entrada } : j));
+  const remove = useCallback((i: number) => {
+    setTimes((prev) => {
+      const next = prev.filter((_, idx) => idx !== i);
+      return next.length > 0 ? next : [''];
+    });
     editCountRef.current += 1;
     setDirty(true);
   }, []);
 
   const add = useCallback(() => {
-    setJornadas((prev) => [...prev, { entrada: '', salida: '' }]);
-    editCountRef.current += 1;
-    setDirty(true);
-  }, []);
-
-  const remove = useCallback((i: number) => {
-    setJornadas((prev) => prev.length === 1 ? [{ entrada: '', salida: '' }] : prev.filter((_, idx) => idx !== i));
+    setTimes((prev) => [...prev, '']);
     editCountRef.current += 1;
     setDirty(true);
   }, []);
 
   const revert = useCallback(() => {
-    setJornadas(initJornadas(dia));
+    setTimes(initFlat(dia));
     setDirty(false);
     setError(null);
   }, [dia]);
 
   const save = useCallback(async () => {
     const countAtSave = editCountRef.current;
-    const complete = jornadasRef.current.filter((j) => j.entrada && j.salida);
-    const payload = complete.length > 0 ? complete : null;
-    console.log('[MarcacionesEditor] save fired — dia.id:', dia.id, 'jornadasRef:', JSON.stringify(jornadasRef.current), 'payload:', JSON.stringify(payload));
+    const payload = flatToPairs(timesRef.current);
     setSaving(true);
     setError(null);
     try {
@@ -111,35 +99,27 @@ export function MarcacionesEditor({ dia, isReadOnly, onSaved }: Props) {
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({})) as { message?: string };
-        console.error('[MarcacionesEditor] save error:', res.status, err);
         setError(err.message ?? `Error ${res.status}`);
         return;
       }
       const data = await res.json() as { dia: DiaLiquidacionData; totales: TotalesData };
-      console.log('[MarcacionesEditor] save response — horasAjustadas:', data.dia.horasAjustadasSupervisor, 'horasOrdinarias:', data.totales.horasOrdinarias);
-      // Only mark clean if no new edits happened during the async fetch
-      if (editCountRef.current === countAtSave) {
-        setDirty(false);
-      }
+      if (editCountRef.current === countAtSave) setDirty(false);
       onSaved(data.dia, data.totales);
-    } catch (e) {
-      console.error('[MarcacionesEditor] save exception:', e);
+    } catch {
       setError('Error de conexión');
     } finally {
       setSaving(false);
     }
   }, [dia.id, onSaved]);
 
+  const saveRef = useRef(save);
   saveRef.current = save;
 
-  // Auto-save on blur.
-  // Guard: only fire if there is at least one complete entrada+salida pair — avoids
-  // saving null when the user is still in the middle of filling the second field.
   const handleBlur = useCallback(() => {
     blurTimer.current = setTimeout(() => {
       if (!dirtyRef.current || savingRef.current) return;
-      const hasComplete = jornadasRef.current.some((j) => j.entrada && j.salida);
-      if (hasComplete) saveRef.current();
+      const hasPair = timesRef.current.filter(Boolean).length >= 2;
+      if (hasPair) saveRef.current();
     }, 150);
   }, []);
 
@@ -151,56 +131,62 @@ export function MarcacionesEditor({ dia, isReadOnly, onSaved }: Props) {
   }, []);
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-      {jornadas.map((j, i) => (
-        <Box key={i} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-          <TextField
-            size="small"
-            type="time"
-            value={j.entrada}
-            onChange={(e) => update(i, 'entrada', e.target.value)}
-            onBlur={isReadOnly ? undefined : handleBlur}
-            onFocus={isReadOnly ? undefined : handleFocus}
-            disabled={isReadOnly || saving}
-            sx={{ width: 108, ...emptyBorder(!isReadOnly && !j.entrada) }}
-            slotProps={{ htmlInput: { step: 60, style: { fontSize: '0.8rem', padding: '4px 6px' } } }}
-          />
-          <Typography variant="caption" color="text.secondary" sx={{ userSelect: 'none' }}>→</Typography>
-          <TextField
-            size="small"
-            type="time"
-            value={j.salida}
-            onChange={(e) => update(i, 'salida', e.target.value)}
-            onBlur={isReadOnly ? undefined : handleBlur}
-            onFocus={isReadOnly ? undefined : handleFocus}
-            disabled={isReadOnly || saving}
-            sx={{ width: 108, ...emptyBorder(!isReadOnly && !j.salida) }}
-            slotProps={{ htmlInput: { step: 60, style: { fontSize: '0.8rem', padding: '4px 6px' } } }}
-          />
-          {!isReadOnly && (
-            <>
-              <Tooltip title="Intercambiar">
-                <IconButton size="small" onClick={() => swap(i)} disabled={saving} sx={{ p: 0.25 }}>
-                  <SwapHorizIcon sx={{ fontSize: 16 }} />
+    <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 0.5 }}>
+      {times.map((t, i) => {
+        const isEntrada = i % 2 === 0;
+        return (
+          <Box key={i} sx={{ display: 'flex', alignItems: 'center', gap: 0.25 }}>
+            <Typography
+              variant="caption"
+              sx={{
+                color: isEntrada ? 'success.main' : 'error.main',
+                fontWeight: 700,
+                fontSize: '0.62rem',
+                lineHeight: 1,
+                userSelect: 'none',
+                minWidth: 10,
+              }}
+            >
+              {isEntrada ? 'E' : 'S'}
+            </Typography>
+            <TextField
+              size="small"
+              type="time"
+              value={t}
+              onChange={(e) => update(i, e.target.value)}
+              onBlur={isReadOnly ? undefined : handleBlur}
+              onFocus={isReadOnly ? undefined : handleFocus}
+              disabled={isReadOnly || saving}
+              sx={{
+                width: 96,
+                ...(!isReadOnly && !t ? {
+                  '& .MuiOutlinedInput-notchedOutline': { borderColor: 'error.main', borderWidth: 2 },
+                  '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: 'error.dark', borderWidth: 2 },
+                } : {}),
+              }}
+              slotProps={{ htmlInput: { step: 60, style: { fontSize: '0.78rem', padding: '3px 5px' } } }}
+            />
+            {!isReadOnly && (
+              <Tooltip title="Quitar marcación">
+                <IconButton size="small" onClick={() => remove(i)} disabled={saving} sx={{ p: 0.15 }}>
+                  <CloseIcon sx={{ fontSize: 13 }} />
                 </IconButton>
               </Tooltip>
-              <Tooltip title="Quitar">
-                <IconButton size="small" onClick={() => remove(i)} disabled={saving} sx={{ p: 0.25 }}>
-                  <RemoveCircleIcon sx={{ fontSize: 16 }} color="disabled" />
-                </IconButton>
-              </Tooltip>
-              <Tooltip title="Agregar turno">
-                <IconButton size="small" onClick={add} disabled={saving} sx={{ p: 0.25 }}>
-                  <AddIcon sx={{ fontSize: 16 }} />
-                </IconButton>
-              </Tooltip>
-            </>
-          )}
-        </Box>
-      ))}
+            )}
+          </Box>
+        );
+      })}
+
+      {!isReadOnly && (
+        <Tooltip title="Agregar marcación">
+          <IconButton size="small" onClick={add} disabled={saving} sx={{ p: 0.25 }}>
+            <AddIcon sx={{ fontSize: 16 }} />
+          </IconButton>
+        </Tooltip>
+      )}
 
       {!isReadOnly && dirty && (
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mt: 0.25 }}>
+        <>
           <Tooltip title="Guardar">
             <span>
               <IconButton size="small" color="primary" onClick={save} disabled={saving} sx={{ p: 0.25 }}>
@@ -208,13 +194,18 @@ export function MarcacionesEditor({ dia, isReadOnly, onSaved }: Props) {
               </IconButton>
             </span>
           </Tooltip>
-          <Tooltip title="Descartar">
+          <Tooltip title="Descartar cambios">
             <IconButton size="small" onClick={revert} disabled={saving} sx={{ p: 0.25 }}>
               <UndoIcon sx={{ fontSize: 16 }} />
             </IconButton>
           </Tooltip>
-          {error && <Typography variant="caption" color="error">{error}</Typography>}
-        </Box>
+        </>
+      )}
+
+      {error && (
+        <Typography variant="caption" color="error" sx={{ width: '100%' }}>
+          {error}
+        </Typography>
       )}
     </Box>
   );
