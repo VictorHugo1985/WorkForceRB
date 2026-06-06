@@ -80,6 +80,16 @@ export function MarcacionesEditor({ dia, isReadOnly, onSaved }: Props) {
     setDirty(true);
   }, []);
 
+  const insertAfter = useCallback((i: number) => {
+    setTimes((prev) => {
+      const next = [...prev];
+      next.splice(i + 1, 0, '');
+      return next;
+    });
+    editCountRef.current += 1;
+    setDirty(true);
+  }, []);
+
   const revert = useCallback(() => {
     setTimes(initFlat(dia));
     setDirty(false);
@@ -131,20 +141,32 @@ export function MarcacionesEditor({ dia, isReadOnly, onSaved }: Props) {
   }, []);
 
   return (
-    <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 0.5 }}>
+    <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 0.25 }}>
       {times.map((t, i) => {
         const isEntrada = i % 2 === 0;
         return (
           <Box key={i} sx={{ display: 'flex', alignItems: 'center', gap: 0.25 }}>
+            {/* Insert-before button between marcaciones */}
+            {!isReadOnly && i > 0 && (
+              <Tooltip title="Insertar marcación aquí">
+                <IconButton
+                  size="small"
+                  onClick={() => insertAfter(i - 1)}
+                  disabled={saving}
+                  sx={{ p: 0.1, color: 'text.disabled', '&:hover': { color: 'primary.main' } }}
+                >
+                  <AddIcon sx={{ fontSize: 11 }} />
+                </IconButton>
+              </Tooltip>
+            )}
             <Typography
               variant="caption"
               sx={{
                 color: isEntrada ? 'success.main' : 'error.main',
                 fontWeight: 700,
-                fontSize: '0.62rem',
+                fontSize: '0.6rem',
                 lineHeight: 1,
                 userSelect: 'none',
-                minWidth: 10,
               }}
             >
               {isEntrada ? 'E' : 'S'}
@@ -158,18 +180,18 @@ export function MarcacionesEditor({ dia, isReadOnly, onSaved }: Props) {
               onFocus={isReadOnly ? undefined : handleFocus}
               disabled={isReadOnly || saving}
               sx={{
-                width: 96,
+                width: 84,
                 ...(!isReadOnly && !t ? {
                   '& .MuiOutlinedInput-notchedOutline': { borderColor: 'error.main', borderWidth: 2 },
                   '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: 'error.dark', borderWidth: 2 },
                 } : {}),
               }}
-              slotProps={{ htmlInput: { step: 60, style: { fontSize: '0.78rem', padding: '3px 5px' } } }}
+              slotProps={{ htmlInput: { step: 60, style: { fontSize: '0.75rem', padding: '2px 4px' } } }}
             />
             {!isReadOnly && (
               <Tooltip title="Quitar marcación">
-                <IconButton size="small" onClick={() => remove(i)} disabled={saving} sx={{ p: 0.15 }}>
-                  <CloseIcon sx={{ fontSize: 13 }} />
+                <IconButton size="small" onClick={() => remove(i)} disabled={saving} sx={{ p: 0.1 }}>
+                  <CloseIcon sx={{ fontSize: 12 }} />
                 </IconButton>
               </Tooltip>
             )}
@@ -178,9 +200,9 @@ export function MarcacionesEditor({ dia, isReadOnly, onSaved }: Props) {
       })}
 
       {!isReadOnly && (
-        <Tooltip title="Agregar marcación">
-          <IconButton size="small" onClick={add} disabled={saving} sx={{ p: 0.25 }}>
-            <AddIcon sx={{ fontSize: 16 }} />
+        <Tooltip title="Agregar marcación al final">
+          <IconButton size="small" onClick={add} disabled={saving} sx={{ p: 0.2, ml: 0.25 }}>
+            <AddIcon sx={{ fontSize: 15 }} />
           </IconButton>
         </Tooltip>
       )}
