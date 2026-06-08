@@ -26,6 +26,7 @@ import CloseIcon from '@mui/icons-material/Close';
 import EditIcon from '@mui/icons-material/Edit';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import PaymentsIcon from '@mui/icons-material/Payments';
+import RefreshIcon from '@mui/icons-material/Refresh';
 import VerifiedIcon from '@mui/icons-material/Verified';
 import type { DiaLiquidacionData, LiquidacionData, TotalesData } from '@/stores/liquidacion.store';
 import { PlanillaDiaRow } from './PlanillaDiaRow';
@@ -212,6 +213,67 @@ function ConfirmarButton({ liquidacionId, hasInconsistencias, onConfirmed }: Con
   );
 }
 
+// ── Reiniciar button ─────────────────────────────────────────────────────────
+
+interface ReiniciarProps {
+  liquidacionId: string;
+  onReiniciado: (data: import('@/stores/liquidacion.store').LiquidacionData) => void;
+}
+
+function ReiniciarButton({ liquidacionId, onReiniciado }: ReiniciarProps) {
+  const [confirm, setConfirm] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const doReiniciar = async () => {
+    setLoading(true); setError(null);
+    try {
+      const res = await fetch(`/api/liquidaciones/${liquidacionId}/reiniciar`, { method: 'POST' });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({})) as { message?: string };
+        setError(err.message ?? 'Error'); return;
+      }
+      const data = await res.json() as import('@/stores/liquidacion.store').LiquidacionData;
+      onReiniciado(data);
+      setConfirm(false);
+    } catch { setError('Error de conexión'); }
+    finally { setLoading(false); }
+  };
+
+  if (!confirm) {
+    return (
+      <Button
+        variant="outlined"
+        size="small"
+        color="inherit"
+        onClick={() => setConfirm(true)}
+        startIcon={<RefreshIcon />}
+        sx={{ whiteSpace: 'nowrap', color: 'text.secondary', borderColor: 'divider' }}
+      >
+        Reiniciar
+      </Button>
+    );
+  }
+
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+      <Typography variant="caption" color="text.secondary">¿Descartar ediciones y usar eventos originales?</Typography>
+      <Button
+        size="small"
+        variant="outlined"
+        color="warning"
+        onClick={doReiniciar}
+        disabled={loading}
+        endIcon={loading ? <CircularProgress size={12} color="inherit" /> : undefined}
+      >
+        Sí
+      </Button>
+      <Button size="small" onClick={() => setConfirm(false)} disabled={loading}>No</Button>
+      {error && <Typography variant="caption" color="error">{error}</Typography>}
+    </Box>
+  );
+}
+
 // ── Pagar button ──────────────────────────────────────────────────────────────
 
 interface PagarProps {
@@ -313,6 +375,10 @@ export function LiquidacionColaborador({
     });
   }, []);
 
+  const handleReiniciado = useCallback((data: LiquidacionData) => {
+    setLiquidacion(data);
+  }, []);
+
   const handleConfirmed = useCallback(() => {
     setLiquidacion((prev) => prev ? { ...prev, estado: 'APROBADO' } : prev);
     onEstadoChange(liquidacionId, 'APROBADO');
@@ -367,13 +433,16 @@ export function LiquidacionColaborador({
 
         {/* Action zone */}
         {liquidacion && (
-          <Box>
+          <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
             {!isLocked && (
-              <ConfirmarButton
-                liquidacionId={liquidacionId}
-                hasInconsistencias={hasInconsistencias}
-                onConfirmed={handleConfirmed}
-              />
+              <>
+                <ReiniciarButton liquidacionId={liquidacionId} onReiniciado={handleReiniciado} />
+                <ConfirmarButton
+                  liquidacionId={liquidacionId}
+                  hasInconsistencias={hasInconsistencias}
+                  onConfirmed={handleConfirmed}
+                />
+              </>
             )}
             {isAprobado && (
               <PagarButton liquidacionId={liquidacionId} onPagado={handlePagado} />
