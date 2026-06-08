@@ -3,10 +3,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyToken, isBlacklisted, COOKIE_NAME } from './auth-server';
 import { Jornada, ExcludedPunch, LiquidacionData } from '@/stores/liquidacion.store';
 
-// ─── Time helper — data is stored as local time (GMT-4) in a UTC column ───────
+// ─── Time helper — checktime is stored as UTC; display in Bolivia local (UTC-4) ─
 
 function toHHMM(d: Date): string {
-  return `${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}`;
+  const local = new Date(d.getTime() - 4 * 60 * 60 * 1000);
+  return `${String(local.getUTCHours()).padStart(2, '0')}:${String(local.getUTCMinutes()).padStart(2, '0')}`;
 }
 
 // ─── Shift pairing algorithm ──────────────────────────────────────────────────
@@ -72,15 +73,15 @@ export async function fetchPunchMap(
   fechaFin: string,
 ): Promise<Map<string, PunchEntry[]>> {
   const res = await client.query(
-    `SELECT ebd.checktime::date AS fecha,
+    `SELECT (ebd.checktime AT TIME ZONE 'America/La_Paz')::date AS fecha,
             array_agg(ebd.checktime ORDER BY ebd.checktime) AS marcaciones,
             array_agg(COALESCE(ebd.tipo_evento, 'ENTRADA') ORDER BY ebd.checktime) AS tipos
      FROM eventos_biometricos_desglosados ebd
      JOIN codigos_colaborador cc
           ON cc.codigo_biometrico = ebd.employee_workno AND cc.activo = true
      WHERE cc.colaborador_id = $1
-       AND ebd.checktime::date BETWEEN $2 AND $3
-     GROUP BY ebd.checktime::date`,
+       AND (ebd.checktime AT TIME ZONE 'America/La_Paz')::date BETWEEN $2 AND $3
+     GROUP BY (ebd.checktime AT TIME ZONE 'America/La_Paz')::date`,
     [colaboradorId, fechaInicio, fechaFin],
   );
   const map = new Map<string, PunchEntry[]>();
@@ -560,13 +561,13 @@ export async function generarBorradoresSemana(
   const eventosRes = await client.query(
     `SELECT
        cc.colaborador_id,
-       ebd.checktime::date AS fecha,
+       (ebd.checktime AT TIME ZONE 'America/La_Paz')::date AS fecha,
        array_agg(ebd.checktime ORDER BY ebd.checktime) AS marcaciones
      FROM eventos_biometricos_desglosados ebd
      JOIN codigos_colaborador cc
           ON cc.codigo_biometrico = ebd.employee_workno AND cc.activo = true
-     WHERE ebd.checktime::date BETWEEN $1 AND $2
-     GROUP BY cc.colaborador_id, ebd.checktime::date`,
+     WHERE (ebd.checktime AT TIME ZONE 'America/La_Paz')::date BETWEEN $1 AND $2
+     GROUP BY cc.colaborador_id, (ebd.checktime AT TIME ZONE 'America/La_Paz')::date`,
     [fechaInicio, fechaFin],
   );
 

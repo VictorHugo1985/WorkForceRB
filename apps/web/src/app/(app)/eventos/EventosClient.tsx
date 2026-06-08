@@ -87,9 +87,10 @@ function todayGMTMinus4(): string {
 }
 
 function formatChecktime(iso: string): string {
-  const d = new Date(iso);
+  // checktime is UTC; convert to Bolivia local time (UTC-4) for display
+  const local = new Date(new Date(iso).getTime() - 4 * 60 * 60 * 1000);
   const pad = (n: number) => String(n).padStart(2, '0');
-  return `${pad(d.getUTCDate())}/${pad(d.getUTCMonth() + 1)}/${d.getUTCFullYear()} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`;
+  return `${pad(local.getUTCDate())}/${pad(local.getUTCMonth() + 1)}/${local.getUTCFullYear()} ${pad(local.getUTCHours())}:${pad(local.getUTCMinutes())}`;
 }
 
 export function EventosClient({ dispositivos }: { dispositivos: Dispositivo[] }) {
