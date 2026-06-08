@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -278,9 +278,14 @@ export function DashboardClient() {
   // Committed filter state (triggers fetch)
   const [filter, setFilter] = useState({ fechaDesde: today, fechaHasta: today, colaborador: '' });
 
-  const [data, setData]     = useState<DashboardData | null>(null);
+  const [data, setData]       = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError]   = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError]     = useState<string | null>(null);
+
+  // Stable ref so doFetch always reads the latest filter without being a dep
+  const filterRef = useRef(filter);
+  filterRef.current = filter;
 
   const applyFilter = useCallback(() => {
     setFilter({ fechaDesde, fechaHasta, colaborador });
@@ -294,6 +299,24 @@ export function DashboardClient() {
     if (q === 'semana') { setFechaDesde(startOfWeekBolivia(t));    setFechaHasta(t); }
   };
 
+  // Shared fetch logic; silent=true for background 60s ticks (no loading spinner)
+  const doFetch = useCallback((silent: boolean) => {
+    const f = filterRef.current;
+    const params = new URLSearchParams({ fecha_desde: f.fechaDesde, fecha_hasta: f.fechaHasta });
+    if (f.colaborador) params.set('colaborador', f.colaborador);
+
+    if (silent) { setRefreshing(true); }
+    else        { setLoading(true); setError(null); }
+
+    fetch(`/api/dashboard/asistencia?${params}`)
+      .then((r) => { if (!r.ok) throw new Error(`Error ${r.status}`); return r.json() as Promise<DashboardData>; })
+      .then(setData)
+      .catch((e: Error) => { if (!silent) setError((e as Error).message); })
+      .finally(() => { if (silent) setRefreshing(false); else setLoading(false); });
+  // filterRef is a ref — intentionally omitted from deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Auto-apply when quick filter changes
   useEffect(() => {
     if (quick !== 'custom') {
@@ -306,19 +329,17 @@ export function DashboardClient() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [quick]);
 
+  // Fetch on committed filter change (user-triggered — shows loading spinner)
   useEffect(() => {
-    const params = new URLSearchParams({ fecha_desde: filter.fechaDesde, fecha_hasta: filter.fechaHasta });
-    if (filter.colaborador) params.set('colaborador', filter.colaborador);
+    doFetch(false);
+  }, [filter, doFetch]);
 
-    setLoading(true);
-    setError(null);
-
-    fetch(`/api/dashboard/asistencia?${params}`)
-      .then((r) => { if (!r.ok) throw new Error(`Error ${r.status}`); return r.json() as Promise<DashboardData>; })
-      .then(setData)
-      .catch((e: Error) => setError(e.message))
-      .finally(() => setLoading(false));
-  }, [filter]);
+  // 60-second auto-refresh — only while viewing "Hoy" (Constitution Principle X)
+  useEffect(() => {
+    if (quick !== 'hoy') return;
+    const id = setInterval(() => doFetch(true), 60_000);
+    return () => clearInterval(id);
+  }, [quick, doFetch]);
 
   // Summary totals
   const totalActivos  = data?.areas.reduce((s, a) => s + a.colaboradores.length, 0) ?? 0;
@@ -332,6 +353,12 @@ export function DashboardClient() {
 
   return (
     <Box>
+      {/* Background-refresh pulse — thin bar, shown only during silent 60s ticks */}
+      <LinearProgress
+        variant="indeterminate"
+        sx={{ height: 2, mb: 0.25, opacity: refreshing ? 1 : 0, transition: 'opacity 0.3s' }}
+      />
+
       <Typography variant="h5" sx={{ fontWeight: 700, mb: 2.5 }}>
         Asistencia
       </Typography>
