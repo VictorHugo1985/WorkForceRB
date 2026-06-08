@@ -29,15 +29,18 @@ function initFlat(dia: DiaLiquidacionData): string[] {
   return flat.length > 0 ? flat : [''];
 }
 
-// Group flat times into entrada/salida pairs for the API
+// Group flat times into entrada/salida pairs for the API.
+// Orphan times (no partner yet) are included with empty salida so they are
+// persisted and visible after save; the server already skips incomplete pairs
+// when computing hours.
 function flatToPairs(times: string[]): Array<{ entrada: string; salida: string }> | null {
   const filled = times.filter(Boolean);
   if (filled.length === 0) return null;
   const pairs: Array<{ entrada: string; salida: string }> = [];
-  for (let i = 0; i + 1 < filled.length; i += 2) {
-    pairs.push({ entrada: filled[i], salida: filled[i + 1] });
+  for (let i = 0; i < filled.length; i += 2) {
+    pairs.push({ entrada: filled[i], salida: filled[i + 1] ?? '' });
   }
-  return pairs.length > 0 ? pairs : null;
+  return pairs;
 }
 
 export function MarcacionesEditor({ dia, isReadOnly, onSaved }: Props) {
@@ -113,7 +116,11 @@ export function MarcacionesEditor({ dia, isReadOnly, onSaved }: Props) {
         return;
       }
       const data = await res.json() as { dia: DiaLiquidacionData; totales: TotalesData };
-      if (editCountRef.current === countAtSave) setDirty(false);
+      // Only sync state if no new edits happened during the async request
+      if (editCountRef.current === countAtSave) {
+        setDirty(false);
+        setTimes(initFlat(data.dia));
+      }
       onSaved(data.dia, data.totales);
     } catch {
       setError('Error de conexión');
@@ -128,8 +135,8 @@ export function MarcacionesEditor({ dia, isReadOnly, onSaved }: Props) {
   const handleBlur = useCallback(() => {
     blurTimer.current = setTimeout(() => {
       if (!dirtyRef.current || savingRef.current) return;
-      const hasPair = timesRef.current.filter(Boolean).length >= 2;
-      if (hasPair) saveRef.current();
+      const hasAny = timesRef.current.some(Boolean);
+      if (hasAny) saveRef.current();
     }, 150);
   }, []);
 
