@@ -498,31 +498,26 @@ export function DashboardClient() {
         <Alert severity="error">{error}</Alert>
       )}
 
-      {/* ── Area cards grid ── */}
+      {/* ── Area cards masonry ── */}
       {!loading && !error && data && (
-        <Box
-          sx={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
-            gap: 1.5,
-            alignItems: 'start',
-          }}
-        >
-          {data.areas.map((area) => (
-            <AreaCard
-              key={area.areaId ?? area.areaNombre}
-              area={area}
-              isMultiDay={isMultiDay}
-              totalDias={totalDias}
-              showAbsent={showAbsent}
-            />
-          ))}
-          {data.areas.length === 0 && (
-            <Typography color="text.secondary" sx={{ gridColumn: '1/-1', py: 4, textAlign: 'center' }}>
-              No hay datos para el período seleccionado.
-            </Typography>
-          )}
-        </Box>
+        data.areas.length === 0 ? (
+          <Typography color="text.secondary" sx={{ py: 4, textAlign: 'center' }}>
+            No hay datos para el período seleccionado.
+          </Typography>
+        ) : (
+          <Box sx={{ columns: '380px', columnGap: '12px' }}>
+            {data.areas.map((area) => (
+              <Box key={area.areaId ?? area.areaNombre} sx={{ breakInside: 'avoid', mb: 1.5, display: 'block' }}>
+                <AreaCard
+                  area={area}
+                  isMultiDay={isMultiDay}
+                  totalDias={totalDias}
+                  showAbsent={showAbsent}
+                />
+              </Box>
+            ))}
+          </Box>
+        )
       )}
     </Box>
   );
