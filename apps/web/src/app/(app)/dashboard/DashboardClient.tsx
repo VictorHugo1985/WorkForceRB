@@ -356,17 +356,13 @@ export function DashboardClient() {
       {/* Background-refresh pulse — thin bar, shown only during silent 60s ticks */}
       <LinearProgress
         variant="indeterminate"
-        sx={{ height: 2, mb: 0.25, opacity: refreshing ? 1 : 0, transition: 'opacity 0.3s' }}
+        sx={{ height: 2, mb: 0.5, opacity: refreshing ? 1 : 0, transition: 'opacity 0.3s' }}
       />
 
-      <Typography variant="h5" sx={{ fontWeight: 700, mb: 2.5 }}>
-        Asistencia
-      </Typography>
-
       {/* ── Filters ── */}
-      <Paper variant="outlined" sx={{ p: 2, mb: 2.5 }}>
-        {/* Quick filters */}
-        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center', mb: 1.5 }}>
+      <Paper variant="outlined" sx={{ p: 1.25, mb: 1.5 }}>
+        {/* Quick filters + date range + search — all in one compact row */}
+        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
           {(['hoy', 'ayer', 'semana'] as const).map((q) => (
             <Chip
               key={q}
@@ -374,6 +370,7 @@ export function DashboardClient() {
               onClick={() => applyQuick(q)}
               color={quick === q ? 'primary' : 'default'}
               variant={quick === q ? 'filled' : 'outlined'}
+              size="small"
               sx={{ cursor: 'pointer' }}
             />
           ))}
@@ -382,20 +379,18 @@ export function DashboardClient() {
             onClick={() => setQuick('custom')}
             color={quick === 'custom' ? 'primary' : 'default'}
             variant={quick === 'custom' ? 'filled' : 'outlined'}
+            size="small"
             sx={{ cursor: 'pointer' }}
           />
-        </Box>
-
-        {/* Date range + search */}
-        <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+          <Divider orientation="vertical" flexItem sx={{ mx: 0.5, my: 0.5 }} />
           <TextField
             label="Desde"
             type="date"
             size="small"
             value={fechaDesde}
             onChange={(e) => { setFechaDesde(e.target.value); setQuick('custom'); }}
-            slotProps={{ inputLabel: { shrink: true } }}
-            sx={{ width: 150 }}
+            slotProps={{ inputLabel: { shrink: true }, htmlInput: { style: { fontSize: '0.8rem', padding: '4px 8px' } } }}
+            sx={{ width: 130 }}
           />
           <TextField
             label="Hasta"
@@ -403,8 +398,8 @@ export function DashboardClient() {
             size="small"
             value={fechaHasta}
             onChange={(e) => { setFechaHasta(e.target.value); setQuick('custom'); }}
-            slotProps={{ inputLabel: { shrink: true } }}
-            sx={{ width: 150 }}
+            slotProps={{ inputLabel: { shrink: true }, htmlInput: { style: { fontSize: '0.8rem', padding: '4px 8px' } } }}
+            sx={{ width: 130 }}
           />
           <TextField
             label="Colaborador"
@@ -412,73 +407,70 @@ export function DashboardClient() {
             value={colaborador}
             onChange={(e) => setColaborador(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && applyFilter()}
-            placeholder="Nombre, apellido o cédula"
-            sx={{ width: 220 }}
-            slotProps={{ input: { endAdornment: <SearchIcon sx={{ fontSize: 18, color: 'text.disabled' }} /> } }}
+            placeholder="Nombre o cédula"
+            sx={{ width: 180 }}
+            slotProps={{
+              input: { endAdornment: <SearchIcon sx={{ fontSize: 16, color: 'text.disabled' }} />, style: { fontSize: '0.8rem' } },
+              inputLabel: { style: { fontSize: '0.8rem' } },
+            }}
           />
           <Button
             variant="contained"
             onClick={applyFilter}
             disabled={loading}
             size="small"
-            sx={{ height: 40 }}
           >
             Filtrar
           </Button>
-          <Button
-            variant="outlined"
-            size="small"
-            sx={{ height: 40, ml: 'auto' }}
-            color={showAbsent ? 'primary' : 'inherit'}
+          <Chip
+            label={showAbsent ? 'Ocultar ausentes' : 'Mostrar ausentes'}
             onClick={() => setShowAbsent((v) => !v)}
-            startIcon={<PersonOffIcon sx={{ fontSize: 16 }} />}
-          >
-            {showAbsent ? 'Ocultar ausentes' : 'Mostrar ausentes'}
-          </Button>
+            color={showAbsent ? 'default' : 'default'}
+            variant={showAbsent ? 'outlined' : 'filled'}
+            size="small"
+            icon={<PersonOffIcon sx={{ fontSize: '14px !important' }} />}
+            sx={{ cursor: 'pointer', ml: 'auto' }}
+          />
         </Box>
       </Paper>
 
-      {/* ── Summary banner ── */}
+      {/* ── Summary banner — compact single row ── */}
       {data && !loading && (
         <Box
           sx={{
             display: 'flex',
-            gap: 3,
+            gap: 2,
             alignItems: 'center',
-            mb: 2.5,
-            px: 2.5,
-            py: 1.5,
+            mb: 1.5,
+            px: 2,
+            py: 0.75,
             bgcolor: 'primary.main',
-            borderRadius: 2,
+            borderRadius: 1.5,
             color: 'white',
           }}
         >
           <Box>
-            <Typography variant="caption" sx={{ opacity: 0.8, display: 'block', lineHeight: 1.2 }}>
+            <Typography sx={{ fontSize: '0.65rem', opacity: 0.8, lineHeight: 1 }}>
               Presentes — {labelRango}
             </Typography>
-            <Typography variant="h4" sx={{ fontWeight: 800, lineHeight: 1.1 }}>
+            <Typography sx={{ fontWeight: 800, fontSize: '1.4rem', lineHeight: 1.1 }}>
               {totalPresentes}
-              <Typography component="span" variant="h6" sx={{ fontWeight: 400, opacity: 0.7 }}>
+              <Typography component="span" sx={{ fontWeight: 400, fontSize: '0.9rem', opacity: 0.7 }}>
                 {' '}/ {totalActivos}
               </Typography>
             </Typography>
           </Box>
           <Divider orientation="vertical" flexItem sx={{ borderColor: 'rgba(255,255,255,0.25)' }} />
           <Box>
-            <Typography variant="caption" sx={{ opacity: 0.8, display: 'block', lineHeight: 1.2 }}>
-              Cobertura
-            </Typography>
-            <Typography variant="h4" sx={{ fontWeight: 800, lineHeight: 1.1 }}>
+            <Typography sx={{ fontSize: '0.65rem', opacity: 0.8, lineHeight: 1 }}>Cobertura</Typography>
+            <Typography sx={{ fontWeight: 800, fontSize: '1.4rem', lineHeight: 1.1 }}>
               {totalActivos > 0 ? Math.round((totalPresentes / totalActivos) * 100) : 0}%
             </Typography>
           </Box>
           <Divider orientation="vertical" flexItem sx={{ borderColor: 'rgba(255,255,255,0.25)' }} />
           <Box>
-            <Typography variant="caption" sx={{ opacity: 0.8, display: 'block', lineHeight: 1.2 }}>
-              Ausentes
-            </Typography>
-            <Typography variant="h4" sx={{ fontWeight: 800, lineHeight: 1.1 }}>
+            <Typography sx={{ fontSize: '0.65rem', opacity: 0.8, lineHeight: 1 }}>Ausentes</Typography>
+            <Typography sx={{ fontWeight: 800, fontSize: '1.4rem', lineHeight: 1.1 }}>
               {totalActivos - totalPresentes}
             </Typography>
           </Box>
@@ -486,10 +478,8 @@ export function DashboardClient() {
             <>
               <Divider orientation="vertical" flexItem sx={{ borderColor: 'rgba(255,255,255,0.25)' }} />
               <Box>
-                <Typography variant="caption" sx={{ opacity: 0.8, display: 'block', lineHeight: 1.2 }}>
-                  Rango
-                </Typography>
-                <Typography variant="h6" sx={{ fontWeight: 600, lineHeight: 1.1 }}>
+                <Typography sx={{ fontSize: '0.65rem', opacity: 0.8, lineHeight: 1 }}>Rango</Typography>
+                <Typography sx={{ fontWeight: 600, fontSize: '1rem', lineHeight: 1.1 }}>
                   {totalDias} días
                 </Typography>
               </Box>
@@ -513,8 +503,8 @@ export function DashboardClient() {
         <Box
           sx={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))',
-            gap: 2,
+            gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
+            gap: 1.5,
           }}
         >
           {data.areas.map((area) => (
