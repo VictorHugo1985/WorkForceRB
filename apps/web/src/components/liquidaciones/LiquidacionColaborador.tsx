@@ -450,18 +450,12 @@ export function LiquidacionColaborador({
           <Table size="small" sx={{ tableLayout: 'fixed' }}>
             <TableHead>
               <TableRow sx={{ bgcolor: 'action.hover' }}>
-                <TableCell sx={{ fontWeight: 600, width: 90, color: 'text.secondary', fontSize: '0.75rem' }}>Fecha</TableCell>
-                <TableCell sx={{ color: 'text.secondary', fontSize: '0.75rem', pt: 0.5, pb: 0.5 }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                    <Box sx={{ width: 108, textAlign: 'center', fontWeight: 600 }}>Entrada</Box>
-                    <Box sx={{ width: 18 }} />
-                    <Box sx={{ width: 108, textAlign: 'center', fontWeight: 600 }}>Salida</Box>
-                  </Box>
-                </TableCell>
-                <TableCell sx={{ fontWeight: 600, width: 100, color: 'text.secondary', fontSize: '0.75rem' }}>Horas</TableCell>
-                <TableCell sx={{ fontWeight: 600, width: 200, color: 'text.secondary', fontSize: '0.75rem' }}>Tipo ajuste</TableCell>
-                <TableCell sx={{ fontWeight: 600, width: 140, color: 'text.secondary', fontSize: '0.75rem' }}>Monto ajuste</TableCell>
-                <TableCell sx={{ fontWeight: 600, width: 110, color: 'text.secondary', fontSize: '0.75rem' }}>Estado</TableCell>
+                <TableCell sx={{ fontWeight: 600, width: 80, color: 'text.secondary', fontSize: '0.75rem', px: 1, py: 0.5 }}>Fecha</TableCell>
+                <TableCell sx={{ fontWeight: 600, color: 'text.secondary', fontSize: '0.75rem', px: 1, py: 0.5 }}>Marcaciones</TableCell>
+                <TableCell sx={{ fontWeight: 600, width: 72, color: 'text.secondary', fontSize: '0.75rem', px: 1, py: 0.5 }}>Horas</TableCell>
+                <TableCell sx={{ fontWeight: 600, width: 155, color: 'text.secondary', fontSize: '0.75rem', px: 1, py: 0.5 }}>Tipo ajuste</TableCell>
+                <TableCell sx={{ fontWeight: 600, width: 110, color: 'text.secondary', fontSize: '0.75rem', px: 1, py: 0.5 }}>Monto</TableCell>
+                <TableCell sx={{ fontWeight: 600, width: 100, color: 'text.secondary', fontSize: '0.75rem', px: 1, py: 0.5 }}>Estado</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>

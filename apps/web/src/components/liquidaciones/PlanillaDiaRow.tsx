@@ -137,14 +137,14 @@ export function PlanillaDiaRow({ dia, isReadOnly, onDiaUpdate }: Props) {
       </TableCell>
 
       {/* Horas */}
-      <TableCell sx={{ verticalAlign: 'middle' }}>
-        <Typography variant="body2" sx={{ fontWeight: 500 }}>
+      <TableCell sx={{ verticalAlign: 'middle', px: 1, py: 0.5, whiteSpace: 'nowrap' }}>
+        <Typography variant="body2" sx={{ fontWeight: 500, fontSize: '0.8rem' }}>
           {effectiveHoras(dia).toFixed(2)} h
         </Typography>
       </TableCell>
 
       {/* Tipo ajuste */}
-      <TableCell sx={{ verticalAlign: 'middle' }}>
+      <TableCell sx={{ verticalAlign: 'middle', px: 1, py: 0.5 }}>
         {cellReadOnly ? (
           tipo ? (
             <Chip
@@ -161,11 +161,11 @@ export function PlanillaDiaRow({ dia, isReadOnly, onDiaUpdate }: Props) {
             onChange={(e) => handleTipoChange(e.target.value as TipoAjuste)}
             displayEmpty
             disabled={saving}
-            sx={{ fontSize: '0.8rem', minWidth: 155 }}
+            sx={{ fontSize: '0.75rem', minWidth: 130, '& .MuiSelect-select': { py: '4px' } }}
           >
             <MenuItem value=""><em>Sin ajuste</em></MenuItem>
             {TIPOS.map((t) => (
-              <MenuItem key={t.value} value={t.value} sx={{ fontSize: '0.8rem' }}>
+              <MenuItem key={t.value} value={t.value} sx={{ fontSize: '0.75rem' }}>
                 {t.label}
               </MenuItem>
             ))}
@@ -174,9 +174,9 @@ export function PlanillaDiaRow({ dia, isReadOnly, onDiaUpdate }: Props) {
       </TableCell>
 
       {/* Monto Ajuste */}
-      <TableCell sx={{ verticalAlign: 'middle' }}>
+      <TableCell sx={{ verticalAlign: 'middle', px: 1, py: 0.5 }}>
         {cellReadOnly ? (
-          <Typography variant="body2" sx={{ fontWeight: monto ? 500 : undefined, color: monto ? (tipo === 'DESCUENTO' ? 'warning.main' : 'success.main') : 'text.disabled' }}>
+          <Typography variant="body2" sx={{ fontWeight: monto ? 500 : undefined, fontSize: '0.8rem', color: monto ? (tipo === 'DESCUENTO' ? 'warning.main' : 'success.main') : 'text.disabled', whiteSpace: 'nowrap' }}>
             {monto ? `${tipo === 'DESCUENTO' ? '−' : '+'}${Number(monto).toFixed(2)} Bs.` : '—'}
           </Typography>
         ) : (
@@ -189,7 +189,7 @@ export function PlanillaDiaRow({ dia, isReadOnly, onDiaUpdate }: Props) {
               onChange={(e) => handleMontoChange(e.target.value)}
               disabled={saving || !tipo}
               error={!!error}
-              sx={{ width: 100, '& .MuiInputBase-input': { fontSize: '0.8rem', py: '5px' } }}
+              sx={{ width: 84, '& .MuiInputBase-input': { fontSize: '0.75rem', py: '4px' } }}
               slotProps={{ htmlInput: { min: 0.01, step: 0.01 } }}
             />
             {dirty && (
@@ -224,7 +224,7 @@ export function PlanillaDiaRow({ dia, isReadOnly, onDiaUpdate }: Props) {
       </TableCell>
 
       {/* Estado */}
-      <TableCell sx={{ verticalAlign: 'middle' }}>
+      <TableCell sx={{ verticalAlign: 'middle', px: 1, py: 0.5, whiteSpace: 'nowrap' }}>
         {estadoChip(dia.estadoDia)}
       </TableCell>
     </TableRow>
