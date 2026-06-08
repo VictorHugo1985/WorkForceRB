@@ -480,12 +480,7 @@ export function PlanillaView() {
   useEffect(() => {
     fetch('/api/semanas-laborales')
       .then((r) => r.json())
-      .then((rows: SemanaLaboral[]) => {
-        setSemanas(rows);
-        // Auto-open the most recent ABIERTA period
-        const abierta = rows.find((s) => s.estado === 'ABIERTA');
-        if (abierta) setSelected(abierta);
-      })
+      .then((rows: SemanaLaboral[]) => setSemanas(rows))
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
