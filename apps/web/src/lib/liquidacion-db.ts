@@ -3,11 +3,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyToken, isBlacklisted, COOKIE_NAME } from './auth-server';
 import { Jornada, ExcludedPunch, LiquidacionData } from '@/stores/liquidacion.store';
 
-// ─── Time helper — checktime is stored as UTC; display in Bolivia local (UTC-4) ─
+// ─── Time helper — receives local time (utc_offset already applied by SQL) ────
 
 function toHHMM(d: Date): string {
-  const local = new Date(d.getTime() - 4 * 60 * 60 * 1000);
-  return `${String(local.getUTCHours()).padStart(2, '0')}:${String(local.getUTCMinutes()).padStart(2, '0')}`;
+  return `${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}`;
 }
 
 // ─── Shift pairing algorithm ──────────────────────────────────────────────────
@@ -78,23 +77,24 @@ export async function fetchPunchMap(
   const fechaFinPlus1 = dayAfter.toISOString().slice(0, 10);
 
   const res = await client.query(
-    `SELECT ebd.checktime,
-            COALESCE(ebd.tipo_evento, 'ENTRADA') AS tipo
+    `SELECT
+       (ebd.checktime + make_interval(hours => ebd.utc_offset)) AS checktime_local,
+       ((ebd.checktime + make_interval(hours => ebd.utc_offset))::date)::text AS fecha_local,
+       COALESCE(ebd.tipo_evento, 'ENTRADA') AS tipo
      FROM eventos_biometricos_desglosados ebd
      JOIN codigos_colaborador cc
           ON cc.codigo_biometrico = ebd.employee_workno AND cc.activo = true
      WHERE cc.colaborador_id = $1
-       AND (ebd.checktime AT TIME ZONE 'America/La_Paz')::date BETWEEN $2 AND $3
+       AND ((ebd.checktime + make_interval(hours => ebd.utc_offset))::date) BETWEEN $2 AND $3
      ORDER BY ebd.checktime`,
     [colaboradorId, fechaInicio, fechaFinPlus1],
   );
 
-  // Group individually by Bolivia local date
+  // Group by Bolivia local date (already computed server-side)
   const map = new Map<string, PunchEntry[]>();
   for (const row of res.rows) {
-    const time = row.checktime as Date;
-    const local = new Date(time.getTime() - 4 * 60 * 60 * 1000);
-    const date = local.toISOString().slice(0, 10);
+    const date = row.fecha_local as string;
+    const time = row.checktime_local as Date;
     if (!map.has(date)) map.set(date, []);
     map.get(date)!.push({ time, tipo: row.tipo as string });
   }
@@ -589,17 +589,17 @@ export async function generarBorradoresSemana(
     liqRes.rows.map((r) => [r.colaborador_id as string, r.id as string]),
   );
 
-  // Fetch all punches per collaborator per day using array_agg
+  // Fetch all punches per collaborator per day using array_agg (local times via stored utc_offset)
   const eventosRes = await client.query(
     `SELECT
        cc.colaborador_id,
-       (ebd.checktime AT TIME ZONE 'America/La_Paz')::date AS fecha,
-       array_agg(ebd.checktime ORDER BY ebd.checktime) AS marcaciones
+       ((ebd.checktime + make_interval(hours => ebd.utc_offset))::date)::text AS fecha,
+       array_agg(ebd.checktime + make_interval(hours => ebd.utc_offset) ORDER BY ebd.checktime) AS marcaciones
      FROM eventos_biometricos_desglosados ebd
      JOIN codigos_colaborador cc
           ON cc.codigo_biometrico = ebd.employee_workno AND cc.activo = true
-     WHERE (ebd.checktime AT TIME ZONE 'America/La_Paz')::date BETWEEN $1 AND $2
-     GROUP BY cc.colaborador_id, (ebd.checktime AT TIME ZONE 'America/La_Paz')::date`,
+     WHERE ((ebd.checktime + make_interval(hours => ebd.utc_offset))::date) BETWEEN $1 AND $2
+     GROUP BY cc.colaborador_id, (ebd.checktime + make_interval(hours => ebd.utc_offset))::date`,
     [fechaInicio, fechaFin],
   );
 
@@ -609,14 +609,14 @@ export async function generarBorradoresSemana(
     if (!liquidacionId) continue;
 
     const { horasParejadas } = buildJornadas(ev.marcaciones as Date[], []);
-    const fecha: string = (ev.fecha as Date).toISOString().slice(0, 10);
+    const fecha = ev.fecha as string;  // already text 'YYYY-MM-DD' from SQL
 
     await client.query(
       `INSERT INTO liquidacion_jornada
          (id, liquidacion_id, fecha, horas_calculadas, estado_dia)
        VALUES (gen_random_uuid(), $1, $2, $3, 'SIN_REVISION')
        ON CONFLICT (liquidacion_id, fecha) DO NOTHING`,
-      [liquidacionId, ev.fecha, horasParejadas],
+      [liquidacionId, fecha, horasParejadas],
     );
   }
   // No totals computed during borrador creation — computed at runtime on read

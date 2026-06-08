@@ -30,7 +30,7 @@ interface Dispositivo {
 
 interface Evento {
   id: string;
-  checktime: string;
+  checktime_local: string;
   tipo_evento: 'ENTRADA' | 'SALIDA' | 'DESCONOCIDO';
   device_name: string;
   employee_workno: string;
@@ -87,10 +87,10 @@ function todayGMTMinus4(): string {
 }
 
 function formatChecktime(iso: string): string {
-  // checktime is UTC; convert to Bolivia local time (UTC-4) for display
-  const local = new Date(new Date(iso).getTime() - 4 * 60 * 60 * 1000);
+  // checktime_local is already in Bolivia local time (UTC-4 applied server-side)
+  const d = new Date(iso);
   const pad = (n: number) => String(n).padStart(2, '0');
-  return `${pad(local.getUTCDate())}/${pad(local.getUTCMonth() + 1)}/${local.getUTCFullYear()} ${pad(local.getUTCHours())}:${pad(local.getUTCMinutes())}`;
+  return `${pad(d.getUTCDate())}/${pad(d.getUTCMonth() + 1)}/${d.getUTCFullYear()} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`;
 }
 
 export function EventosClient({ dispositivos }: { dispositivos: Dispositivo[] }) {
@@ -294,7 +294,7 @@ export function EventosClient({ dispositivos }: { dispositivos: Dispositivo[] })
                 {result.eventos.map((ev) => (
                   <TableRow key={ev.id} hover>
                     <TableCell sx={{ whiteSpace: 'nowrap' }}>
-                      {formatChecktime(ev.checktime)}
+                      {formatChecktime(ev.checktime_local)}
                     </TableCell>
                     <TableCell
                       sx={

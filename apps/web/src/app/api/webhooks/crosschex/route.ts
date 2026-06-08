@@ -69,11 +69,11 @@ async function processRecord(record: any, fallbackRequestId: string) {
     await client.query(
       `INSERT INTO eventos_biometricos_desglosados
          (evento_id, checktime, checktype, tipo_evento, device_serial_number,
-          device_name, employee_workno, employee_first_name, employee_last_name)
-       VALUES ($1, $2, $3, $4::\"TipoEvento\", $5, $6, $7, $8, $9)
+          device_name, employee_workno, employee_first_name, employee_last_name, utc_offset)
+       VALUES ($1, $2, $3, $4::\"TipoEvento\", $5, $6, $7, $8, $9, $10)
        ON CONFLICT (evento_id) DO NOTHING`,
       [eventoId, new Date(checktime), checktype, tipoEvento,
-       serialNumber, deviceName, workno, firstName, lastName],
+       serialNumber, deviceName, workno, firstName, lastName, -4],
     );
   } catch (err) {
     // T025: structured error log with context for debugging

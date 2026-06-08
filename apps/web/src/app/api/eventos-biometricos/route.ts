@@ -39,7 +39,6 @@ export async function GET(req: NextRequest) {
   const pageSizeRaw = parseInt(searchParams.get('page_size') ?? '25', 10);
   const page_size = ([25, 50, 100] as number[]).includes(pageSizeRaw) ? pageSizeRaw : 25;
 
-  const { desde, hasta } = buildDateRange(fecha_desde, fecha_hasta);
   const offset = (page - 1) * page_size;
 
   // Estado computed at query time by joining codigos_colaborador with the current workno mapping.
@@ -57,9 +56,9 @@ export async function GET(req: NextRequest) {
     LEFT JOIN colaboradores c ON c.id = cc.colaborador_id
   `;
 
+  // Filter by local date using the stored utc_offset per row
   const baseWhere = `
-    WHERE ebd.checktime >= $1
-      AND ebd.checktime < $2
+    WHERE ((ebd.checktime + make_interval(hours => ebd.utc_offset))::date) BETWEEN $1::date AND $2::date
       AND ($3::text IS NULL OR
            c.nombre ILIKE '%' || $3 || '%' OR
            c.apellido ILIKE '%' || $3 || '%' OR
@@ -74,7 +73,7 @@ export async function GET(req: NextRequest) {
     const dataResult = await client.query(
       `SELECT
          ebd.id,
-         ebd.checktime,
+         (ebd.checktime + make_interval(hours => ebd.utc_offset)) AS checktime_local,
          ebd.tipo_evento,
          ebd.device_name,
          ebd.employee_workno,
@@ -87,12 +86,12 @@ export async function GET(req: NextRequest) {
        ${baseWhere}
        ORDER BY ebd.checktime DESC
        LIMIT $7 OFFSET $8`,
-      [desde, hasta, colaborador, tipo_evento, dispositivo, estado, page_size, offset],
+      [fecha_desde, fecha_hasta, colaborador, tipo_evento, dispositivo, estado, page_size, offset],
     );
 
     const countResult = await client.query<{ count: string }>(
       `SELECT COUNT(*) AS count ${baseJoins} ${baseWhere}`,
-      [desde, hasta, colaborador, tipo_evento, dispositivo, estado],
+      [fecha_desde, fecha_hasta, colaborador, tipo_evento, dispositivo, estado],
     );
 
     const total = parseInt(countResult.rows[0].count, 10);
@@ -115,11 +114,4 @@ function todayGMTMinus4(): string {
   const offset = -4 * 60;
   const local = new Date(now.getTime() + (offset - now.getTimezoneOffset()) * 60000);
   return local.toISOString().slice(0, 10);
-}
-
-function buildDateRange(fecha_desde: string, fecha_hasta: string) {
-  const desde = new Date(`${fecha_desde}T00:00:00Z`);
-  const hasta = new Date(`${fecha_hasta}T00:00:00Z`);
-  hasta.setUTCDate(hasta.getUTCDate() + 1);
-  return { desde: desde.toISOString(), hasta: hasta.toISOString() };
 }

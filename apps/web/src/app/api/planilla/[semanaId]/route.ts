@@ -31,8 +31,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ sema
          FROM eventos_biometricos_desglosados ebd
          JOIN codigos_colaborador cc
               ON cc.codigo_biometrico = ebd.employee_workno AND cc.activo = true
-         WHERE (ebd.checktime AT TIME ZONE 'America/La_Paz')::date BETWEEN $1 AND $2
-         GROUP BY cc.colaborador_id, (ebd.checktime AT TIME ZONE 'America/La_Paz')::date
+         WHERE ((ebd.checktime + make_interval(hours => ebd.utc_offset))::date) BETWEEN $1 AND $2
+         GROUP BY cc.colaborador_id, (ebd.checktime + make_interval(hours => ebd.utc_offset))::date
        ),
        colab_max AS (
          SELECT colaborador_id,
