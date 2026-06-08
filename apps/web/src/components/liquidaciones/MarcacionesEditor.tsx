@@ -158,6 +158,17 @@ export function MarcacionesEditor({ dia, isReadOnly, onSaved }: Props) {
 
   useEffect(() => () => { if (blurTimer.current) clearTimeout(blurTimer.current); }, []);
 
+  // Re-initialize when dia content changes from outside (e.g. reiniciar clears marcacionesManuales)
+  const manualesKey = JSON.stringify(dia.marcacionesManuales ?? null);
+  useEffect(() => {
+    if (savingRef.current) return;
+    setItems(initItems(dia));
+    setDirty(false);
+    setError(null);
+    editCountRef.current = 0;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dia.id, manualesKey]);
+
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
   // ── Mutations ────────────────────────────────────────────────────────────
