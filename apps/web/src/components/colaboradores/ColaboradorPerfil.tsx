@@ -50,6 +50,7 @@ interface PerfilData {
   activo: boolean;
   creado_en: string;
   supervisor: { id: string; nombre: string; apellido: string } | null;
+  area: { id: string; nombre: string } | null;
   tarifa_hora: number | null;
   tipo_pago: TipoPago | null;
   plantilla_horario: PlantillaHorario | null;
@@ -67,6 +68,7 @@ const EditSchema = z.object({
   telefono: z.string().max(30).optional().or(z.literal('')),
   fecha_nacimiento: z.string().optional().or(z.literal('')),
   supervisor_id: z.union([z.string().uuid(), z.literal(''), z.null()]).optional(),
+  area_id: z.union([z.string().uuid(), z.literal(''), z.null()]).optional(),
   tarifa_hora: z.string().optional().or(z.literal('')),
   tipo_pago: z.enum(['SEMANAL', 'QUINCENAL', 'MENSUAL']).or(z.literal('')).nullable().optional(),
   plantilla_horario_id: z.union([z.string().uuid(), z.literal(''), z.null()]).optional(),
@@ -113,6 +115,7 @@ export default function ColaboradorPerfil({ perfil }: ColaboradorPerfilProps) {
     fecha_nacimiento: perfil.fecha_nacimiento,
     activo: perfil.activo,
     supervisor: perfil.supervisor,
+    area: perfil.area,
   });
   const [tarifaHora, setTarifaHora] = useState<number | null>(perfil.tarifa_hora);
   const [tipoPago, setTipoPago] = useState<TipoPago | null>(perfil.tipo_pago);
@@ -125,6 +128,7 @@ export default function ColaboradorPerfil({ perfil }: ColaboradorPerfilProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
   const [supervisores, setSupervisores] = useState<{ id: string; nombre: string; apellido: string }[]>([]);
+  const [areas, setAreas] = useState<{ id: string; nombre: string }[]>([]);
   const [plantillasDisponibles, setPlantillasDisponibles] = useState<PlantillaHorario[]>([]);
   const [loadingEdit, setLoadingEdit] = useState(false);
 
@@ -138,11 +142,13 @@ export default function ColaboradorPerfil({ perfil }: ColaboradorPerfilProps) {
   async function handleEditClick() {
     setLoadingEdit(true);
     try {
-      const [supRes, plantRes] = await Promise.all([
+      const [supRes, areasRes, plantRes] = await Promise.all([
         fetch('/api/usuarios/supervisores').then((r) => r.json()),
+        fetch('/api/areas').then((r) => r.json()),
         fetch('/api/plantillas-horario').then((r) => r.json()),
       ]);
       setSupervisores(supRes.supervisores ?? []);
+      setAreas(areasRes.areas ?? []);
       setPlantillasDisponibles(plantRes.plantillas ?? []);
     } catch {
       showError('Error cargando datos del formulario.');
@@ -156,6 +162,7 @@ export default function ColaboradorPerfil({ perfil }: ColaboradorPerfilProps) {
       telefono: data.telefono ?? '',
       fecha_nacimiento: data.fecha_nacimiento ?? '',
       supervisor_id: data.supervisor?.id ?? '',
+      area_id: data.area?.id ?? '',
       tarifa_hora: tarifaHora !== null ? String(tarifaHora) : '',
       tipo_pago: tipoPago ?? '',
       plantilla_horario_id: plantilla?.id ?? '',
@@ -173,13 +180,14 @@ export default function ColaboradorPerfil({ perfil }: ColaboradorPerfilProps) {
   async function onEditSubmit(values: EditFormValues) {
     setEditError(null);
     const supervisor_id = values.supervisor_id || null;
+    const area_id = values.area_id || null;
     const plantilla_horario_id = values.plantilla_horario_id || null;
     const tipo_pago = (values.tipo_pago as TipoPago) || null;
     const codigos = localCodigos.map((c) => ({ id: c.id, workno: worknos[c.id] ?? c.workno }));
     const nuevaTarifa = values.tarifa_hora ? Number(values.tarifa_hora) : null;
 
     try {
-      // Main PATCH: personal data + supervisor + plantilla + tipo_pago + codigos
+      // Main PATCH: personal data + supervisor + area + plantilla + tipo_pago + codigos
       const res = await fetch(`/api/colaboradores/${perfil.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -190,6 +198,7 @@ export default function ColaboradorPerfil({ perfil }: ColaboradorPerfilProps) {
           telefono: values.telefono || null,
           fecha_nacimiento: values.fecha_nacimiento || null,
           supervisor_id,
+          area_id,
           plantilla_horario_id,
           tipo_pago,
           codigos,
@@ -221,6 +230,7 @@ export default function ColaboradorPerfil({ perfil }: ColaboradorPerfilProps) {
       }
 
       const supObj = supervisores.find((s) => s.id === supervisor_id) ?? null;
+      const areaObj = areas.find((a) => a.id === area_id) ?? null;
       const plantObj = plantillasDisponibles.find((p) => p.id === plantilla_horario_id) ?? null;
 
       setData((prev) => ({
@@ -231,6 +241,7 @@ export default function ColaboradorPerfil({ perfil }: ColaboradorPerfilProps) {
         telefono: values.telefono || null,
         fecha_nacimiento: values.fecha_nacimiento || null,
         supervisor: supObj ? { id: supObj.id, nombre: supObj.nombre, apellido: supObj.apellido } : null,
+        area: areaObj ? { id: areaObj.id, nombre: areaObj.nombre } : null,
       }));
       setTipoPago(tipo_pago);
       setPlantilla(plantObj);
@@ -358,6 +369,22 @@ export default function ColaboradorPerfil({ perfil }: ColaboradorPerfilProps) {
               </FormControl>
             )}
           />
+          <Controller
+            name="area_id"
+            control={control}
+            render={({ field }) => (
+              <FormControl size="small">
+                <InputLabel>Área (opcional)</InputLabel>
+                <Select {...field} value={field.value ?? ''} label="Área (opcional)">
+                  <MenuItem value=""><em>Sin área</em></MenuItem>
+                  {areas.map((a) => (
+                    <MenuItem key={a.id} value={a.id}>{a.nombre}</MenuItem>
+                  ))}
+                </Select>
+                {errors.area_id && <FormHelperText error>{errors.area_id.message}</FormHelperText>}
+              </FormControl>
+            )}
+          />
 
           <SectionTitle>Tarifa y tipo de pago</SectionTitle>
           <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
@@ -445,6 +472,7 @@ export default function ColaboradorPerfil({ perfil }: ColaboradorPerfilProps) {
           <Row label="Cédula" value={data.cedula} />
           <Row label="Teléfono" value={data.telefono} />
           <Row label="Fecha de nacimiento" value={data.fecha_nacimiento ? formatDate(data.fecha_nacimiento) : null} />
+          <Row label="Área" value={data.area?.nombre ?? 'Sin área'} />
           <Row label="Supervisor" value={data.supervisor ? `${data.supervisor.nombre} ${data.supervisor.apellido}` : 'Sin supervisor'} />
           <Row label="Registrado el" value={new Date(perfil.creado_en).toLocaleDateString('es-VE')} />
 

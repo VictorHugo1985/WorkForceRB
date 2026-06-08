@@ -9,6 +9,7 @@ const EditSchema = z.object({
   telefono: z.string().max(30).nullable().optional(),
   fecha_nacimiento: z.string().nullable().optional(),
   supervisor_id: z.string().uuid().nullable().optional(),
+  area_id: z.string().uuid().nullable().optional(),
   plantilla_horario_id: z.string().uuid().nullable().optional(),
   tipo_pago: z.enum(['SEMANAL', 'QUINCENAL', 'MENSUAL']).nullable().optional(),
   codigos: z.array(z.object({ id: z.string().uuid(), workno: z.string().min(1) })).optional(),
@@ -37,7 +38,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     return NextResponse.json({ error: 'VALIDATION_ERROR', fields }, { status: 400 });
   }
 
-  const { nombre, apellido, cedula, telefono, fecha_nacimiento, supervisor_id, plantilla_horario_id, tipo_pago, codigos } = parsed.data;
+  const { nombre, apellido, cedula, telefono, fecha_nacimiento, supervisor_id, area_id, plantilla_horario_id, tipo_pago, codigos } = parsed.data;
 
   const client = await pool.connect();
   try {
@@ -64,9 +65,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     await client.query(
       `UPDATE colaboradores
        SET nombre = $1, apellido = $2, cedula = $3, telefono = $4, fecha_nacimiento = $5,
-           supervisor_id = $6, plantilla_horario_id = $7, tipo_pago = $8, actualizado_en = now()
-       WHERE id = $9`,
-      [nombre, apellido, cedula, telefono ?? null, fecha_nacimiento ?? null, supervisor_id ?? null, plantilla_horario_id ?? null, tipo_pago ?? null, id],
+           supervisor_id = $6, area_id = $7, plantilla_horario_id = $8, tipo_pago = $9, actualizado_en = now()
+       WHERE id = $10`,
+      [nombre, apellido, cedula, telefono ?? null, fecha_nacimiento ?? null, supervisor_id ?? null, area_id ?? null, plantilla_horario_id ?? null, tipo_pago ?? null, id],
     );
 
     if (codigos && codigos.length > 0) {
@@ -131,10 +132,12 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       `SELECT c.id, c.nombre, c.apellido, c.cedula, c.telefono, c.fecha_nacimiento, c.activo, c.creado_en,
               c.tarifa_hora, c.tipo_pago,
               u.id AS supervisor_id, u.nombre AS supervisor_nombre, u.apellido AS supervisor_apellido,
+              a.id AS area_id, a.nombre AS area_nombre,
               ph.id AS plantilla_id, ph.nombre AS plantilla_nombre,
               ph.dias_laborables, ph.hora_entrada_esperada::text AS hora_entrada_esperada
        FROM colaboradores c
        LEFT JOIN usuarios u ON u.id = c.supervisor_id
+       LEFT JOIN areas a ON a.id = c.area_id
        LEFT JOIN plantillas_horario ph ON ph.id = c.plantilla_horario_id
        WHERE c.id = $1`,
       [id],
@@ -168,6 +171,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       supervisor: col.supervisor_id
         ? { id: col.supervisor_id, nombre: col.supervisor_nombre, apellido: col.supervisor_apellido }
         : null,
+      area: col.area_id ? { id: col.area_id, nombre: col.area_nombre } : null,
       plantilla_horario: col.plantilla_id
         ? {
             id: col.plantilla_id,
