@@ -118,7 +118,7 @@ function SortablePunch({ item, index, isReadOnly, saving, onUpdate, onRemove, on
             '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: 'error.dark', borderWidth: 2 },
           } : {}),
         }}
-        slotProps={{ htmlInput: { step: 60, style: { fontSize: '0.75rem', padding: '2px 4px' } } }}
+        slotProps={{ htmlInput: { step: 60, lang: 'es', style: { fontSize: '0.75rem', padding: '2px 4px' } } }}
       />
 
       {!isReadOnly && (
