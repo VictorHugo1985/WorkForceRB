@@ -72,25 +72,57 @@ export async function fetchPunchMap(
   fechaInicio: string,
   fechaFin: string,
 ): Promise<Map<string, PunchEntry[]>> {
+  // Fetch one extra day so a cross-midnight SALIDA is available for pairing
+  const dayAfter = new Date(fechaFin + 'T12:00:00Z');
+  dayAfter.setUTCDate(dayAfter.getUTCDate() + 1);
+  const fechaFinPlus1 = dayAfter.toISOString().slice(0, 10);
+
   const res = await client.query(
-    `SELECT (ebd.checktime AT TIME ZONE 'America/La_Paz')::date AS fecha,
-            array_agg(ebd.checktime ORDER BY ebd.checktime) AS marcaciones,
-            array_agg(COALESCE(ebd.tipo_evento, 'ENTRADA') ORDER BY ebd.checktime) AS tipos
+    `SELECT ebd.checktime,
+            COALESCE(ebd.tipo_evento, 'ENTRADA') AS tipo
      FROM eventos_biometricos_desglosados ebd
      JOIN codigos_colaborador cc
           ON cc.codigo_biometrico = ebd.employee_workno AND cc.activo = true
      WHERE cc.colaborador_id = $1
        AND (ebd.checktime AT TIME ZONE 'America/La_Paz')::date BETWEEN $2 AND $3
-     GROUP BY (ebd.checktime AT TIME ZONE 'America/La_Paz')::date`,
-    [colaboradorId, fechaInicio, fechaFin],
+     ORDER BY ebd.checktime`,
+    [colaboradorId, fechaInicio, fechaFinPlus1],
   );
+
+  // Group individually by Bolivia local date
   const map = new Map<string, PunchEntry[]>();
   for (const row of res.rows) {
-    const key = (row.fecha as Date).toISOString().slice(0, 10);
-    const times = row.marcaciones as Date[];
-    const tipos = row.tipos as string[];
-    map.set(key, times.map((t, i) => ({ time: t, tipo: tipos[i] ?? 'ENTRADA' })));
+    const time = row.checktime as Date;
+    const local = new Date(time.getTime() - 4 * 60 * 60 * 1000);
+    const date = local.toISOString().slice(0, 10);
+    if (!map.has(date)) map.set(date, []);
+    map.get(date)!.push({ time, tipo: row.tipo as string });
   }
+
+  // Cross-midnight pairing: if a day ends with an orphan ENTRADA, pull the
+  // next day's first SALIDA into this day (up to 12 h gap = reasonable shift)
+  const sortedDates = [...map.keys()].sort();
+  for (let i = 0; i < sortedDates.length - 1; i++) {
+    const punches = map.get(sortedDates[i])!;
+    if (punches.length % 2 === 0) continue;
+    const last = punches[punches.length - 1];
+    if (last.tipo !== 'ENTRADA') continue;
+    const nextPunches = map.get(sortedDates[i + 1]);
+    if (!nextPunches?.length) continue;
+    const candidate = nextPunches[0];
+    const hoursGap = (candidate.time.getTime() - last.time.getTime()) / 3_600_000;
+    if (candidate.tipo === 'SALIDA' && hoursGap <= 12) {
+      punches.push(candidate);
+      nextPunches.shift();
+      if (!nextPunches.length) map.delete(sortedDates[i + 1]);
+    }
+  }
+
+  // Drop dates outside the requested range (the extra day we fetched)
+  for (const date of [...map.keys()]) {
+    if (date > fechaFin) map.delete(date);
+  }
+
   return map;
 }
 
