@@ -1,6 +1,21 @@
 'use client';
 
 import { useState, useCallback, useRef, useEffect } from 'react';
+import {
+  DndContext,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  arrayMove,
+  horizontalListSortingStrategy,
+  useSortable,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
 import IconButton from '@mui/material/IconButton';
@@ -13,28 +28,32 @@ import CloseIcon from '@mui/icons-material/Close';
 import UndoIcon from '@mui/icons-material/Undo';
 import type { DiaLiquidacionData, TotalesData } from '@/stores/liquidacion.store';
 
-interface Props {
-  dia: DiaLiquidacionData;
-  isReadOnly: boolean;
-  onSaved: (updatedDia: DiaLiquidacionData, updatedTotales: TotalesData) => void;
-}
+// ─── Types ────────────────────────────────────────────────────────────────────
 
-// Flatten biometric jornadas or manual pairs to a simple ordered list of HH:MM times
-function initFlat(dia: DiaLiquidacionData): string[] {
+interface PunchItem { id: number; time: string }
+
+let _nextId = 0;
+const mkItem = (time = ''): PunchItem => ({ id: _nextId++, time });
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function initItems(dia: DiaLiquidacionData): PunchItem[] {
+  let flat: string[];
   if (dia.marcacionesManuales && dia.marcacionesManuales.length > 0) {
-    return dia.marcacionesManuales.flatMap((j) => [j.entrada, j.salida]);
+    flat = dia.marcacionesManuales.flatMap((j) => [j.entrada, j.salida]);
+  } else {
+    flat = (dia.jornadas ?? []).flatMap((j) => [j.entrada, j.salida]);
+    if (dia.marcacionSuelta) flat.push(dia.marcacionSuelta);
   }
-  const flat: string[] = (dia.jornadas ?? []).flatMap((j) => [j.entrada, j.salida]);
-  if (dia.marcacionSuelta) flat.push(dia.marcacionSuelta);
-  return flat.length > 0 ? flat : [''];
+  const items = flat.filter(Boolean).map((t) => mkItem(t));
+  return items.length > 0 ? items : [mkItem()];
 }
 
-// Group flat times into entrada/salida pairs for the API.
-// Orphan times (no partner yet) are included with empty salida so they are
-// persisted and visible after save; the server already skips incomplete pairs
-// when computing hours.
-function flatToPairs(times: string[]): Array<{ entrada: string; salida: string }> | null {
-  const filled = times.filter(Boolean);
+// Orphan times are persisted as {entrada, salida:''} so they survive a save
+// and are visible when the component re-mounts. The server skips incomplete
+// pairs in the hours calculation.
+function toPairs(items: PunchItem[]): Array<{ entrada: string; salida: string }> | null {
+  const filled = items.map((i) => i.time).filter(Boolean);
   if (filled.length === 0) return null;
   const pairs: Array<{ entrada: string; salida: string }> = [];
   for (let i = 0; i < filled.length; i += 2) {
@@ -43,50 +62,132 @@ function flatToPairs(times: string[]): Array<{ entrada: string; salida: string }
   return pairs;
 }
 
+// ─── Sortable punch chip ──────────────────────────────────────────────────────
+
+interface ChipProps {
+  item: PunchItem;
+  index: number;
+  isReadOnly: boolean;
+  saving: boolean;
+  onUpdate: (id: number, value: string) => void;
+  onRemove: (id: number) => void;
+  onBlur: () => void;
+  onFocus: () => void;
+}
+
+function SortablePunch({ item, index, isReadOnly, saving, onUpdate, onRemove, onBlur, onFocus }: ChipProps) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id });
+  const isEntrada = index % 2 === 0;
+
+  return (
+    <Box
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1 }}
+      sx={{ display: 'flex', alignItems: 'center', gap: 0.25, zIndex: isDragging ? 999 : undefined }}
+    >
+      {/* E/S label doubles as drag handle */}
+      <Typography
+        variant="caption"
+        {...(!isReadOnly ? { ...attributes, ...listeners } : {})}
+        sx={{
+          color: isEntrada ? 'success.main' : 'error.main',
+          fontWeight: 700,
+          fontSize: '0.6rem',
+          lineHeight: 1,
+          userSelect: 'none',
+          cursor: isReadOnly ? 'default' : 'grab',
+          '&:active': { cursor: 'grabbing' },
+          px: 0.25,
+        }}
+      >
+        {isEntrada ? 'E' : 'S'}
+      </Typography>
+
+      <TextField
+        size="small"
+        type="time"
+        value={item.time}
+        onChange={(e) => onUpdate(item.id, e.target.value)}
+        onBlur={isReadOnly ? undefined : onBlur}
+        onFocus={isReadOnly ? undefined : onFocus}
+        disabled={isReadOnly || saving}
+        sx={{
+          width: 84,
+          ...(!isReadOnly && !item.time ? {
+            '& .MuiOutlinedInput-notchedOutline': { borderColor: 'error.main', borderWidth: 2 },
+            '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: 'error.dark', borderWidth: 2 },
+          } : {}),
+        }}
+        slotProps={{ htmlInput: { step: 60, style: { fontSize: '0.75rem', padding: '2px 4px' } } }}
+      />
+
+      {!isReadOnly && (
+        <Tooltip title="Quitar marcación">
+          <IconButton size="small" onClick={() => onRemove(item.id)} disabled={saving} sx={{ p: 0.1 }}>
+            <CloseIcon sx={{ fontSize: 12 }} />
+          </IconButton>
+        </Tooltip>
+      )}
+    </Box>
+  );
+}
+
+// ─── Main editor ─────────────────────────────────────────────────────────────
+
+interface Props {
+  dia: DiaLiquidacionData;
+  isReadOnly: boolean;
+  onSaved: (updatedDia: DiaLiquidacionData, updatedTotales: TotalesData) => void;
+}
+
 export function MarcacionesEditor({ dia, isReadOnly, onSaved }: Props) {
-  const [times, setTimes] = useState<string[]>(() => initFlat(dia));
-  const [dirty, setDirty] = useState(false);
+  const [items, setItems] = useState<PunchItem[]>(() => initItems(dia));
+  const [dirty, setDirty]   = useState(false);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError]   = useState<string | null>(null);
 
-  const timesRef    = useRef(times);
-  const dirtyRef    = useRef(false);
-  const savingRef   = useRef(saving);
+  const itemsRef     = useRef(items);
+  const dirtyRef     = useRef(false);
+  const savingRef    = useRef(saving);
   const editCountRef = useRef(0);
-  const blurTimer   = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const blurTimer    = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  timesRef.current  = times;
+  itemsRef.current  = items;
   dirtyRef.current  = dirty;
   savingRef.current = saving;
 
   useEffect(() => () => { if (blurTimer.current) clearTimeout(blurTimer.current); }, []);
 
-  const update = useCallback((i: number, value: string) => {
-    setTimes((prev) => prev.map((t, idx) => idx === i ? value : t));
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+
+  // ── Mutations ────────────────────────────────────────────────────────────
+
+  const update = useCallback((id: number, value: string) => {
+    setItems((prev) => prev.map((it) => it.id === id ? { ...it, time: value } : it));
     editCountRef.current += 1;
     setDirty(true);
     setError(null);
   }, []);
 
-  const remove = useCallback((i: number) => {
-    setTimes((prev) => {
-      const next = prev.filter((_, idx) => idx !== i);
-      return next.length > 0 ? next : [''];
+  const remove = useCallback((id: number) => {
+    setItems((prev) => {
+      const next = prev.filter((it) => it.id !== id);
+      return next.length > 0 ? next : [mkItem()];
     });
     editCountRef.current += 1;
     setDirty(true);
   }, []);
 
   const add = useCallback(() => {
-    setTimes((prev) => [...prev, '']);
+    setItems((prev) => [...prev, mkItem()]);
     editCountRef.current += 1;
     setDirty(true);
   }, []);
 
-  const insertAfter = useCallback((i: number) => {
-    setTimes((prev) => {
+  const insertAfter = useCallback((index: number) => {
+    setItems((prev) => {
       const next = [...prev];
-      next.splice(i + 1, 0, '');
+      next.splice(index + 1, 0, mkItem());
       return next;
     });
     editCountRef.current += 1;
@@ -94,14 +195,28 @@ export function MarcacionesEditor({ dia, isReadOnly, onSaved }: Props) {
   }, []);
 
   const revert = useCallback(() => {
-    setTimes(initFlat(dia));
+    setItems(initItems(dia));
     setDirty(false);
     setError(null);
   }, [dia]);
 
+  const handleDragEnd = useCallback((event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    setItems((prev) => {
+      const from = prev.findIndex((it) => it.id === active.id);
+      const to   = prev.findIndex((it) => it.id === over.id);
+      return arrayMove(prev, from, to);
+    });
+    editCountRef.current += 1;
+    setDirty(true);
+  }, []);
+
+  // ── Save ─────────────────────────────────────────────────────────────────
+
   const save = useCallback(async () => {
     const countAtSave = editCountRef.current;
-    const payload = flatToPairs(timesRef.current);
+    const payload = toPairs(itemsRef.current);
     setSaving(true);
     setError(null);
     try {
@@ -116,10 +231,9 @@ export function MarcacionesEditor({ dia, isReadOnly, onSaved }: Props) {
         return;
       }
       const data = await res.json() as { dia: DiaLiquidacionData; totales: TotalesData };
-      // Only sync state if no new edits happened during the async request
       if (editCountRef.current === countAtSave) {
         setDirty(false);
-        setTimes(initFlat(data.dia));
+        setItems(initItems(data.dia));
       }
       onSaved(data.dia, data.totales);
     } catch {
@@ -135,8 +249,7 @@ export function MarcacionesEditor({ dia, isReadOnly, onSaved }: Props) {
   const handleBlur = useCallback(() => {
     blurTimer.current = setTimeout(() => {
       if (!dirtyRef.current || savingRef.current) return;
-      const hasAny = timesRef.current.some(Boolean);
-      if (hasAny) saveRef.current();
+      if (itemsRef.current.some((it) => it.time)) saveRef.current();
     }, 150);
   }, []);
 
@@ -147,64 +260,40 @@ export function MarcacionesEditor({ dia, isReadOnly, onSaved }: Props) {
     }
   }, []);
 
+  // ── Render ───────────────────────────────────────────────────────────────
+
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 0.25 }}>
-      {times.map((t, i) => {
-        const isEntrada = i % 2 === 0;
-        return (
-          <Box key={i} sx={{ display: 'flex', alignItems: 'center', gap: 0.25 }}>
-            {/* Insert-before button between marcaciones */}
-            {!isReadOnly && i > 0 && (
-              <Tooltip title="Insertar marcación aquí">
-                <IconButton
-                  size="small"
-                  onClick={() => insertAfter(i - 1)}
-                  disabled={saving}
-                  sx={{ p: 0.1, color: 'text.disabled', '&:hover': { color: 'primary.main' } }}
-                >
-                  <AddIcon sx={{ fontSize: 11 }} />
-                </IconButton>
-              </Tooltip>
-            )}
-            <Typography
-              variant="caption"
-              sx={{
-                color: isEntrada ? 'success.main' : 'error.main',
-                fontWeight: 700,
-                fontSize: '0.6rem',
-                lineHeight: 1,
-                userSelect: 'none',
-              }}
-            >
-              {isEntrada ? 'E' : 'S'}
-            </Typography>
-            <TextField
-              size="small"
-              type="time"
-              value={t}
-              onChange={(e) => update(i, e.target.value)}
-              onBlur={isReadOnly ? undefined : handleBlur}
-              onFocus={isReadOnly ? undefined : handleFocus}
-              disabled={isReadOnly || saving}
-              sx={{
-                width: 84,
-                ...(!isReadOnly && !t ? {
-                  '& .MuiOutlinedInput-notchedOutline': { borderColor: 'error.main', borderWidth: 2 },
-                  '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: 'error.dark', borderWidth: 2 },
-                } : {}),
-              }}
-              slotProps={{ htmlInput: { step: 60, style: { fontSize: '0.75rem', padding: '2px 4px' } } }}
-            />
-            {!isReadOnly && (
-              <Tooltip title="Quitar marcación">
-                <IconButton size="small" onClick={() => remove(i)} disabled={saving} sx={{ p: 0.1 }}>
-                  <CloseIcon sx={{ fontSize: 12 }} />
-                </IconButton>
-              </Tooltip>
-            )}
-          </Box>
-        );
-      })}
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        <SortableContext items={items.map((it) => it.id)} strategy={horizontalListSortingStrategy}>
+          {items.map((item, i) => (
+            <Box key={item.id} sx={{ display: 'flex', alignItems: 'center' }}>
+              {!isReadOnly && i > 0 && (
+                <Tooltip title="Insertar marcación aquí">
+                  <IconButton
+                    size="small"
+                    onClick={() => insertAfter(i - 1)}
+                    disabled={saving}
+                    sx={{ p: 0.1, color: 'text.disabled', '&:hover': { color: 'primary.main' } }}
+                  >
+                    <AddIcon sx={{ fontSize: 11 }} />
+                  </IconButton>
+                </Tooltip>
+              )}
+              <SortablePunch
+                item={item}
+                index={i}
+                isReadOnly={isReadOnly}
+                saving={saving}
+                onUpdate={update}
+                onRemove={remove}
+                onBlur={handleBlur}
+                onFocus={handleFocus}
+              />
+            </Box>
+          ))}
+        </SortableContext>
+      </DndContext>
 
       {!isReadOnly && (
         <Tooltip title="Agregar marcación al final">
