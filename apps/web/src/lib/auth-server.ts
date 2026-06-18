@@ -126,7 +126,12 @@ export async function checkAdminRole(
       { status: 403 },
     );
   }
-  const sessionValid = await checkSessionValidity(payload.sub, payload.iat);
+  let sessionValid: boolean;
+  try {
+    sessionValid = await checkSessionValidity(payload.sub, payload.iat);
+  } catch {
+    return NextResponse.json({ error: 'UNAUTHORIZED' }, { status: 401 });
+  }
   if (!sessionValid) {
     return NextResponse.json({ error: 'UNAUTHORIZED' }, { status: 401 });
   }
