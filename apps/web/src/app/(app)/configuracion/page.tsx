@@ -1,4 +1,5 @@
-import { ComingSoon } from '@/components/ui/ComingSoon';
-export default function ConfiguracionPage() {
-  return <ComingSoon title="Configuración" />;
+import { ConfiguracionPage } from '@/components/configuracion/ConfiguracionPage';
+
+export default function Page() {
+  return <ConfiguracionPage />;
 }
