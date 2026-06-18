@@ -15,11 +15,13 @@ import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import Divider from '@mui/material/Divider';
 import FormControl from '@mui/material/FormControl';
+import FormControlLabel from '@mui/material/FormControlLabel';
 import FormHelperText from '@mui/material/FormHelperText';
 import InputAdornment from '@mui/material/InputAdornment';
 import InputLabel from '@mui/material/InputLabel';
 import MenuItem from '@mui/material/MenuItem';
 import Select from '@mui/material/Select';
+import Switch from '@mui/material/Switch';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { useSnackbar } from '@/lib/SnackbarContext';
@@ -48,6 +50,7 @@ interface PerfilData {
   telefono: string | null;
   fecha_nacimiento: string | null;
   activo: boolean;
+  fijo: boolean;
   creado_en: string;
   supervisor: { id: string; nombre: string; apellido: string } | null;
   area: { id: string; nombre: string } | null;
@@ -72,6 +75,7 @@ const EditSchema = z.object({
   tarifa_hora: z.string().optional().or(z.literal('')),
   tipo_pago: z.enum(['SEMANAL', 'QUINCENAL', 'MENSUAL']).or(z.literal('')).nullable().optional(),
   plantilla_horario_id: z.union([z.string().uuid(), z.literal(''), z.null()]).optional(),
+  fijo: z.boolean().optional(),
 });
 type EditFormValues = z.infer<typeof EditSchema>;
 
@@ -117,6 +121,7 @@ export default function ColaboradorPerfil({ perfil }: ColaboradorPerfilProps) {
     supervisor: perfil.supervisor,
     area: perfil.area,
   });
+  const [fijo, setFijo] = useState<boolean>(perfil.fijo);
   const [tarifaHora, setTarifaHora] = useState<number | null>(perfil.tarifa_hora);
   const [tipoPago, setTipoPago] = useState<TipoPago | null>(perfil.tipo_pago);
   const [plantilla, setPlantilla] = useState<PlantillaHorario | null>(perfil.plantilla_horario);
@@ -166,6 +171,7 @@ export default function ColaboradorPerfil({ perfil }: ColaboradorPerfilProps) {
       tarifa_hora: tarifaHora !== null ? String(tarifaHora) : '',
       tipo_pago: tipoPago ?? '',
       plantilla_horario_id: plantilla?.id ?? '',
+      fijo,
     });
     setWorknos(Object.fromEntries(localCodigos.map((c) => [c.id, c.workno])));
     setEditError(null);
@@ -183,6 +189,7 @@ export default function ColaboradorPerfil({ perfil }: ColaboradorPerfilProps) {
     const area_id = values.area_id || null;
     const plantilla_horario_id = values.plantilla_horario_id || null;
     const tipo_pago = (values.tipo_pago as TipoPago) || null;
+    const nuevoFijo = values.fijo ?? fijo;
     const codigos = localCodigos.map((c) => ({ id: c.id, workno: worknos[c.id] ?? c.workno }));
     const nuevaTarifa = values.tarifa_hora ? Number(values.tarifa_hora) : null;
 
@@ -201,6 +208,7 @@ export default function ColaboradorPerfil({ perfil }: ColaboradorPerfilProps) {
           area_id,
           plantilla_horario_id,
           tipo_pago,
+          fijo: nuevoFijo,
           codigos,
         }),
       });
@@ -243,6 +251,7 @@ export default function ColaboradorPerfil({ perfil }: ColaboradorPerfilProps) {
         supervisor: supObj ? { id: supObj.id, nombre: supObj.nombre, apellido: supObj.apellido } : null,
         area: areaObj ? { id: areaObj.id, nombre: areaObj.nombre } : null,
       }));
+      setFijo(nuevoFijo);
       setTipoPago(tipo_pago);
       setPlantilla(plantObj);
       setLocalCodigos((prev) => prev.map((c) => ({ ...c, workno: worknos[c.id] ?? c.workno })));
@@ -311,6 +320,7 @@ export default function ColaboradorPerfil({ perfil }: ColaboradorPerfilProps) {
           {data.nombre} {data.apellido}
         </Typography>
         <Chip label={data.activo ? 'Activo' : 'Inactivo'} color={data.activo ? 'success' : 'default'} size="small" />
+        <Chip label={fijo ? 'Fijo' : 'Jornalero'} color={fijo ? 'warning' : 'default'} variant={fijo ? 'filled' : 'outlined'} size="small" />
         <Box sx={{ ml: 'auto', display: 'flex', gap: 1 }}>
           {!isEditing && (
             <>
@@ -353,6 +363,27 @@ export default function ColaboradorPerfil({ perfil }: ColaboradorPerfilProps) {
             error={!!errors.fecha_nacimiento}
             helperText={errors.fecha_nacimiento?.message}
           />
+          <Box>
+            <Controller
+              name="fijo"
+              control={control}
+              render={({ field }) => (
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={field.value ?? false}
+                      onChange={(e) => field.onChange(e.target.checked)}
+                      size="small"
+                    />
+                  }
+                  label="Colaborador fijo (salario fijo)"
+                />
+              )}
+            />
+            <FormHelperText>
+              Los colaboradores fijos no participan en el cálculo de liquidaciones por horas.
+            </FormHelperText>
+          </Box>
           <Controller
             name="supervisor_id"
             control={control}

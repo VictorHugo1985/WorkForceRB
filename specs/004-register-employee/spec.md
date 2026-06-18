@@ -4,7 +4,7 @@
 
 **Created**: 2026-05-22
 
-**Status**: Draft
+**Status**: Draft — *Amendado por `specs/019-add-fijo-field` (campo `fijo`)*
 
 ---
 
@@ -131,11 +131,12 @@ biométrico activo con el dispositivo al que pertenece.
 - **FR-008**: El sistema DEBE rechazar la asignación de un workno si ese código ya está activo para otro colaborador en el mismo dispositivo, mostrando un mensaje de error claro.
 - **FR-009**: El colaborador recién registrado DEBE estar activo inmediatamente y disponible para la resolución de eventos biométricos sin demoras.
 - **FR-010**: El registro completo (colaborador + tarifa + horario + código biométrico) DEBE quedar registrado en el log de auditoría: quién registró, cuándo, y el resumen de los datos ingresados.
+- **FR-011** *(019-add-fijo-field)*: El registro DEBE permitir clasificar al colaborador como "fijo" (salario fijo, excluido del cálculo de liquidaciones por horas) o "jornalero" (calculado por horas trabajadas). El valor por defecto es "jornalero".
 
 ### Key Entities
 
 - **Área**: Catálogo de áreas de trabajo (`areas`). El colaborador referencia su área mediante FK `area_id`.
-- **Colaborador**: Trabajador registrado con datos personales (nombre, apellido, cédula) y área de trabajo asignada (FK a `areas`).
+- **Colaborador**: Trabajador registrado con datos personales (nombre, apellido, cédula) y área de trabajo asignada (FK a `areas`). Incluye el atributo `fijo` (booleano, por defecto `false`) que clasifica al colaborador como jornalero (`false`) o de salario fijo (`true`). Los colaboradores `fijo` son excluidos del cálculo de liquidaciones por horas trabajadas.
 - **Perfil de Tarifa Salarial**: Configuración de tarifa horaria específica para el colaborador, con fecha de inicio de vigencia. Se aplica a este colaborador únicamente (sobreescribe la tarifa global para sus liquidaciones).
 - **Horario Laboral**: Configuración de horas diarias esperadas y umbral de horas extra del colaborador, con fecha de inicio de vigencia.
 - **Código Biométrico**: Vínculo entre un colaborador, un código workno y un dispositivo biométrico específico. Es la clave que permite resolver un marcaje entrante al colaborador correcto.
@@ -161,3 +162,4 @@ biométrico activo con el dispositivo al que pertenece.
 - El sistema asume que solo puede existir una SEMANA_LABORAL en estado ABIERTA a la vez; el colaborador registrado participa a partir de la semana activa vigente.
 - La implementación de servidor se realiza en Next.js API routes (`apps/web`), consistente con auth y webhook. NestJS (`apps/api`) no está desplegado actualmente.
 - La herencia de tarifa y horario globales se resuelve en tiempo de cálculo de liquidación, no en tiempo de registro.
+- *(019-add-fijo-field)* El campo `fijo` es `false` por defecto para todos los colaboradores, incluidos los ya existentes al momento de la migración. Ver `specs/019-add-fijo-field` para la especificación completa de este campo.

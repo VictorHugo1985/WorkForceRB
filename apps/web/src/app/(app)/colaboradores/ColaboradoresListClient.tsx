@@ -35,6 +35,7 @@ interface ColaboradorRow {
   workno: string;
   telefono: string;
   activo: boolean;
+  fijo: boolean;
   tarifa_hora: number | null;
   tipo_pago: TipoPago | null;
   area: { id: string; nombre: string } | null;
@@ -44,15 +45,20 @@ interface Props {
   colaboradores: ColaboradorRow[];
 }
 
+type TipoFiltro = 'todos' | 'fijo' | 'jornalero';
+
 export function ColaboradoresListClient({ colaboradores }: Props) {
   const router = useRouter();
   const [busqueda, setBusqueda] = useState('');
   const [mostrarInactivos, setMostrarInactivos] = useState(false);
+  const [tipoFiltro, setTipoFiltro] = useState<TipoFiltro>('todos');
 
   const filtered = useMemo(() => {
     const q = busqueda.toLowerCase().trim();
     return colaboradores.filter((c) => {
       if (!mostrarInactivos && !c.activo) return false;
+      if (tipoFiltro === 'fijo' && !c.fijo) return false;
+      if (tipoFiltro === 'jornalero' && c.fijo) return false;
       if (!q) return true;
       return (
         c.nombre.toLowerCase().includes(q) ||
@@ -62,7 +68,7 @@ export function ColaboradoresListClient({ colaboradores }: Props) {
         c.telefono.toLowerCase().includes(q)
       );
     });
-  }, [colaboradores, busqueda, mostrarInactivos]);
+  }, [colaboradores, busqueda, mostrarInactivos, tipoFiltro]);
 
   return (
     <Box>
@@ -89,6 +95,19 @@ export function ColaboradoresListClient({ colaboradores }: Props) {
           size="small"
           sx={{ flexGrow: 1, maxWidth: 420 }}
         />
+        <Box sx={{ display: 'flex', gap: 0.5 }}>
+          {(['todos', 'fijo', 'jornalero'] as TipoFiltro[]).map((t) => (
+            <Chip
+              key={t}
+              label={t === 'todos' ? 'Todos' : t === 'fijo' ? 'Fijo' : 'Jornalero'}
+              size="small"
+              variant={tipoFiltro === t ? 'filled' : 'outlined'}
+              color={tipoFiltro === t ? (t === 'fijo' ? 'warning' : 'primary') : 'default'}
+              onClick={() => setTipoFiltro(t)}
+              sx={{ cursor: 'pointer' }}
+            />
+          ))}
+        </Box>
         <FormControlLabel
           control={
             <Switch
@@ -116,6 +135,7 @@ export function ColaboradoresListClient({ colaboradores }: Props) {
                 <TableCell>Área</TableCell>
                 <TableCell align="right">Tarifa/h</TableCell>
                 <TableCell>Tipo de pago</TableCell>
+                <TableCell>Tipo colaborador</TableCell>
                 <TableCell>Estado</TableCell>
               </TableRow>
             </TableHead>
@@ -140,6 +160,14 @@ export function ColaboradoresListClient({ colaboradores }: Props) {
                     {c.tipo_pago ? (
                       <Chip label={TIPO_PAGO_LABEL[c.tipo_pago]} size="small" variant="outlined" />
                     ) : '—'}
+                  </TableCell>
+                  <TableCell>
+                    <Chip
+                      label={c.fijo ? 'Fijo' : 'Jornalero'}
+                      color={c.fijo ? 'warning' : 'default'}
+                      variant={c.fijo ? 'filled' : 'outlined'}
+                      size="small"
+                    />
                   </TableCell>
                   <TableCell>
                     <Chip

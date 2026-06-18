@@ -57,6 +57,7 @@ export async function GET(req: NextRequest) {
          c.id,
          c.nombre,
          c.apellido,
+         c.fijo,
          a.id   AS area_id,
          COALESCE(a.nombre, 'Sin área') AS area_nombre,
          COALESCE(
@@ -74,7 +75,7 @@ export async function GET(req: NextRequest) {
               c.nombre  ILIKE '%' || $3 || '%' OR
               c.apellido ILIKE '%' || $3 || '%' OR
               c.cedula   ILIKE '%' || $3 || '%')
-       GROUP BY c.id, c.nombre, c.apellido, a.id, a.nombre
+       GROUP BY c.id, c.nombre, c.apellido, c.fijo, a.id, a.nombre
        ORDER BY a.nombre NULLS LAST, c.apellido, c.nombre`,
       [fechaDesde, fechaHasta, colaborador],
     );
@@ -95,8 +96,24 @@ export async function GET(req: NextRequest) {
         id: row.id,
         nombre: row.nombre,
         apellido: row.apellido,
+        fijo: row.fijo as boolean,
         dias: row.dias ?? [],
       });
+    }
+
+    // FR-015: sort colaboradores by first punch time in single-day view
+    if (fechaDesde === fechaHasta) {
+      type ColabRow = { apellido: string; nombre: string; dias: Array<{ marcaciones: string[] }> };
+      for (const area of areaMap.values()) {
+        (area.colaboradores as ColabRow[]).sort((a, b) => {
+          const aTime = a.dias[0]?.marcaciones[0];
+          const bTime = b.dias[0]?.marcaciones[0];
+          if (aTime && bTime) return aTime < bTime ? -1 : aTime > bTime ? 1 : 0;
+          if (aTime) return -1;
+          if (bTime) return 1;
+          return `${a.apellido} ${a.nombre}`.localeCompare(`${b.apellido} ${b.nombre}`, 'es');
+        });
+      }
     }
 
     return NextResponse.json({

@@ -61,12 +61,19 @@ CTE "eventos":
   For each (colaborador_id, local_date) pair:
     - Filter eventos_biometricos_desglosados by local date range using utc_offset
     - Aggregate marcaciones (HH:MM strings) into an array per day
+      (ORDER BY ebd.checktime → marcaciones[0] is always earliest punch)
 
 Main query:
   LEFT JOIN "eventos" onto all active colaboradores
   → Colaboradores with no events still appear (as absent)
   GROUP BY colaborador, area
   ORDER BY area.nombre, colaborador.apellido, colaborador.nombre
+
+JS post-processing (FR-015 — single-day only):
+  If fechaDesde === fechaHasta:
+    For each area, sort colaboradores by dias[0].marcaciones[0] ascending
+    → Absent (dias=[]) go to end, sorted alphabetically by apellido
+  Multi-day: SQL order (apellido, nombre) is kept as-is
 ```
 
 Result shape per collaborador:

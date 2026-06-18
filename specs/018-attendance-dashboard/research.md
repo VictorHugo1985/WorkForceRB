@@ -70,6 +70,23 @@ All date/time calculations use the `utc_offset` column stored on each `eventos_b
 
 ---
 
+## Decision 5: FR-015 Arrival-Order Sort — Where to Implement
+
+**Context**: FR-015 (added 2026-06-18) requires collaborators within each area card to be sorted by first marcacion time (ascending) in single-day view; absent collaborators at end alphabetically.
+
+**Decision**: JS post-processing in the API route (`route.ts`), after the `areaMap` loop, not in SQL.
+
+**Rationale**:
+- The SQL CTE already orders `marcaciones` per day by `checktime ASC`, so `dias[0].marcaciones[0]` is always the earliest punch — no extra SQL needed.
+- A conditional `ORDER BY` in SQL (single-day vs multi-day) would require passing extra logic into the query. JS is cheaper to maintain here.
+- The API response is the contract boundary; ordering belongs there, not in the frontend.
+
+**Alternatives considered**:
+- SQL `ORDER BY MIN(checktime) NULLS LAST, apellido, nombre` conditional on `fechaDesde = fechaHasta` → Rejected; adds query complexity for zero performance benefit.
+- Frontend sort in `AreaCard` component → Rejected; the API contract should already return data in the correct order.
+
+---
+
 ## Decision 4: Query Performance
 
 **Current state**: The SQL CTE in `GET /api/dashboard/asistencia` joins `eventos_biometricos_desglosados` → `codigos_colaborador` → `colaboradores` → `areas` and uses a LEFT JOIN to include colaboradores with no events. This is a single query with `json_agg` grouping.

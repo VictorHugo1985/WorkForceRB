@@ -9,7 +9,7 @@ export async function GET(req: NextRequest) {
   const client = await pool.connect();
   try {
     const result = await client.query(
-      `SELECT c.id, c.nombre, c.apellido, c.cedula, c.activo, c.tarifa_hora
+      `SELECT c.id, c.nombre, c.apellido, c.cedula, c.activo, c.fijo, c.tarifa_hora
        FROM colaboradores c
        ORDER BY c.apellido, c.nombre`,
     );
@@ -19,6 +19,7 @@ export async function GET(req: NextRequest) {
       apellido: r.apellido,
       cedula: r.cedula,
       activo: r.activo,
+      fijo: r.fijo,
       tarifa_hora: r.tarifa_hora !== null ? Number(r.tarifa_hora) : null,
     }));
     return NextResponse.json({ colaboradores });
@@ -40,6 +41,7 @@ const ColaboradorSchema = z.object({
   fecha_nacimiento: z.string().nullable().optional(),
   supervisor_id: z.string().uuid().nullable().optional(),
   tarifa_hora: z.number().positive().nullable().optional(),
+  fijo: z.boolean().optional().default(false),
   codigo_biometrico: CodigoBiometricoSchema.nullable().optional(),
 });
 
@@ -64,7 +66,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'VALIDATION_ERROR', fields }, { status: 400 });
   }
 
-  const { nombre, apellido, cedula, telefono, fecha_nacimiento, supervisor_id, tarifa_hora, codigo_biometrico } = parsed.data;
+  const { nombre, apellido, cedula, telefono, fecha_nacimiento, supervisor_id, tarifa_hora, fijo, codigo_biometrico } = parsed.data;
 
   const client = await pool.connect();
   try {
@@ -80,10 +82,10 @@ export async function POST(req: NextRequest) {
     }
 
     const colRes = await client.query<{ id: string }>(
-      `INSERT INTO colaboradores (nombre, apellido, cedula, telefono, fecha_nacimiento, supervisor_id, tarifa_hora, actualizado_en)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, now())
+      `INSERT INTO colaboradores (nombre, apellido, cedula, telefono, fecha_nacimiento, supervisor_id, tarifa_hora, fijo, actualizado_en)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now())
        RETURNING id`,
-      [nombre, apellido, cedula, telefono ?? null, fecha_nacimiento ?? null, supervisor_id ?? null, tarifa_hora ?? null],
+      [nombre, apellido, cedula, telefono ?? null, fecha_nacimiento ?? null, supervisor_id ?? null, tarifa_hora ?? null, fijo ?? false],
     );
     const colaboradorId = colRes.rows[0].id;
 
@@ -121,7 +123,7 @@ export async function POST(req: NextRequest) {
           userId,
           `Registro de nuevo colaborador: ${nombre} ${apellido}`,
           ip,
-          JSON.stringify({ nombre, apellido, cedula, supervisor_id, tarifa_hora, codigo_biometrico }),
+          JSON.stringify({ nombre, apellido, cedula, supervisor_id, tarifa_hora, fijo, codigo_biometrico }),
         ],
       );
     } catch { /* audit failure does not block response */ }

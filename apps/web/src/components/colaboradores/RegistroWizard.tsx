@@ -35,6 +35,7 @@ export const WizardSchema = z.object({
   fecha_nacimiento: z.string().optional().or(z.literal('')),
   supervisor_id: z.string().uuid().nullable().optional(),
   tarifa_hora: z.number().positive().nullable().optional(),
+  fijo: z.boolean(),
   codigo_biometrico: z
     .object({ dispositivo_id: z.string().uuid(), workno: z.string().min(1) })
     .nullable()
@@ -75,6 +76,7 @@ export default function RegistroWizard() {
       cedula: '',
       supervisor_id: null,
       tarifa_hora: null,
+      fijo: false,
       codigo_biometrico: null,
     },
   });

@@ -58,7 +58,9 @@ Returns attendance data grouped by area for the given date range and optional co
 - `dias: []` means the collaborador had zero marcaciones in the requested period → **absent**.
 - `dias` with one or more entries means **present** on those dates.
 - All active collaboradores appear in the response regardless of attendance. The query uses a LEFT JOIN.
-- Areas are ordered alphabetically; `"Sin área"` appears last. Collaboradores within an area are ordered by `apellido, nombre`.
+- Areas are ordered alphabetically; `"Sin área"` appears last.
+- **Single-day query** (`fecha_desde === fecha_hasta`): collaboradores within each area are ordered by their first marcacion time ascending (earliest arrival first). Collaboradores with no marcaciones appear at the end, sorted alphabetically by `apellido, nombre`.
+- **Multi-day query**: collaboradores within each area are ordered alphabetically by `apellido, nombre`.
 - For a multi-day query, each `dias` entry is one calendar day with marcaciones. The frontend aggregates "X/Y días" counts from `dias.length`.
 
 ### Error Responses

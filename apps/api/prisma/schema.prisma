@@ -148,6 +148,7 @@ model Colaborador {
   telefono              String?   @db.VarChar(30)
   fecha_nacimiento      DateTime? @db.Date
   activo                Boolean   @default(true)
+  fijo                  Boolean   @default(false)
   supervisor_id         String?   @db.Uuid
   tarifa_hora           Decimal?  @db.Decimal(15, 4)
   tipo_pago             TipoPeriodoPago?

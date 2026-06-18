@@ -134,6 +134,7 @@ model Colaborador {
   apellido              String
   cedula                String   @unique
   activo                Boolean  @default(true)
+  fijo                  Boolean  @default(false)
   supervisor_id         String?  @db.Uuid
   tarifa_hora           Decimal? @db.Decimal(15, 4)
   plantilla_horario_id  String?  @db.Uuid

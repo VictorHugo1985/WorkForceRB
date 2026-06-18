@@ -6,6 +6,14 @@
 
 **Status**: Draft
 
+## Clarifications
+
+### Session 2026-06-18
+
+- Q: Should "orden de llegada" sort collaborators within each area by first punch time, or sort individual punch events within each collaborator's row? → A: Sort collaborators within each area card by their first marcacion time (earliest arrival first).
+- Q: Where do absent collaborators (no marcaciones) appear when the list is sorted by arrival time? → A: At the end of the list, sorted alphabetically by surname among themselves.
+- Q: What ordering applies in multi-day historical view where there is no single arrival time? → A: Revert to surname/name alphabetical order in multi-day view.
+
 **Input**: User description: "Crear un dashboard de inicio, que te de un pantallazo de las asistencia de hoy, que permita consultar asistencias historicas y que te diferencia los colaboradores por area y que permite tener un resumen en un periodo determinado de un colaborador en particular"
 
 ## User Scenarios & Testing *(mandatory)*
@@ -93,6 +101,7 @@ The dashboard organizes collaborators into collapsible area cards so supervisors
 - **FR-005**: The dashboard MUST allow users to enter a custom start date and end date to query any historical date range.
 - **FR-006**: The dashboard MUST provide a text search field to filter results to a single collaborator by name, surname, or ID number.
 - **FR-007**: For a single-day view, the dashboard MUST show each collaborator's individual marcaciones (check-in/check-out times) for that day.
+- **FR-015**: In single-day view, collaborators within each area card MUST be ordered by their first marcacion time ascending (earliest arrival first); collaborators with no marcaciones MUST appear at the end of the list, sorted alphabetically by surname. In multi-day view, collaborators MUST be ordered alphabetically by surname then first name.
 - **FR-008**: For a multi-day view, the dashboard MUST show each collaborator's attendance count as "days present / total days in range."
 - **FR-009**: Each area section MUST display a visual attendance percentage indicator showing the proportion of present collaborators.
 - **FR-010**: The dashboard MUST visually distinguish present collaborators from absent ones within each area section.
@@ -129,5 +138,5 @@ The dashboard organizes collaborators into collapsible area cards so supervisors
 - A collaborador's area assignment reflects their current area at query time; historical area changes are not tracked in the dashboard view.
 - The system's timezone for date calculations is Bolivia standard time (UTC-4), consistent with the rest of the application.
 - The collaborador search is not case-sensitive and supports partial name matching.
-- Area sections are ordered alphabetically; collaborators within an area are ordered by surname then first name.
+- Area sections are ordered alphabetically. In single-day view, collaborators within an area are ordered by their first marcacion time ascending (earliest arrival first); absent collaborators appear at the end, sorted alphabetically by surname. In multi-day view, collaborators are ordered alphabetically by surname then first name.
 - Mobile responsiveness is desirable but desktop is the primary use case for this dashboard.

@@ -29,6 +29,7 @@ interface ColaboradorData {
   id: string;
   nombre: string;
   apellido: string;
+  fijo: boolean;
   dias: DiaData[];
 }
 
@@ -128,13 +129,22 @@ function ColaboradorRow({
         }}
       />
 
-      {/* Name */}
-      <Typography
-        variant="body2"
-        sx={{ minWidth: 160, fontWeight: asistio ? 500 : 400, fontSize: '0.82rem' }}
-      >
-        {colab.apellido}, {colab.nombre}
-      </Typography>
+      {/* Name + tipo badge */}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 160 }}>
+        <Typography
+          variant="body2"
+          sx={{ fontWeight: asistio ? 500 : 400, fontSize: '0.82rem' }}
+        >
+          {colab.apellido}, {colab.nombre}
+        </Typography>
+        <Chip
+          label={colab.fijo ? 'F' : 'J'}
+          size="small"
+          color={colab.fijo ? 'warning' : 'default'}
+          variant={colab.fijo ? 'filled' : 'outlined'}
+          sx={{ height: 16, fontSize: '0.6rem', fontWeight: 700, px: 0, '& .MuiChip-label': { px: '4px' } }}
+        />
+      </Box>
 
       {/* Attendance detail */}
       <Box sx={{ flex: 1, display: 'flex', flexWrap: 'wrap', gap: 0.5, justifyContent: 'flex-end' }}>

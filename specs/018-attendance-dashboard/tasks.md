@@ -4,7 +4,7 @@
 
 **Prerequisites**: plan.md ✅, spec.md ✅, research.md ✅, data-model.md ✅, contracts/api.md ✅
 
-**Status note**: The core implementation was shipped as part of branch `017-period-date-marcacion-calc`. Tasks already completed are marked `[x]`. One task remains open for constitutional compliance.
+**Status note**: The core implementation (T001–T030) was shipped in a prior session. All previous tasks are marked `[x]`. Phase 8 covers the new **FR-015** arrival-order sort added on 2026-06-18.
 
 **Organization**: Tasks are grouped by user story to enable independent implementation and testing.
 
@@ -43,7 +43,7 @@
 
 **Goal**: Dashboard loads today's attendance by default; supervisor sees present/absent counts and marcaciones per area with no extra navigation.
 
-**Independent Test**: Open dashboard → without any filters, all active collaboradores appear grouped by area, with green/gray dots and today's punch times.
+**Independent Test**: Open dashboard → without any filters, all active colaboradores appear grouped by area, with green/gray dots and today's punch times.
 
 ### Implementation for User Story 1
 
@@ -61,9 +61,9 @@
 
 ## Phase 4: User Story 2 — Historical Attendance Query (Priority: P2)
 
-**Goal**: User selects a date range and sees "X/Y días" per collaborador for that period.
+**Goal**: User selects a date range and sees "X/Y días" per colaborador for that period.
 
-**Independent Test**: Select "Esta semana" → each collaborador shows correct days-attended count for the current week.
+**Independent Test**: Select "Esta semana" → each colaborador shows correct days-attended count for the current week.
 
 ### Implementation for User Story 2
 
@@ -79,46 +79,63 @@
 
 ---
 
-## Phase 5: User Story 3 — Collaborador Period Summary (Priority: P3)
+## Phase 5: User Story 3 — Colaborador Period Summary (Priority: P3)
 
-**Goal**: Search for a collaborador by name/ID, apply date range, see only their attendance detail.
+**Goal**: Search for a colaborador by name/ID, apply date range, see only their attendance detail.
 
-**Independent Test**: Type a collaborador's name in the search field, press Enter or click "Filtrar" → only that person's rows appear.
+**Independent Test**: Type a colaborador's name in the search field, press Enter or click "Filtrar" → only that person's rows appear.
 
 ### Implementation for User Story 3
 
-- [x] T021 [P] [US3] Implement collaborador search TextField (with SearchIcon adornment, Enter key submit) in `apps/web/src/app/(app)/dashboard/DashboardClient.tsx`
-- [x] T022 [US3] Wire collaborador search value into committed filter state so Filtrar button + Enter both trigger fetch in `apps/web/src/app/(app)/dashboard/DashboardClient.tsx`
+- [x] T021 [P] [US3] Implement colaborador search TextField (with SearchIcon adornment, Enter key submit) in `apps/web/src/app/(app)/dashboard/DashboardClient.tsx`
+- [x] T022 [US3] Wire colaborador search value into committed filter state so Filtrar button + Enter both trigger fetch in `apps/web/src/app/(app)/dashboard/DashboardClient.tsx`
 - [x] T023 [US3] Handle empty results: show "No hay datos para el período seleccionado." message when `data.areas.length === 0` in `apps/web/src/app/(app)/dashboard/DashboardClient.tsx`
 
-**Checkpoint**: User Story 3 fully functional — collaborador-specific period summary working ✅
+**Checkpoint**: User Story 3 fully functional — colaborador-specific period summary working ✅
 
 ---
 
 ## Phase 6: User Story 4 — Area Breakdown Navigation (Priority: P4)
 
-**Goal**: Collapsible area cards with color-coded coverage indicators; "Sin área" group for unassigned collaboradores.
+**Goal**: Collapsible area cards with color-coded coverage indicators; "Sin área" group for unassigned colaboradores.
 
-**Independent Test**: Collapse all cards → only area header rows visible. Expand one → collaborator list appears. An unassigned collaborador appears under "Sin área".
+**Independent Test**: Collapse all cards → only area header rows visible. Expand one → colaborador list appears. An unassigned colaborador appears under "Sin área".
 
 ### Implementation for User Story 4
 
 - [x] T024 [P] [US4] Implement collapsible state on `AreaCard` with `ExpandMoreIcon` toggle and `Collapse` animation in `apps/web/src/app/(app)/dashboard/DashboardClient.tsx`
 - [x] T025 [P] [US4] Apply color-coded left border to `AreaCard` header using `presenceColor()` thresholds (≥80% green, ≥40% orange, <40% red) in `apps/web/src/app/(app)/dashboard/DashboardClient.tsx`
-- [x] T026 [US4] Render absent collaborador count ("+ N ausentes ocultos") when `showAbsent = false` in `apps/web/src/app/(app)/dashboard/DashboardClient.tsx`
+- [x] T026 [US4] Render absent colaborador count ("+ N ausentes ocultos") when `showAbsent = false` in `apps/web/src/app/(app)/dashboard/DashboardClient.tsx`
 
 **Checkpoint**: User Story 4 fully functional — area cards collapsible with visual coverage indicators ✅
 
 ---
 
-## Phase 7: Polish & Cross-Cutting Concerns
+## Phase 7: Polish & Cross-Cutting Concerns (prior session)
 
-**Purpose**: Constitution compliance, TypeScript validation, and verification.
+**Purpose**: Constitution compliance (Principle X auto-refresh) and verification.
 
 - [x] T027 Add 60-second auto-refresh interval to `apps/web/src/app/(app)/dashboard/DashboardClient.tsx`: use `setInterval` that re-fires the fetch with the current filter only when `quick === 'hoy'`; clear the interval when `quick` changes or the component unmounts; background refresh must NOT show the full loading spinner (use a separate `refreshing` boolean for background ticks)
 - [x] T028 [P] Run TypeScript check: `cd apps/web && npx tsc --noEmit` — must produce no errors
 - [x] T029 [P] Verify dashboard renders in browser: open home screen, confirm area cards, summary banner, and filter controls are present
-- [x] T030 Manual smoke test per quickstart.md: verify "Hoy" / "Ayer" / "Esta semana" / custom range / collaborador search all produce correct results
+- [x] T030 Manual smoke test per quickstart.md: verify "Hoy" / "Ayer" / "Esta semana" / custom range / colaborador search all produce correct results
+
+---
+
+## Phase 8: FR-015 — Arrival-Order Sort (added 2026-06-18)
+
+**Goal**: Colaboradores within each area card are ordered by first punch time (earliest arrival first) in single-day view. Absent colaboradores appear at the end, sorted alphabetically. Multi-day view retains alphabetical order.
+
+**Independent Test**: Open the dashboard with "Hoy" selected. Within any area card that has present colaboradores, verify that the person with the earliest marcacion appears first. Verify absent colaboradores (gray dot, "Sin registro") appear after all present ones.
+
+### Implementation for FR-015
+
+- [x] T031 In `apps/web/src/app/api/dashboard/asistencia/route.ts`, after the `areaMap` construction loop, add a JS sort block: if `fechaDesde === fechaHasta`, sort each area's `colaboradores` array by `dias[0]?.marcaciones[0]` ascending (present first, earliest first); absent colaboradores (empty `dias`) sorted by `apellido nombre` at end using `localeCompare('es')`
+
+### Verification
+
+- [x] T032 [P] Run TypeScript check: `cd apps/web && npx tsc --noEmit` — must produce no errors after T031
+- [x] T033 [P] Manual smoke test for FR-015: open dashboard on "Hoy" → confirm first colaborador in each area has the earliest time chip; switch to "Esta semana" → confirm order reverts to alphabetical by surname
 
 ---
 
@@ -126,52 +143,64 @@
 
 ### Phase Dependencies
 
-- **Setup (Phase 1)**: No dependencies — ✅ complete
-- **Foundational (Phase 2)**: Depends on Setup — ✅ complete; unblocked all user stories
-- **User Stories (Phases 3–6)**: All depend on Foundational — ✅ complete
-- **Polish (Phase 7)**: Depends on all user stories — 1 task remaining (T027)
+- **Phases 1–7**: All complete ✅
+- **Phase 8 (FR-015)**: No new dependencies — modifies only `route.ts` post-query JS
 
 ### User Story Dependencies
 
-- **US1 (P1)**: No story dependencies — ✅ complete
-- **US2 (P2)**: No story dependencies — ✅ complete (builds on US1 component, but independently testable)
-- **US3 (P3)**: No story dependencies — ✅ complete
-- **US4 (P4)**: No story dependencies — ✅ complete
+- **US1 (P1)**: ✅ complete
+- **US2 (P2)**: ✅ complete
+- **US3 (P3)**: ✅ complete
+- **US4 (P4)**: ✅ complete
 
-### Within Each User Story
+### Within FR-015 Phase
 
-- Models before services before endpoints (all complete in this feature — read-only query pattern)
-- Each story is implemented within a single client component + single API route
+- T031 must complete before T032 and T033 (which can then run in parallel)
 
 ---
 
-## Parallel Example: Phase 7 (only remaining work)
+## Parallel Example: Phase 8 (FR-015)
 
 ```bash
-# T027 is the only remaining open task:
-Task: "Add 60-second auto-refresh interval for 'Hoy' filter in DashboardClient.tsx"
-# After T027:
-Task: "Run tsc --noEmit" (T028)
-Task: "Manual smoke test per quickstart.md" (T030)
+# T031 first (sole implementation task):
+Task: "Add arrival-order sort after areaMap loop in route.ts"
+
+# Then in parallel:
+Task: "tsc --noEmit" (T032)
+Task: "Manual smoke test — verify arrival order on Hoy, alphabetical on Esta semana" (T033)
 ```
 
 ---
 
 ## Implementation Strategy
 
-### Remaining Work (1 task)
+### Remaining Work (3 tasks)
 
-1. **T027**: Add auto-refresh interval to `DashboardClient.tsx`
-   - When `quick === 'hoy'`: start a 60-second `setInterval` that calls the fetch without triggering the main loading spinner
-   - When `quick` changes away from `'hoy'` OR component unmounts: `clearInterval`
-   - Use a `useEffect` keyed on `[quick]` to manage the interval lifecycle
-   - Add a `refreshing` state (boolean) separate from `loading` to show a subtle indicator (e.g., small progress bar or icon) during background ticks
-2. **Run** `tsc --noEmit` — verify clean
-3. **Manual verify**: Open dashboard → network tab → confirm 60s polling on "Hoy", no polling on other filters
+1. **T031** — Single file change in `route.ts`. After the closing brace of the `for (const row of res.rows)` loop and before `return NextResponse.json(...)`:
+
+   ```typescript
+   const isSingleDay = fechaDesde === fechaHasta;
+   if (isSingleDay) {
+     for (const area of areaMap.values()) {
+       (area.colaboradores as Array<{ dias: Array<{ marcaciones: string[] }>; apellido: string; nombre: string }>)
+         .sort((a, b) => {
+           const aTime = a.dias[0]?.marcaciones[0];
+           const bTime = b.dias[0]?.marcaciones[0];
+           if (aTime && bTime) return aTime < bTime ? -1 : aTime > bTime ? 1 : 0;
+           if (aTime) return -1;
+           if (bTime) return 1;
+           return `${a.apellido} ${a.nombre}`.localeCompare(`${b.apellido} ${b.nombre}`, 'es');
+         });
+     }
+   }
+   ```
+
+2. **T032** — `cd apps/web && npx tsc --noEmit`
+3. **T033** — Manual smoke test in browser
 
 ### MVP Status
 
-All 4 user stories are complete. The feature is functional and usable. T027 is a constitutional compliance addition, not a blocker for user value.
+All 4 original user stories complete. FR-015 is a single-task enhancement requiring one ~15-line change to `route.ts`.
 
 ---
 
@@ -179,6 +208,7 @@ All 4 user stories are complete. The feature is functional and usable. T027 is a
 
 - `[x]` = already implemented and committed
 - `[ ]` = remaining work
-- [P] tasks = different files, no dependencies, can run in parallel
+- `[P]` tasks = different files, no dependencies, can run in parallel
 - The entire feature lives in 2 files: `DashboardClient.tsx` and `asistencia/route.ts`
-- No new DB tables, migrations, or backend changes required
+- FR-015 only touches `asistencia/route.ts` — no frontend changes required
+- No DB tables, migrations, or NestJS backend changes required

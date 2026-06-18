@@ -44,6 +44,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ sema
        FROM colab_max cm
        JOIN colaboradores c ON c.id = cm.colaborador_id
        WHERE ($3::text IS NULL OR c.tipo_pago::text = $3)
+         AND c.fijo = false
        ORDER BY c.apellido, c.nombre`,
       [fechaInicio, fechaFin, tipoPeriodo],
     );
