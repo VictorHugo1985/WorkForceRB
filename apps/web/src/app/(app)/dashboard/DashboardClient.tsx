@@ -68,11 +68,6 @@ function startOfWeekBolivia(date: string): string {
   return d.toISOString().slice(0, 10);
 }
 
-function formatFechaCorta(iso: string): string {
-  const [, m, d] = iso.split('-');
-  return `${d}/${m}`;
-}
-
 function diasEnRango(fechaDesde: string, fechaHasta: string): number {
   const from = new Date(fechaDesde + 'T12:00:00Z');
   const to   = new Date(fechaHasta + 'T12:00:00Z');
@@ -351,15 +346,8 @@ export function DashboardClient() {
     return () => clearInterval(id);
   }, [quick, doFetch]);
 
-  // Summary totals
-  const totalActivos  = data?.areas.reduce((s, a) => s + a.colaboradores.length, 0) ?? 0;
-  const totalPresentes = data?.areas.reduce((s, a) => s + a.colaboradores.filter((c) => c.dias.length > 0).length, 0) ?? 0;
-  const isMultiDay    = filter.fechaDesde !== filter.fechaHasta;
-  const totalDias     = isMultiDay ? diasEnRango(filter.fechaDesde, filter.fechaHasta) : 1;
-
-  const labelRango = filter.fechaDesde === filter.fechaHasta
-    ? formatFechaCorta(filter.fechaDesde)
-    : `${formatFechaCorta(filter.fechaDesde)} – ${formatFechaCorta(filter.fechaHasta)}`;
+  const isMultiDay = filter.fechaDesde !== filter.fechaHasta;
+  const totalDias  = isMultiDay ? diasEnRango(filter.fechaDesde, filter.fechaHasta) : 1;
 
   return (
     <Box>
@@ -443,60 +431,6 @@ export function DashboardClient() {
           />
         </Box>
       </Paper>
-
-      {/* ── Summary banner — compact single row ── */}
-      {data && !loading && (
-        <Box
-          sx={{
-            display: 'flex',
-            gap: 2,
-            alignItems: 'center',
-            mb: 1.5,
-            px: 2,
-            py: 0.75,
-            bgcolor: 'primary.main',
-            borderRadius: 1.5,
-            color: 'white',
-          }}
-        >
-          <Box>
-            <Typography sx={{ fontSize: '0.65rem', opacity: 0.8, lineHeight: 1 }}>
-              Presentes — {labelRango}
-            </Typography>
-            <Typography sx={{ fontWeight: 800, fontSize: '1.4rem', lineHeight: 1.1 }}>
-              {totalPresentes}
-              <Typography component="span" sx={{ fontWeight: 400, fontSize: '0.9rem', opacity: 0.7 }}>
-                {' '}/ {totalActivos}
-              </Typography>
-            </Typography>
-          </Box>
-          <Divider orientation="vertical" flexItem sx={{ borderColor: 'rgba(255,255,255,0.25)' }} />
-          <Box>
-            <Typography sx={{ fontSize: '0.65rem', opacity: 0.8, lineHeight: 1 }}>Cobertura</Typography>
-            <Typography sx={{ fontWeight: 800, fontSize: '1.4rem', lineHeight: 1.1 }}>
-              {totalActivos > 0 ? Math.round((totalPresentes / totalActivos) * 100) : 0}%
-            </Typography>
-          </Box>
-          <Divider orientation="vertical" flexItem sx={{ borderColor: 'rgba(255,255,255,0.25)' }} />
-          <Box>
-            <Typography sx={{ fontSize: '0.65rem', opacity: 0.8, lineHeight: 1 }}>Ausentes</Typography>
-            <Typography sx={{ fontWeight: 800, fontSize: '1.4rem', lineHeight: 1.1 }}>
-              {totalActivos - totalPresentes}
-            </Typography>
-          </Box>
-          {isMultiDay && (
-            <>
-              <Divider orientation="vertical" flexItem sx={{ borderColor: 'rgba(255,255,255,0.25)' }} />
-              <Box>
-                <Typography sx={{ fontSize: '0.65rem', opacity: 0.8, lineHeight: 1 }}>Rango</Typography>
-                <Typography sx={{ fontWeight: 600, fontSize: '1rem', lineHeight: 1.1 }}>
-                  {totalDias} días
-                </Typography>
-              </Box>
-            </>
-          )}
-        </Box>
-      )}
 
       {/* ── States ── */}
       {loading && (
