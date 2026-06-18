@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import Alert from '@mui/material/Alert';
 import Autocomplete from '@mui/material/Autocomplete';
 import Box from '@mui/material/Box';
@@ -40,6 +41,11 @@ interface Props {
 
 export function CrearUsuarioDialog({ open, onClose, onCreado }: Props) {
   const { showSuccess } = useSnackbar();
+  const router = useRouter();
+  const handleSessionExpired = useCallback(async () => {
+    await fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
+    router.push('/login?reason=expired');
+  }, [router]);
 
   const [nombre, setNombre] = useState('');
   const [apellido, setApellido] = useState('');
@@ -123,11 +129,13 @@ export function CrearUsuarioDialog({ open, onClose, onCreado }: Props) {
           colaborador_id: colaborador?.id ?? null,
         }),
       });
-      const data = await res.json();
       if (!res.ok) {
-        setError(data.message ?? 'Error al crear el usuario.');
+        if (res.status === 401) { handleSessionExpired(); return; }
+        const errData = await res.json().catch(() => ({}));
+        setError(errData.message ?? 'Error al crear el usuario.');
         return;
       }
+      const data = await res.json();
       setConfirmPassword(password);
       onCreado({
         ...data,

@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import Alert from '@mui/material/Alert';
 import Autocomplete from '@mui/material/Autocomplete';
 import Box from '@mui/material/Box';
@@ -37,6 +38,11 @@ interface Props {
 
 export function EditarUsuarioDialog({ open, usuario, onClose, onEditado }: Props) {
   const { showSuccess, showError } = useSnackbar();
+  const router = useRouter();
+  const handleSessionExpired = useCallback(async () => {
+    await fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
+    router.push('/login?reason=expired');
+  }, [router]);
   const [tab, setTab] = useState(0);
 
   const [nombre, setNombre] = useState(usuario.nombre);
@@ -111,8 +117,9 @@ export function EditarUsuarioDialog({ open, usuario, onClose, onEditado }: Props
           colaborador_id: colaborador?.id ?? null,
         }),
       });
-      const data = await res.json();
       if (!res.ok) {
+        if (res.status === 401) { handleSessionExpired(); return; }
+        const data = await res.json().catch(() => ({}));
         setErrorDatos(data.message ?? 'Error al guardar.');
         return;
       }
@@ -144,8 +151,9 @@ export function EditarUsuarioDialog({ open, usuario, onClose, onEditado }: Props
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ roles }),
       });
-      const data = await res.json();
       if (!res.ok) {
+        if (res.status === 401) { handleSessionExpired(); return; }
+        const data = await res.json().catch(() => ({}));
         setErrorRoles(data.message ?? 'Error al actualizar roles.');
         return;
       }

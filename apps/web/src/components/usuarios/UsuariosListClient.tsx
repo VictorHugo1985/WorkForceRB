@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
@@ -54,6 +55,7 @@ const ROL_COLOR: Record<string, 'primary' | 'secondary' | 'warning' | 'default'>
 
 export function UsuariosListClient({ usuarios: initial, isAdmin, currentUserId }: Props) {
   const { showSuccess, showError } = useSnackbar();
+  const router = useRouter();
   const [usuarios, setUsuarios] = useState<UsuarioRow[]>(initial);
   const [search, setSearch] = useState('');
   const [togglingId, setTogglingId] = useState<string | null>(null);
@@ -74,6 +76,11 @@ export function UsuariosListClient({ usuarios: initial, isAdmin, currentUserId }
 
   const activeAdmins = usuarios.filter((u) => u.activo && u.roles.includes('ADMINISTRADOR'));
 
+  const handleSessionExpired = useCallback(async () => {
+    await fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
+    router.push('/login?reason=expired');
+  }, [router]);
+
   const handleToggleEstado = async (u: UsuarioRow) => {
     if (!u.activo && activeAdmins.length === 0) return;
     if (u.activo && u.roles.includes('ADMINISTRADOR') && activeAdmins.length <= 1) {
@@ -88,6 +95,7 @@ export function UsuariosListClient({ usuarios: initial, isAdmin, currentUserId }
         body: JSON.stringify({ activo: !u.activo }),
       });
       if (!res.ok) {
+        if (res.status === 401) { handleSessionExpired(); return; }
         const data = await res.json().catch(() => ({}));
         showError(data.message ?? 'Error al cambiar estado.');
         return;

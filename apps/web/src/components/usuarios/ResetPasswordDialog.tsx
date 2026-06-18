@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -28,6 +29,11 @@ interface Props {
 
 export function ResetPasswordDialog({ open, usuario, onClose }: Props) {
   const { showSuccess } = useSnackbar();
+  const router = useRouter();
+  const handleSessionExpired = useCallback(async () => {
+    await fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
+    router.push('/login?reason=expired');
+  }, [router]);
   const [password, setPassword] = useState('');
   const [showPass, setShowPass] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -49,8 +55,9 @@ export function ResetPasswordDialog({ open, usuario, onClose }: Props) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ password }),
       });
-      const data = await res.json();
       if (!res.ok) {
+        if (res.status === 401) { handleSessionExpired(); return; }
+        const data = await res.json().catch(() => ({}));
         setError(data.message ?? 'Error al resetear la contraseña.');
         return;
       }
