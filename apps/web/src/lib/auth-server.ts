@@ -88,6 +88,22 @@ export async function verifyToken(token: string): Promise<AuthPayload> {
   return payload as unknown as AuthPayload;
 }
 
+export async function checkSessionValidity(userId: string, iat: number): Promise<boolean> {
+  const client = await pool.connect();
+  try {
+    const res = await client.query(
+      `SELECT roles_actualizados_en FROM usuarios WHERE id = $1 AND activo = true`,
+      [userId],
+    );
+    if (res.rows.length === 0) return false;
+    const ts: Date | null = res.rows[0].roles_actualizados_en;
+    if (!ts) return true;
+    return iat * 1000 > new Date(ts).getTime();
+  } finally {
+    client.release();
+  }
+}
+
 export async function checkAdminRole(
   req: NextRequest,
 ): Promise<{ userId: string } | NextResponse> {
@@ -109,6 +125,10 @@ export async function checkAdminRole(
       { error: 'FORBIDDEN', required_role: 'ADMINISTRADOR' },
       { status: 403 },
     );
+  }
+  const sessionValid = await checkSessionValidity(payload.sub, payload.iat);
+  if (!sessionValid) {
+    return NextResponse.json({ error: 'UNAUTHORIZED' }, { status: 401 });
   }
   return { userId: payload.sub };
 }

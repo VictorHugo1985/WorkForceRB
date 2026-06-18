@@ -92,6 +92,7 @@ enum TipoAjusteDia {
 // ─── Models ───────────────────────────────────────────────────────────────────
 
 // v2.0: removed rol field; added debe_cambiar_password; roles via usuario_roles (spec 005/009)
+// spec 009: added colaborador_id (optional 1:1 link), roles_actualizados_en (session invalidation)
 model Usuario {
   id                     String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   email                  String    @unique
@@ -102,10 +103,13 @@ model Usuario {
   activo                 Boolean   @default(true)
   email_verificado       Boolean   @default(false)
   ultimo_acceso          DateTime? @db.Timestamptz
+  colaborador_id         String?   @unique @db.Uuid
+  roles_actualizados_en  DateTime? @db.Timestamptz
   creado_en              DateTime  @default(now()) @db.Timestamptz
   actualizado_en         DateTime  @updatedAt @db.Timestamptz
 
   roles                          UsuarioRol[]
+  colaborador                    Colaborador?         @relation("UsuarioColaborador", fields: [colaborador_id], references: [id])
   colaboradores_supervisados     Colaborador[]        @relation("SupervisorColaborador")
   semanas_cerradas               SemanaLaboral[]      @relation("SemanaCerradaPor")
   bonos_aprobados                Bono[]               @relation("BonoAprobadoPor")
@@ -142,6 +146,7 @@ model Colaborador {
   actualizado_en        DateTime @updatedAt @db.Timestamptz
 
   supervisor         Usuario?          @relation("SupervisorColaborador", fields: [supervisor_id], references: [id])
+  usuario_sistema    Usuario?          @relation("UsuarioColaborador")
   plantilla_horario  PlantillaHorario? @relation(fields: [plantilla_horario_id], references: [id])
   codigos            CodigoColaborador[]
   eventos_biometricos EventoBiometrico[]
