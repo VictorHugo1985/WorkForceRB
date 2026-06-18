@@ -8,12 +8,16 @@ export default async function LiquidacionesPage() {
   const token = cookieStore.get('access_token')?.value;
   if (!token) redirect('/login?reason=expired');
 
+  let payload: Awaited<ReturnType<typeof verifyToken>>;
   try {
-    const payload = await verifyToken(token!);
-    if (isBlacklisted(payload.jti)) redirect('/login?reason=expired');
+    payload = await verifyToken(token!);
   } catch {
     redirect('/login?reason=expired');
   }
 
-  return <PlanillaView />;
+  if (isBlacklisted(payload!.jti)) redirect('/login?reason=expired');
+
+  const isAdmin = payload!.roles.includes('ADMINISTRADOR');
+
+  return <PlanillaView isAdmin={isAdmin} />;
 }

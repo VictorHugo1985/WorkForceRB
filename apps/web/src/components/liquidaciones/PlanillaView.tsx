@@ -24,10 +24,12 @@ import TableRow from '@mui/material/TableRow';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
+import Alert from '@mui/material/Alert';
 import AddIcon from '@mui/icons-material/Add';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import CheckIcon from '@mui/icons-material/Check';
 import CloseIcon from '@mui/icons-material/Close';
+import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
 import { LiquidacionColaborador, type EstadoLiquidacion } from './LiquidacionColaborador';
 
@@ -213,18 +215,46 @@ function CrearPeriodoDialog({ open, onClose, onCreated }: CrearPeriodoDialogProp
 
 interface HistoricoGridProps {
   semanas: SemanaLaboral[];
+  isAdmin: boolean;
   onSelect: (semana: SemanaLaboral) => void;
   onNuevoPeriodo: () => void;
+  onDelete: (id: string) => void;
 }
 
-function HistoricoGrid({ semanas, onSelect, onNuevoPeriodo }: HistoricoGridProps) {
+function HistoricoGrid({ semanas, isAdmin, onSelect, onNuevoPeriodo, onDelete }: HistoricoGridProps) {
+  const [deleteTarget, setDeleteTarget] = useState<SemanaLaboral | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      const res = await fetch(`/api/semanas-laborales/${deleteTarget.id}`, { method: 'DELETE' });
+      if (res.ok) {
+        onDelete(deleteTarget.id);
+        setDeleteTarget(null);
+      } else {
+        const json = await res.json().catch(() => ({}));
+        setDeleteError(json?.message ?? `Error ${res.status}`);
+      }
+    } catch {
+      setDeleteError('Error de conexión. Intente de nuevo.');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   return (
     <Box>
       <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
         <Typography variant="h6" sx={{ fontWeight: 600, flex: 1 }}>Períodos de liquidación</Typography>
-        <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={onNuevoPeriodo}>
-          Nuevo período
-        </Button>
+        {isAdmin && (
+          <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={onNuevoPeriodo}>
+            Nuevo período
+          </Button>
+        )}
       </Box>
 
       {semanas.length === 0 ? (
@@ -241,6 +271,7 @@ function HistoricoGrid({ semanas, onSelect, onNuevoPeriodo }: HistoricoGridProps
                 <TableCell sx={{ fontWeight: 600 }} align="right">Monto total</TableCell>
                 <TableCell sx={{ fontWeight: 600 }}>Fecha cierre</TableCell>
                 <TableCell sx={{ fontWeight: 600 }}>Cerrado por</TableCell>
+                {isAdmin && <TableCell />}
               </TableRow>
             </TableHead>
             <TableBody>
@@ -271,12 +302,47 @@ function HistoricoGrid({ semanas, onSelect, onNuevoPeriodo }: HistoricoGridProps
                   <TableCell>
                     {s.cerrado_por ?? <Typography variant="body2" color="text.disabled">—</Typography>}
                   </TableCell>
+                  {isAdmin && (
+                    <TableCell align="right" onClick={(e) => e.stopPropagation()}>
+                      <Tooltip title="Eliminar período">
+                        <IconButton size="small" onClick={() => { setDeleteTarget(s); setDeleteError(null); }}>
+                          <DeleteIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    </TableCell>
+                  )}
                 </TableRow>
               ))}
             </TableBody>
           </Table>
         </Paper>
       )}
+
+      {/* Confirmación de eliminación */}
+      <Dialog
+        open={deleteTarget !== null}
+        onClose={() => { setDeleteTarget(null); setDeleteError(null); }}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>Eliminar período</DialogTitle>
+        <DialogContent>
+          {deleteError && <Alert severity="error" sx={{ mb: 2 }}>{deleteError}</Alert>}
+          <Typography>
+            ¿Eliminar el período{' '}
+            <strong>{deleteTarget ? formatRangoFecha(deleteTarget) : ''}</strong>?
+            Esta acción no se puede deshacer.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => { setDeleteTarget(null); setDeleteError(null); }} disabled={deleting}>
+            Cancelar
+          </Button>
+          <Button color="error" variant="contained" onClick={handleDelete} disabled={deleting}>
+            Eliminar
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }
@@ -471,7 +537,11 @@ function DetailView({ semana, onBack, onUpdate }: DetailViewProps) {
 
 // ── Main view ─────────────────────────────────────────────────────────────────
 
-export function PlanillaView() {
+interface PlanillaViewProps {
+  isAdmin: boolean;
+}
+
+export function PlanillaView({ isAdmin }: PlanillaViewProps) {
   const [semanas, setSemanas] = useState<SemanaLaboral[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<SemanaLaboral | null>(null);
@@ -499,6 +569,10 @@ export function PlanillaView() {
     setSelected(semana);
   }, []);
 
+  const handlePeriodoEliminado = useCallback((id: string) => {
+    setSemanas((prev) => prev.filter((s) => s.id !== id));
+  }, []);
+
   if (loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', mt: 8 }}>
@@ -520,8 +594,10 @@ export function PlanillaView() {
     <>
       <HistoricoGrid
         semanas={semanas}
+        isAdmin={isAdmin}
         onSelect={setSelected}
         onNuevoPeriodo={() => setDialogOpen(true)}
+        onDelete={handlePeriodoEliminado}
       />
       <CrearPeriodoDialog open={dialogOpen} onClose={() => setDialogOpen(false)} onCreated={handlePeriodoCreado} />
     </>
