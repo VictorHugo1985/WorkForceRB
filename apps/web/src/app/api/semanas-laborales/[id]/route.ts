@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { pool, verifyToken, isBlacklisted, COOKIE_NAME } from '@/lib/auth-server';
+import { pool, verifyToken, isBlacklisted, COOKIE_NAME, checkAdminRole } from '@/lib/auth-server';
 import { checkLiquidacionRole } from '@/lib/liquidacion-db';
 
 const TIPO_PERIODO = ['SEMANAL', 'QUINCENAL', 'MENSUAL'] as const;
@@ -10,6 +10,70 @@ const PatchSchema = z.object({
   fechaFin: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato YYYY-MM-DD requerido'),
   tipoPeriodo: z.enum(TIPO_PERIODO).nullable().optional(),
 });
+
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const auth = await checkAdminRole(req);
+  if (auth instanceof NextResponse) return auth;
+
+  const { id } = await params;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const row = await client.query(
+      `SELECT id, estado, fecha_inicio, fecha_fin FROM liquidacion_periodo WHERE id = $1`,
+      [id],
+    );
+    if (row.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return NextResponse.json({ message: 'Período no encontrado' }, { status: 404 });
+    }
+    const periodo = row.rows[0];
+
+    if (periodo.estado !== 'ABIERTA') {
+      await client.query('ROLLBACK');
+      return NextResponse.json({ message: 'Los períodos cerrados no pueden eliminarse.' }, { status: 422 });
+    }
+
+    const blocked = await client.query(
+      `SELECT COUNT(*) FROM liquidacion_colaborador
+       WHERE semana_id = $1 AND estado IN ('APROBADO', 'PAGADO')`,
+      [id],
+    );
+    if (parseInt(blocked.rows[0].count, 10) > 0) {
+      await client.query('ROLLBACK');
+      return NextResponse.json(
+        { message: 'El período tiene liquidaciones aprobadas o pagadas y no puede eliminarse.' },
+        { status: 409 },
+      );
+    }
+
+    await client.query(
+      `DELETE FROM dias_liquidacion
+       WHERE liquidacion_id IN (SELECT id FROM liquidacion_colaborador WHERE semana_id = $1)`,
+      [id],
+    );
+    await client.query(`DELETE FROM liquidacion_colaborador WHERE semana_id = $1`, [id]);
+    await client.query(`DELETE FROM bonos WHERE semana_id = $1`, [id]);
+    await client.query(`DELETE FROM liquidacion_periodo WHERE id = $1`, [id]);
+
+    try {
+      await client.query(
+        `INSERT INTO registros_auditoria (accion, entidad_tipo, entidad_id, datos_anteriores, usuario_id, creado_en)
+         VALUES ('PERIODO_ELIMINADO', 'LiquidacionPeriodo', $1, $2, $3, NOW())`,
+        [id, JSON.stringify({ fecha_inicio: periodo.fecha_inicio, fecha_fin: periodo.fecha_fin }), auth.userId],
+      );
+    } catch { /* audit failure does not abort the delete */ }
+
+    await client.query('COMMIT');
+    return NextResponse.json({});
+  } catch (e) {
+    await client.query('ROLLBACK');
+    throw e;
+  } finally {
+    client.release();
+  }
+}
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const auth = await checkLiquidacionRole(req);

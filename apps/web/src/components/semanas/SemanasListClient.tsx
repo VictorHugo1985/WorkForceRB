@@ -25,6 +25,7 @@ import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import AddIcon from '@mui/icons-material/Add';
+import DeleteIcon from '@mui/icons-material/Delete';
 import LockIcon from '@mui/icons-material/Lock';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -72,6 +73,9 @@ export function SemanasListClient({ semanas: initial, isAdmin }: Props) {
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [closingId, setClosingId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<SemanaLaboral | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const isCustom = periodo === -1;
 
@@ -118,6 +122,31 @@ export function SemanasListClient({ semanas: initial, isAdmin }: Props) {
       showError(msg);
     } finally {
       setCreating(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    setDeletingId(deleteTarget.id);
+    try {
+      const res = await fetch(`/api/semanas-laborales/${deleteTarget.id}`, { method: 'DELETE' });
+      if (res.ok) {
+        setSemanas((prev) => prev.filter((s) => s.id !== deleteTarget.id));
+        setDeleteTarget(null);
+        setDeleteError(null);
+        showSuccess('Período eliminado correctamente.');
+      } else {
+        const json = await res.json().catch(() => ({}));
+        const msg = json?.message ?? `Error ${res.status}`;
+        setDeleteError(msg);
+        showError(msg);
+      }
+    } catch {
+      const msg = 'Error de red. Intente de nuevo.';
+      setDeleteError(msg);
+      showError(msg);
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -203,6 +232,13 @@ export function SemanasListClient({ semanas: initial, isAdmin }: Props) {
                         </IconButton>
                       </Tooltip>
                     )}
+                    {isAdmin && s.estado === 'ABIERTA' && (
+                      <Tooltip title="Eliminar período">
+                        <IconButton size="small" onClick={() => { setDeleteTarget(s); setDeleteError(null); }}>
+                          <DeleteIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}
@@ -210,6 +246,39 @@ export function SemanasListClient({ semanas: initial, isAdmin }: Props) {
           </Table>
         </Paper>
       )}
+
+      {/* Delete confirmation dialog */}
+      <Dialog
+        open={deleteTarget !== null}
+        onClose={() => { setDeleteTarget(null); setDeleteError(null); }}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>Eliminar período</DialogTitle>
+        <DialogContent>
+          {deleteError && <Alert severity="error" sx={{ mb: 2 }}>{deleteError}</Alert>}
+          <Typography>
+            ¿Eliminar el período{' '}
+            <strong>
+              {deleteTarget
+                ? `${formatDate(deleteTarget.fecha_inicio)} – ${formatDate(deleteTarget.fecha_fin)}`
+                : ''}
+            </strong>
+            ? Esta acción no se puede deshacer.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => { setDeleteTarget(null); setDeleteError(null); }}
+            disabled={!!deletingId}
+          >
+            Cancelar
+          </Button>
+          <Button color="error" variant="contained" onClick={handleDelete} disabled={!!deletingId}>
+            Eliminar
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* Create dialog */}
       <Dialog
