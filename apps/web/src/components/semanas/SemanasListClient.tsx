@@ -232,7 +232,7 @@ export function SemanasListClient({ semanas: initial, isAdmin }: Props) {
                         </IconButton>
                       </Tooltip>
                     )}
-                    {isAdmin && s.estado === 'ABIERTA' && (
+                    {isAdmin && (
                       <Tooltip title="Eliminar período">
                         <IconButton size="small" onClick={() => { setDeleteTarget(s); setDeleteError(null); }}>
                           <DeleteIcon fontSize="small" />
