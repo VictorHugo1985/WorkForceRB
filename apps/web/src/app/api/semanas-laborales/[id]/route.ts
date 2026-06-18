@@ -68,8 +68,10 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     await client.query('COMMIT');
     return NextResponse.json({});
   } catch (e) {
-    await client.query('ROLLBACK');
-    throw e;
+    try { await client.query('ROLLBACK'); } catch { /* ignore rollback error */ }
+    console.error('[DELETE semana-laboral]', e);
+    const msg = e instanceof Error ? e.message : String(e);
+    return NextResponse.json({ message: msg }, { status: 500 });
   } finally {
     client.release();
   }
