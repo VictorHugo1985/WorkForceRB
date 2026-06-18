@@ -1,0 +1,2 @@
+ALTER TABLE colaboradores ADD COLUMN IF NOT EXISTS fijo BOOLEAN NOT NULL DEFAULT false;
+-- DOWN: ALTER TABLE colaboradores DROP COLUMN fijo;
