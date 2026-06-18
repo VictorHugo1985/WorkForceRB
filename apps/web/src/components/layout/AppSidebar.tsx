@@ -19,6 +19,7 @@ import SettingsIcon from '@mui/icons-material/Settings';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import FingerprintIcon from '@mui/icons-material/Fingerprint';
 import ManageAccountsIcon from '@mui/icons-material/ManageAccounts';
+import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import LogoutIcon from '@mui/icons-material/Logout';
@@ -35,6 +36,7 @@ const NAV_ICONS: Record<string, React.ReactNode> = {
   '/configuracion': <SettingsIcon fontSize="small" />,
   '/liquidaciones': <ReceiptLongIcon fontSize="small" />,
   '/eventos':       <FingerprintIcon fontSize="small" />,
+  '/relojes':       <AccessTimeIcon fontSize="small" />,
   '/usuarios':      <ManageAccountsIcon fontSize="small" />,
 };
 
