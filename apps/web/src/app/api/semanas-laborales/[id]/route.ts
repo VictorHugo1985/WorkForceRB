@@ -49,7 +49,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     }
 
     await client.query(
-      `DELETE FROM dias_liquidacion
+      `DELETE FROM liquidacion_jornada
        WHERE liquidacion_id IN (SELECT id FROM liquidacion_colaborador WHERE semana_id = $1)`,
       [id],
     );
