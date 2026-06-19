@@ -40,11 +40,7 @@ export function LoginForm() {
         debeChangiarPassword: boolean;
       }>('/api/auth/login', data);
 
-      if (res.data.debeChangiarPassword) {
-        router.push('/auth/cambiar-contrasena');
-      } else {
-        router.push(returnUrl);
-      }
+      router.push(returnUrl);
     } catch (err: any) {
       if (axios.isAxiosError(err)) {
         const status = err.response?.status;

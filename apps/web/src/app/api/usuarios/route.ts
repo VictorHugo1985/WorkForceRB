@@ -111,7 +111,7 @@ export async function POST(req: NextRequest) {
 
     const userRes = await client.query<{ id: string }>(
       `INSERT INTO usuarios (email, password_hash, nombre, apellido, debe_cambiar_password, activo, colaborador_id, actualizado_en)
-       VALUES ($1, $2, $3, $4, true, true, $5, NOW())
+       VALUES ($1, $2, $3, $4, false, true, $5, NOW())
        RETURNING id`,
       [emailNorm, passwordHash, nombre, apellido, colaborador_id ?? null],
     );
