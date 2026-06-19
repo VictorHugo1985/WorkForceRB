@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Rosa Betania — Workforce",
-  description: "Sistema de gestión de asistencia y nómina",
+  title: "Workforce",
+  description: "Marcaciones biométricas",
 };
 
 export default function RootLayout({
