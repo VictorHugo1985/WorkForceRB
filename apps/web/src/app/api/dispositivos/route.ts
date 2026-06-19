@@ -59,8 +59,8 @@ export async function POST(req: NextRequest) {
     }
 
     const res = await client.query(
-      `INSERT INTO dispositivos_biometricos (nombre, numero_serie, tipo, webhook_secreto)
-       VALUES ($1, $2, $3, $4)
+      `INSERT INTO dispositivos_biometricos (nombre, numero_serie, tipo, webhook_secreto, actualizado_en)
+       VALUES ($1, $2, $3, $4, NOW())
        RETURNING id, nombre, numero_serie, tipo, activo,
                  (webhook_secreto IS NOT NULL AND webhook_secreto <> '') AS tiene_webhook_secreto,
                  creado_en, actualizado_en`,

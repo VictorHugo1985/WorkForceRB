@@ -110,8 +110,8 @@ export async function POST(req: NextRequest) {
     const passwordHash = await bcrypt.hash(password, 10);
 
     const userRes = await client.query<{ id: string }>(
-      `INSERT INTO usuarios (email, password_hash, nombre, apellido, debe_cambiar_password, activo, colaborador_id)
-       VALUES ($1, $2, $3, $4, true, true, $5)
+      `INSERT INTO usuarios (email, password_hash, nombre, apellido, debe_cambiar_password, activo, colaborador_id, actualizado_en)
+       VALUES ($1, $2, $3, $4, true, true, $5, NOW())
        RETURNING id`,
       [emailNorm, passwordHash, nombre, apellido, colaborador_id ?? null],
     );
