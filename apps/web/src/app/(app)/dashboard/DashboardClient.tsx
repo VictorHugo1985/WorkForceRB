@@ -128,7 +128,7 @@ function ColaboradorRow({
           variant="body2"
           sx={{ fontWeight: asistio ? 500 : 400, fontSize: '0.82rem' }}
         >
-          {colab.apellido}, {colab.nombre}
+          {colab.apellido.split(' ')[0]}, {colab.nombre}
         </Typography>
         <Chip
           label={colab.fijo ? 'F' : 'J'}
