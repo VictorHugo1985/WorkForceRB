@@ -3,7 +3,6 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
 import Collapse from '@mui/material/Collapse';
@@ -17,6 +16,7 @@ import Typography from '@mui/material/Typography';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import PersonOffIcon from '@mui/icons-material/PersonOff';
 import SearchIcon from '@mui/icons-material/Search';
+import type { DispositivoOption } from './page';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -62,8 +62,8 @@ function subtractDays(date: string, n: number): string {
 
 function startOfWeekBolivia(date: string): string {
   const d = new Date(date + 'T12:00:00Z');
-  const day = d.getUTCDay(); // 0=Sun..6=Sat
-  const diff = day === 0 ? -6 : 1 - day; // back to Monday
+  const day = d.getUTCDay();
+  const diff = day === 0 ? -6 : 1 - day;
   d.setUTCDate(d.getUTCDate() + diff);
   return d.toISOString().slice(0, 10);
 }
@@ -113,7 +113,6 @@ function ColaboradorRow({
         opacity: asistio ? 1 : 0.45,
       }}
     >
-      {/* Status dot */}
       <Box
         sx={{
           width: 8,
@@ -124,7 +123,6 @@ function ColaboradorRow({
         }}
       />
 
-      {/* Name + tipo badge */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 160 }}>
         <Typography
           variant="body2"
@@ -141,7 +139,6 @@ function ColaboradorRow({
         />
       </Box>
 
-      {/* Attendance detail */}
       <Box sx={{ flex: 1, display: 'flex', flexWrap: 'wrap', gap: 0.5, justifyContent: 'flex-end' }}>
         {!asistio ? (
           <Typography variant="caption" color="text.disabled" sx={{ fontStyle: 'italic' }}>
@@ -195,7 +192,6 @@ function AreaCard({
 
   return (
     <Paper variant="outlined" sx={{ overflow: 'hidden' }}>
-      {/* Header */}
       <Box
         sx={{
           px: 2,
@@ -241,7 +237,6 @@ function AreaCard({
         </Typography>
       </Box>
 
-      {/* Body */}
       <Collapse in={expanded} unmountOnExit={false}>
         <Divider />
         {presentes.map((c) => (
@@ -269,46 +264,47 @@ function AreaCard({
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
-type QuickFilter = 'hoy' | 'ayer' | 'semana' | 'custom';
+type QuickFilter = 'hoy' | 'ayer' | 'semana';
 
-export function DashboardClient() {
+interface Props {
+  dispositivos: DispositivoOption[];
+}
+
+export function DashboardClient({ dispositivos }: Props) {
   const today = todayBolivia();
 
-  const [fechaDesde, setFechaDesde]       = useState(today);
-  const [fechaHasta, setFechaHasta]       = useState(today);
-  const [colaborador, setColaborador]     = useState('');
-  const [quick, setQuick]                 = useState<QuickFilter>('hoy');
-  const [showAbsent, setShowAbsent]       = useState(true);
+  const [quick, setQuick]             = useState<QuickFilter>('hoy');
+  const [colaborador, setColaborador] = useState('');
+  const [dispositivoSerial, setDispositivoSerial] = useState<string | null>(null);
+  const [showAbsent, setShowAbsent]   = useState(true);
 
-  // Committed filter state (triggers fetch)
-  const [filter, setFilter] = useState({ fechaDesde: today, fechaHasta: today, colaborador: '' });
+  const [filter, setFilter] = useState({
+    fechaDesde: today,
+    fechaHasta: today,
+    colaborador: '',
+    dispositivoSerial: null as string | null,
+  });
 
   const [data, setData]       = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError]     = useState<string | null>(null);
 
-  // Stable ref so doFetch always reads the latest filter without being a dep
   const filterRef = useRef(filter);
   filterRef.current = filter;
 
-  const applyFilter = useCallback(() => {
-    setFilter({ fechaDesde, fechaHasta, colaborador });
-  }, [fechaDesde, fechaHasta, colaborador]);
-
-  const applyQuick = (q: QuickFilter) => {
-    setQuick(q);
+  const dateRangeFor = (q: QuickFilter): { desde: string; hasta: string } => {
     const t = todayBolivia();
-    if (q === 'hoy')    { setFechaDesde(t);                        setFechaHasta(t); }
-    if (q === 'ayer')   { const y = subtractDays(t, 1); setFechaDesde(y); setFechaHasta(y); }
-    if (q === 'semana') { setFechaDesde(startOfWeekBolivia(t));    setFechaHasta(t); }
+    if (q === 'ayer')   { const y = subtractDays(t, 1); return { desde: y, hasta: y }; }
+    if (q === 'semana') return { desde: startOfWeekBolivia(t), hasta: t };
+    return { desde: t, hasta: t };
   };
 
-  // Shared fetch logic; silent=true for background 60s ticks (no loading spinner)
   const doFetch = useCallback((silent: boolean) => {
     const f = filterRef.current;
     const params = new URLSearchParams({ fecha_desde: f.fechaDesde, fecha_hasta: f.fechaHasta });
-    if (f.colaborador) params.set('colaborador', f.colaborador);
+    if (f.colaborador)      params.set('colaborador', f.colaborador);
+    if (f.dispositivoSerial) params.set('dispositivo', f.dispositivoSerial);
 
     if (silent) { setRefreshing(true); }
     else        { setLoading(true); setError(null); }
@@ -318,93 +314,97 @@ export function DashboardClient() {
       .then(setData)
       .catch((e: Error) => { if (!silent) setError((e as Error).message); })
       .finally(() => { if (silent) setRefreshing(false); else setLoading(false); });
-  // filterRef is a ref — intentionally omitted from deps
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Auto-apply when quick filter changes
+  // Auto-apply date chip changes
   useEffect(() => {
-    if (quick !== 'custom') {
-      const t = todayBolivia();
-      let desde = t, hasta = t;
-      if (quick === 'ayer')   { desde = hasta = subtractDays(t, 1); }
-      if (quick === 'semana') { desde = startOfWeekBolivia(t); }
-      setFilter({ fechaDesde: desde, fechaHasta: hasta, colaborador });
-    }
+    const { desde, hasta } = dateRangeFor(quick);
+    setFilter((prev) => ({ ...prev, fechaDesde: desde, fechaHasta: hasta }));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [quick]);
 
-  // Fetch on committed filter change (user-triggered — shows loading spinner)
+  // Auto-apply device chip changes
+  useEffect(() => {
+    setFilter((prev) => ({ ...prev, dispositivoSerial }));
+  }, [dispositivoSerial]);
+
+  // Fetch on filter change
   useEffect(() => {
     doFetch(false);
   }, [filter, doFetch]);
 
-  // 60-second auto-refresh — only while viewing "Hoy" (Constitution Principle X)
+  // 60-second auto-refresh for "Hoy"
   useEffect(() => {
     if (quick !== 'hoy') return;
     const id = setInterval(() => doFetch(true), 60_000);
     return () => clearInterval(id);
   }, [quick, doFetch]);
 
+  const applyColaborador = useCallback(() => {
+    setFilter((prev) => ({ ...prev, colaborador }));
+  }, [colaborador]);
+
   const isMultiDay = filter.fechaDesde !== filter.fechaHasta;
   const totalDias  = isMultiDay ? diasEnRango(filter.fechaDesde, filter.fechaHasta) : 1;
 
   return (
     <Box>
-      {/* Background-refresh pulse — thin bar, shown only during silent 60s ticks */}
       <LinearProgress
         variant="indeterminate"
         sx={{ height: 2, mb: 0.5, opacity: refreshing ? 1 : 0, transition: 'opacity 0.3s' }}
       />
 
-      {/* ── Filters ── */}
       <Paper variant="outlined" sx={{ p: 1.25, mb: 1.5 }}>
-        {/* Quick filters + date range + search — all in one compact row */}
         <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
+
+          {/* Date chips */}
           {(['hoy', 'ayer', 'semana'] as const).map((q) => (
             <Chip
               key={q}
               label={q === 'hoy' ? 'Hoy' : q === 'ayer' ? 'Ayer' : 'Esta semana'}
-              onClick={() => applyQuick(q)}
+              onClick={() => setQuick(q)}
               color={quick === q ? 'primary' : 'default'}
               variant={quick === q ? 'filled' : 'outlined'}
               size="small"
               sx={{ cursor: 'pointer' }}
             />
           ))}
-          <Chip
-            label="Personalizado"
-            onClick={() => setQuick('custom')}
-            color={quick === 'custom' ? 'primary' : 'default'}
-            variant={quick === 'custom' ? 'filled' : 'outlined'}
-            size="small"
-            sx={{ cursor: 'pointer' }}
-          />
+
+          {/* Device chips — shown only when there are devices */}
+          {dispositivos.length > 0 && (
+            <>
+              <Divider orientation="vertical" flexItem sx={{ mx: 0.5, my: 0.5 }} />
+              <Chip
+                label="Todos"
+                onClick={() => setDispositivoSerial(null)}
+                color={dispositivoSerial === null ? 'secondary' : 'default'}
+                variant={dispositivoSerial === null ? 'filled' : 'outlined'}
+                size="small"
+                sx={{ cursor: 'pointer' }}
+              />
+              {dispositivos.map((d) => (
+                <Chip
+                  key={d.serial}
+                  label={d.nombre}
+                  onClick={() => setDispositivoSerial(d.serial)}
+                  color={dispositivoSerial === d.serial ? 'secondary' : 'default'}
+                  variant={dispositivoSerial === d.serial ? 'filled' : 'outlined'}
+                  size="small"
+                  sx={{ cursor: 'pointer' }}
+                />
+              ))}
+            </>
+          )}
+
+          {/* Collaborator search */}
           <Divider orientation="vertical" flexItem sx={{ mx: 0.5, my: 0.5 }} />
-          <TextField
-            label="Desde"
-            type="date"
-            size="small"
-            value={fechaDesde}
-            onChange={(e) => { setFechaDesde(e.target.value); setQuick('custom'); }}
-            slotProps={{ inputLabel: { shrink: true }, htmlInput: { style: { fontSize: '0.8rem', padding: '4px 8px' } } }}
-            sx={{ width: 130 }}
-          />
-          <TextField
-            label="Hasta"
-            type="date"
-            size="small"
-            value={fechaHasta}
-            onChange={(e) => { setFechaHasta(e.target.value); setQuick('custom'); }}
-            slotProps={{ inputLabel: { shrink: true }, htmlInput: { style: { fontSize: '0.8rem', padding: '4px 8px' } } }}
-            sx={{ width: 130 }}
-          />
           <TextField
             label="Colaborador"
             size="small"
             value={colaborador}
             onChange={(e) => setColaborador(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && applyFilter()}
+            onKeyDown={(e) => e.key === 'Enter' && applyColaborador()}
             placeholder="Nombre o cédula"
             sx={{ width: 180 }}
             slotProps={{
@@ -412,18 +412,11 @@ export function DashboardClient() {
               inputLabel: { style: { fontSize: '0.8rem' } },
             }}
           />
-          <Button
-            variant="contained"
-            onClick={applyFilter}
-            disabled={loading}
-            size="small"
-          >
-            Filtrar
-          </Button>
+
+          {/* Absent toggle */}
           <Chip
             label={showAbsent ? 'Ocultar ausentes' : 'Mostrar ausentes'}
             onClick={() => setShowAbsent((v) => !v)}
-            color={showAbsent ? 'default' : 'default'}
             variant={showAbsent ? 'outlined' : 'filled'}
             size="small"
             icon={<PersonOffIcon sx={{ fontSize: '14px !important' }} />}
@@ -432,7 +425,6 @@ export function DashboardClient() {
         </Box>
       </Paper>
 
-      {/* ── States ── */}
       {loading && (
         <Box sx={{ display: 'flex', justifyContent: 'center', mt: 6 }}>
           <CircularProgress />
@@ -442,7 +434,6 @@ export function DashboardClient() {
         <Alert severity="error">{error}</Alert>
       )}
 
-      {/* ── Area cards masonry ── */}
       {!loading && !error && data && (
         data.areas.length === 0 ? (
           <Typography color="text.secondary" sx={{ py: 4, textAlign: 'center' }}>

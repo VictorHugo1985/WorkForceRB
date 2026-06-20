@@ -30,6 +30,7 @@ export async function GET(req: NextRequest) {
   const fechaDesde = searchParams.get('fecha_desde') ?? today;
   const fechaHasta = searchParams.get('fecha_hasta') ?? today;
   const colaborador = searchParams.get('colaborador') || null;
+  const dispositivo = searchParams.get('dispositivo') || null;
 
   const client = await pool.connect();
   try {
@@ -51,6 +52,7 @@ export async function GET(req: NextRequest) {
                 cf.nombre  ILIKE '%' || $3 || '%' OR
                 cf.apellido ILIKE '%' || $3 || '%' OR
                 cf.cedula   ILIKE '%' || $3 || '%')
+           AND ($4::text IS NULL OR ebd.device_serial_number = $4)
          GROUP BY cc.colaborador_id, fecha
        )
        SELECT
@@ -77,7 +79,7 @@ export async function GET(req: NextRequest) {
               c.cedula   ILIKE '%' || $3 || '%')
        GROUP BY c.id, c.nombre, c.apellido, c.fijo, a.id, a.nombre
        ORDER BY a.nombre NULLS LAST, c.apellido, c.nombre`,
-      [fechaDesde, fechaHasta, colaborador],
+      [fechaDesde, fechaHasta, colaborador, dispositivo],
     );
 
     // Group by area in JS
