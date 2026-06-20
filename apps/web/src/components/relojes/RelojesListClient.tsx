@@ -35,6 +35,7 @@ import { useSnackbar } from '@/lib/SnackbarContext';
 interface DispositivoRow {
   id: string;
   nombre: string;
+  alias: string | null;
   numero_serie: string | null;
   tipo: 'WEBHOOK' | 'CSV';
   activo: boolean;
@@ -57,6 +58,7 @@ export function RelojesListClient({ dispositivos: initial, isAdmin }: Props) {
   const [createError, setCreateError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [cNombre, setCNombre] = useState('');
+  const [cAlias, setCAlias] = useState('');
   const [cNumeroSerie, setCNumeroSerie] = useState('');
   const [cTipo, setCTipo] = useState<'WEBHOOK' | 'CSV'>('WEBHOOK');
   const [cSecreto, setCSecreto] = useState('');
@@ -66,6 +68,7 @@ export function RelojesListClient({ dispositivos: initial, isAdmin }: Props) {
   const [editError, setEditError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [eNombre, setENombre] = useState('');
+  const [eAlias, setEAlias] = useState('');
   const [eNumeroSerie, setENumeroSerie] = useState('');
   const [eTipo, setETipo] = useState<'WEBHOOK' | 'CSV'>('WEBHOOK');
   const [eSecreto, setESecreto] = useState('');
@@ -74,7 +77,7 @@ export function RelojesListClient({ dispositivos: initial, isAdmin }: Props) {
   const [togglingId, setTogglingId] = useState<string | null>(null);
 
   const handleOpenCreate = () => {
-    setCNombre(''); setCNumeroSerie(''); setCTipo('WEBHOOK'); setCSecreto('');
+    setCNombre(''); setCAlias(''); setCNumeroSerie(''); setCTipo('WEBHOOK'); setCSecreto('');
     setCreateError(null);
     setCreateOpen(true);
   };
@@ -90,6 +93,7 @@ export function RelojesListClient({ dispositivos: initial, isAdmin }: Props) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           nombre: cNombre.trim(),
+          alias: cAlias.trim() || null,
           numero_serie: cNumeroSerie.trim() || undefined,
           tipo: cTipo,
           webhook_secreto: cTipo === 'WEBHOOK' ? cSecreto : undefined,
@@ -110,6 +114,7 @@ export function RelojesListClient({ dispositivos: initial, isAdmin }: Props) {
   const handleOpenEdit = (d: DispositivoRow) => {
     setEditTarget(d);
     setENombre(d.nombre);
+    setEAlias(d.alias ?? '');
     setENumeroSerie(d.numero_serie ?? '');
     setETipo(d.tipo);
     setESecreto('');
@@ -127,6 +132,7 @@ export function RelojesListClient({ dispositivos: initial, isAdmin }: Props) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           nombre: eNombre.trim(),
+          alias: eAlias.trim() || null,
           numero_serie: eNumeroSerie.trim() || null,
           tipo: eTipo,
           webhook_secreto: eSecreto.trim() || undefined,
@@ -191,6 +197,7 @@ export function RelojesListClient({ dispositivos: initial, isAdmin }: Props) {
             <TableHead>
               <TableRow>
                 <TableCell>Nombre</TableCell>
+                <TableCell>Alias</TableCell>
                 <TableCell>N.º de serie</TableCell>
                 <TableCell>Tipo</TableCell>
                 <TableCell>Secreto</TableCell>
@@ -202,6 +209,11 @@ export function RelojesListClient({ dispositivos: initial, isAdmin }: Props) {
               {dispositivos.map((d) => (
                 <TableRow key={d.id} hover>
                   <TableCell sx={{ fontWeight: 500 }}>{d.nombre}</TableCell>
+                  <TableCell>
+                    {d.alias
+                      ? <Chip label={d.alias} size="small" color="secondary" variant="outlined" />
+                      : <Typography variant="caption" color="text.disabled">—</Typography>}
+                  </TableCell>
                   <TableCell sx={{ color: 'text.secondary', fontSize: 12 }}>{d.numero_serie ?? '—'}</TableCell>
                   <TableCell>
                     <Chip
@@ -269,6 +281,14 @@ export function RelojesListClient({ dispositivos: initial, isAdmin }: Props) {
               required
             />
             <TextField
+              label="Alias"
+              size="small"
+              value={cAlias}
+              onChange={(e) => setCAlias(e.target.value)}
+              helperText="Nombre corto para mostrar en el dashboard (ej. RB)"
+              slotProps={{ htmlInput: { maxLength: 30 } }}
+            />
+            <TextField
               label="Número de serie"
               size="small"
               value={cNumeroSerie}
@@ -320,6 +340,14 @@ export function RelojesListClient({ dispositivos: initial, isAdmin }: Props) {
               value={eNombre}
               onChange={(e) => setENombre(e.target.value)}
               required
+            />
+            <TextField
+              label="Alias"
+              size="small"
+              value={eAlias}
+              onChange={(e) => setEAlias(e.target.value)}
+              helperText="Nombre corto para mostrar en el dashboard (ej. RB)"
+              slotProps={{ htmlInput: { maxLength: 30 } }}
             />
             <TextField
               label="Número de serie"

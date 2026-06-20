@@ -4,6 +4,7 @@ import { pool, checkAdminRole } from '@/lib/auth-server';
 
 const PatchSchema = z.object({
   nombre: z.string().min(1).max(100).optional(),
+  alias: z.string().max(30).nullable().optional(),
   numero_serie: z.string().nullable().optional(),
   tipo: z.enum(['WEBHOOK', 'CSV']).optional(),
   webhook_secreto: z.string().optional(),
@@ -22,12 +23,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const parsed = PatchSchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ message: parsed.error.issues[0].message }, { status: 400 });
 
-  const { nombre, numero_serie, tipo, webhook_secreto, activo } = parsed.data;
+  const { nombre, alias, numero_serie, tipo, webhook_secreto, activo } = parsed.data;
 
   const client = await pool.connect();
   try {
     const existing = await client.query(
-      `SELECT id, nombre, numero_serie, tipo, activo, webhook_secreto
+      `SELECT id, nombre, alias, numero_serie, tipo, activo, webhook_secreto
        FROM dispositivos_biometricos WHERE id = $1`,
       [id],
     );
@@ -55,14 +56,16 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       newSecret = webhook_secreto;
     }
 
+    const newAlias = alias !== undefined ? (alias ?? null) : prev.alias;
+
     const res = await client.query(
       `UPDATE dispositivos_biometricos
-       SET nombre = $1, numero_serie = $2, tipo = $3, webhook_secreto = $4, activo = $5
-       WHERE id = $6
-       RETURNING id, nombre, numero_serie, tipo, activo,
+       SET nombre = $1, alias = $2, numero_serie = $3, tipo = $4, webhook_secreto = $5, activo = $6, actualizado_en = NOW()
+       WHERE id = $7
+       RETURNING id, nombre, alias, numero_serie, tipo, activo,
                  (webhook_secreto IS NOT NULL AND webhook_secreto <> '') AS tiene_webhook_secreto,
                  actualizado_en`,
-      [nombre ?? prev.nombre, newSerial, newTipo, newSecret, activo ?? prev.activo, id],
+      [nombre ?? prev.nombre, newAlias, newSerial, newTipo, newSecret, activo ?? prev.activo, id],
     );
     const row = res.rows[0];
 

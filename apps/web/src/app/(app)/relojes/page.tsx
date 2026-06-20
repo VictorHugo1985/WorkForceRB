@@ -19,6 +19,7 @@ export default async function RelojesPage() {
   let dispositivos: {
     id: string;
     nombre: string;
+    alias: string | null;
     numero_serie: string | null;
     tipo: 'WEBHOOK' | 'CSV';
     activo: boolean;
@@ -31,7 +32,7 @@ export default async function RelojesPage() {
     const client = await pool.connect();
     try {
       const res = await client.query(
-        `SELECT id, nombre, numero_serie, tipo, activo,
+        `SELECT id, nombre, alias, numero_serie, tipo, activo,
                 (webhook_secreto IS NOT NULL AND webhook_secreto <> '') AS tiene_webhook_secreto,
                 creado_en::text, actualizado_en::text
          FROM dispositivos_biometricos ORDER BY nombre`,

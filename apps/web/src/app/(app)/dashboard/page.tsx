@@ -11,7 +11,7 @@ export default async function DashboardPage() {
   const client = await pool.connect();
   try {
     const res = await client.query(
-      `SELECT numero_serie AS serial, nombre FROM dispositivos_biometricos WHERE activo = true ORDER BY nombre`,
+      `SELECT numero_serie AS serial, COALESCE(alias, nombre) AS nombre FROM dispositivos_biometricos WHERE activo = true ORDER BY nombre`,
     );
     dispositivos = res.rows;
   } catch {

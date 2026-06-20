@@ -4,6 +4,7 @@ import { pool, checkAdminRole } from '@/lib/auth-server';
 
 const CreateSchema = z.object({
   nombre: z.string().min(1, 'El nombre es requerido').max(100),
+  alias: z.string().max(30).nullable().optional(),
   numero_serie: z.string().optional(),
   tipo: z.enum(['WEBHOOK', 'CSV']),
   webhook_secreto: z.string().optional(),
@@ -16,7 +17,7 @@ export async function GET(req: NextRequest) {
   const client = await pool.connect();
   try {
     const result = await client.query(
-      `SELECT id, nombre, numero_serie, tipo, activo,
+      `SELECT id, nombre, alias, numero_serie, tipo, activo,
               (webhook_secreto IS NOT NULL AND webhook_secreto <> '') AS tiene_webhook_secreto,
               creado_en, actualizado_en
        FROM dispositivos_biometricos ORDER BY nombre`,
@@ -37,7 +38,7 @@ export async function POST(req: NextRequest) {
   const parsed = CreateSchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ message: parsed.error.issues[0].message }, { status: 400 });
 
-  const { nombre, numero_serie, tipo, webhook_secreto } = parsed.data;
+  const { nombre, alias, numero_serie, tipo, webhook_secreto } = parsed.data;
 
   if (tipo === 'WEBHOOK' && !webhook_secreto?.trim()) {
     return NextResponse.json(
@@ -59,12 +60,12 @@ export async function POST(req: NextRequest) {
     }
 
     const res = await client.query(
-      `INSERT INTO dispositivos_biometricos (nombre, numero_serie, tipo, webhook_secreto, actualizado_en)
-       VALUES ($1, $2, $3, $4, NOW())
-       RETURNING id, nombre, numero_serie, tipo, activo,
+      `INSERT INTO dispositivos_biometricos (nombre, alias, numero_serie, tipo, webhook_secreto, actualizado_en)
+       VALUES ($1, $2, $3, $4, $5, NOW())
+       RETURNING id, nombre, alias, numero_serie, tipo, activo,
                  (webhook_secreto IS NOT NULL AND webhook_secreto <> '') AS tiene_webhook_secreto,
                  creado_en, actualizado_en`,
-      [nombre, numero_serie ?? null, tipo, tipo === 'WEBHOOK' ? (webhook_secreto ?? null) : null],
+      [nombre, alias ?? null, numero_serie ?? null, tipo, tipo === 'WEBHOOK' ? (webhook_secreto ?? null) : null],
     );
     const row = res.rows[0];
 
