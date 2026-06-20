@@ -12,6 +12,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: 'Eventos Biométricos',  href: '/eventos',       roles: ['ADMINISTRADOR', 'SUPERVISOR'] },
   { label: 'Configuración Reloj',  href: '/relojes',       roles: ['ADMINISTRADOR'] },
   { label: 'Usuarios del Sistema', href: '/usuarios',      roles: ['ADMINISTRADOR'] },
+  { label: 'Accesos',             href: '/accesos',       roles: ['ADMINISTRADOR'] },
 ];
 
 export const ROUTE_ROLES: Record<string, string[]> = {
@@ -24,6 +25,7 @@ export const ROUTE_ROLES: Record<string, string[]> = {
   '/eventos':       ['ADMINISTRADOR', 'SUPERVISOR'],
   '/relojes':       ['ADMINISTRADOR'],
   '/usuarios':      ['ADMINISTRADOR'],
+  '/accesos':       ['ADMINISTRADOR'],
 };
 
 export const PUBLIC_ROUTES = ['/login', '/auth', '/api/auth/login', '/api/webhooks'];
