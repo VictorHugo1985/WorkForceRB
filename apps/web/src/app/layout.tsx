@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Workforce",
+  title: "Jornalero",
   description: "Marcaciones biométricas",
 };
 
