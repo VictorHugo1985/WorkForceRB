@@ -197,7 +197,7 @@ export default function ColaboradorPerfil({ perfil }: ColaboradorPerfilProps) {
     const tipo_pago = (values.tipo_pago as TipoPago) || null;
     const nuevoFijo = values.fijo ?? fijo;
     const codigos = localCodigos.map((c) => ({ id: c.id, workno: worknos[c.id] ?? c.workno }));
-    const nuevaTarifa = values.tarifa_hora ? Number(values.tarifa_hora) : null;
+    const nuevaTarifa = values.tarifa_hora !== '' && values.tarifa_hora != null ? Number(values.tarifa_hora) : null;
 
     try {
       // Main PATCH: personal data + supervisor + area + plantilla + tipo_pago + codigos

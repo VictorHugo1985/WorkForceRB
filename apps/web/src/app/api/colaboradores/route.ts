@@ -40,7 +40,7 @@ const ColaboradorSchema = z.object({
   telefono: z.string().max(30).nullable().optional(),
   fecha_nacimiento: z.string().nullable().optional(),
   supervisor_id: z.string().uuid().nullable().optional(),
-  tarifa_hora: z.number().positive().nullable().optional(),
+  tarifa_hora: z.number().min(0).nullable().optional(),
   fijo: z.boolean().optional().default(false),
   codigo_biometrico: CodigoBiometricoSchema.nullable().optional(),
 });
@@ -91,7 +91,7 @@ export async function POST(req: NextRequest) {
 
     const warnings: string[] = [];
 
-    if (!tarifa_hora) {
+    if (tarifa_hora == null) {
       warnings.push('Sin tarifa configurada: el colaborador no tendrá tarifa hasta que sea asignada desde su perfil.');
     }
 

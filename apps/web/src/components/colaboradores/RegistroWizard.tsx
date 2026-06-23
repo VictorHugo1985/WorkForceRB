@@ -34,7 +34,7 @@ export const WizardSchema = z.object({
   telefono: z.string().max(30).optional().or(z.literal('')),
   fecha_nacimiento: z.string().optional().or(z.literal('')),
   supervisor_id: z.string().uuid().nullable().optional(),
-  tarifa_hora: z.number().positive().nullable().optional(),
+  tarifa_hora: z.number().min(0).nullable().optional(),
   fijo: z.boolean(),
   codigo_biometrico: z
     .object({ dispositivo_id: z.string().uuid(), workno: z.string().min(1) })
