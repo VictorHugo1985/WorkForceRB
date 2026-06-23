@@ -85,7 +85,7 @@ export async function POST(req: NextRequest) {
       `INSERT INTO colaboradores (nombre, apellido, cedula, telefono, fecha_nacimiento, supervisor_id, tarifa_hora, fijo, actualizado_en)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now())
        RETURNING id`,
-      [nombre, apellido, cedula, telefono ?? null, fecha_nacimiento ?? null, supervisor_id ?? null, tarifa_hora ?? null, fijo ?? false],
+      [nombre, apellido, cedula, telefono || null, fecha_nacimiento || null, supervisor_id || null, tarifa_hora ?? null, fijo ?? false],
     );
     const colaboradorId = colRes.rows[0].id;
 
