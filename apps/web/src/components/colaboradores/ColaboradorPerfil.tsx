@@ -135,6 +135,8 @@ export default function ColaboradorPerfil({ perfil }: ColaboradorPerfilProps) {
   const [supervisores, setSupervisores] = useState<{ id: string; nombre: string; apellido: string }[]>([]);
   const [areas, setAreas] = useState<{ id: string; nombre: string }[]>([]);
   const [plantillasDisponibles, setPlantillasDisponibles] = useState<PlantillaHorario[]>([]);
+  const [dispositivos, setDispositivos] = useState<{ id: string; nombre: string; numero_serie: string }[]>([]);
+  const [newCodigo, setNewCodigo] = useState<{ dispositivo_id: string; workno: string } | null>(null);
   const [loadingEdit, setLoadingEdit] = useState(false);
 
   const [bajaDialogOpen, setBajaDialogOpen] = useState(false);
@@ -147,19 +149,22 @@ export default function ColaboradorPerfil({ perfil }: ColaboradorPerfilProps) {
   async function handleEditClick() {
     setLoadingEdit(true);
     try {
-      const [supRes, areasRes, plantRes] = await Promise.all([
+      const [supRes, areasRes, plantRes, dispRes] = await Promise.all([
         fetch('/api/usuarios/supervisores').then((r) => r.json()),
         fetch('/api/areas').then((r) => r.json()),
         fetch('/api/plantillas-horario').then((r) => r.json()),
+        fetch('/api/dispositivos').then((r) => r.json()),
       ]);
       setSupervisores(supRes.supervisores ?? []);
       setAreas(areasRes.areas ?? []);
       setPlantillasDisponibles(plantRes.plantillas ?? []);
+      setDispositivos(dispRes.dispositivos ?? []);
     } catch {
       showError('Error cargando datos del formulario.');
     } finally {
       setLoadingEdit(false);
     }
+    setNewCodigo(null);
     reset({
       nombre: data.nombre,
       apellido: data.apellido,
@@ -181,6 +186,7 @@ export default function ColaboradorPerfil({ perfil }: ColaboradorPerfilProps) {
   function handleCancelEdit() {
     setIsEditing(false);
     setEditError(null);
+    setNewCodigo(null);
   }
 
   async function onEditSubmit(values: EditFormValues) {
@@ -210,6 +216,7 @@ export default function ColaboradorPerfil({ perfil }: ColaboradorPerfilProps) {
           tipo_pago,
           fijo: nuevoFijo,
           codigos,
+          new_codigo: newCodigo?.dispositivo_id && newCodigo?.workno ? newCodigo : null,
         }),
       });
       const json = await res.json().catch(() => ({}));
@@ -254,7 +261,14 @@ export default function ColaboradorPerfil({ perfil }: ColaboradorPerfilProps) {
       setFijo(nuevoFijo);
       setTipoPago(tipo_pago);
       setPlantilla(plantObj);
-      setLocalCodigos((prev) => prev.map((c) => ({ ...c, workno: worknos[c.id] ?? c.workno })));
+      const updatedCodigos = (json as { codigos_biometricos?: CodigoBiometrico[] }).codigos_biometricos;
+      if (updatedCodigos) {
+        setLocalCodigos(updatedCodigos);
+        setWorknos(Object.fromEntries(updatedCodigos.map((c) => [c.id, c.workno])));
+      } else {
+        setLocalCodigos((prev) => prev.map((c) => ({ ...c, workno: worknos[c.id] ?? c.workno })));
+      }
+      setNewCodigo(null);
       setIsEditing(false);
       showSuccess('Datos actualizados correctamente.');
     } catch {
@@ -465,20 +479,46 @@ export default function ColaboradorPerfil({ perfil }: ColaboradorPerfilProps) {
             )}
           />
 
-          {localCodigos.length > 0 && (
-            <>
-              <SectionTitle>Códigos biométricos</SectionTitle>
-              {localCodigos.map((c) => (
+          <SectionTitle>Código biométrico</SectionTitle>
+          {localCodigos.length > 0 ? (
+            localCodigos.map((c) => (
+              <TextField
+                key={c.id}
+                label={`Workno — ${c.dispositivo.nombre}`}
+                size="small"
+                value={worknos[c.id] ?? ''}
+                onChange={(e) => setWorknos((prev) => ({ ...prev, [c.id]: e.target.value }))}
+                helperText={`S/N: ${c.dispositivo.numero_serie}`}
+              />
+            ))
+          ) : (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+              <FormControl size="small" fullWidth>
+                <InputLabel>Dispositivo</InputLabel>
+                <Select
+                  value={newCodigo?.dispositivo_id ?? ''}
+                  label="Dispositivo"
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setNewCodigo(val ? { dispositivo_id: val, workno: newCodigo?.workno ?? '' } : null);
+                  }}
+                >
+                  <MenuItem value=""><em>Sin asignar</em></MenuItem>
+                  {dispositivos.map((d) => (
+                    <MenuItem key={d.id} value={d.id}>{d.nombre} — S/N: {d.numero_serie}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              {newCodigo?.dispositivo_id && (
                 <TextField
-                  key={c.id}
-                  label={`Workno — ${c.dispositivo.nombre}`}
+                  label="Workno"
                   size="small"
-                  value={worknos[c.id] ?? ''}
-                  onChange={(e) => setWorknos((prev) => ({ ...prev, [c.id]: e.target.value }))}
-                  helperText={`S/N: ${c.dispositivo.numero_serie}`}
+                  value={newCodigo.workno}
+                  onChange={(e) => setNewCodigo((prev) => prev ? { ...prev, workno: e.target.value } : null)}
+                  helperText="Número de empleado en el dispositivo biométrico"
                 />
-              ))}
-            </>
+              )}
+            </Box>
           )}
 
           <Box sx={{ display: 'flex', gap: 1, pt: 1 }}>

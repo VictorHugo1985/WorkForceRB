@@ -144,6 +144,13 @@ export async function POST(req: NextRequest) {
       },
       { status: 201 },
     );
+  } catch (err: unknown) {
+    const e = err as { code?: string; message?: string };
+    if (e.code === '23505') {
+      return NextResponse.json({ error: 'DUPLICATE_CEDULA', message: 'Ya existe un colaborador con la cédula ingresada.' }, { status: 409 });
+    }
+    console.error('[colaboradores POST] unexpected error:', e);
+    return NextResponse.json({ error: 'INTERNAL_ERROR', message: 'Error interno del servidor.' }, { status: 500 });
   } finally {
     client.release();
   }

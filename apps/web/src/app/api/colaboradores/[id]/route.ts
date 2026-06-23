@@ -14,6 +14,7 @@ const EditSchema = z.object({
   tipo_pago: z.enum(['SEMANAL', 'QUINCENAL', 'MENSUAL']).nullable().optional(),
   fijo: z.boolean().optional(),
   codigos: z.array(z.object({ id: z.string().uuid(), workno: z.string().min(1) })).optional(),
+  new_codigo: z.object({ dispositivo_id: z.string().uuid(), workno: z.string().min(1) }).nullable().optional(),
 });
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -39,7 +40,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     return NextResponse.json({ error: 'VALIDATION_ERROR', fields }, { status: 400 });
   }
 
-  const { nombre, apellido, cedula, telefono, fecha_nacimiento, supervisor_id, area_id, plantilla_horario_id, tipo_pago, fijo, codigos } = parsed.data;
+  const { nombre, apellido, cedula, telefono, fecha_nacimiento, supervisor_id, area_id, plantilla_horario_id, tipo_pago, fijo, codigos, new_codigo } = parsed.data;
 
   const client = await pool.connect();
   try {
@@ -91,6 +92,25 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       }
     }
 
+    if (new_codigo) {
+      try {
+        await client.query(
+          `INSERT INTO codigos_colaborador (colaborador_id, dispositivo_id, codigo_biometrico)
+           VALUES ($1, $2, $3)`,
+          [id, new_codigo.dispositivo_id, new_codigo.workno],
+        );
+      } catch (err: unknown) {
+        const pg = err as { code?: string };
+        if (pg.code === '23505') {
+          return NextResponse.json(
+            { error: 'DUPLICATE_WORKNO', message: `El workno "${new_codigo.workno}" ya está asignado en este dispositivo.` },
+            { status: 409 },
+          );
+        }
+        throw err;
+      }
+    }
+
     try {
       const ip = req.headers.get('x-forwarded-for') ?? null;
       await client.query(
@@ -107,8 +127,24 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       );
     } catch { /* audit failure does not block response */ }
 
+    const codigosRes = await client.query(
+      `SELECT cc.id, cc.codigo_biometrico AS workno, cc.activo,
+              db.id AS dispositivo_id, db.nombre AS dispositivo_nombre, db.numero_serie
+       FROM codigos_colaborador cc
+       JOIN dispositivos_biometricos db ON db.id = cc.dispositivo_id
+       WHERE cc.colaborador_id = $1 AND cc.activo = true
+       ORDER BY cc.creado_en DESC`,
+      [id],
+    );
+
     return NextResponse.json({
       colaborador: { id, nombre, apellido, cedula, supervisor_id: supervisor_id ?? null, plantilla_horario_id: plantilla_horario_id ?? null },
+      codigos_biometricos: codigosRes.rows.map((r) => ({
+        id: r.id,
+        workno: r.workno,
+        activo: r.activo,
+        dispositivo: { id: r.dispositivo_id, nombre: r.dispositivo_nombre, numero_serie: r.numero_serie },
+      })),
     });
   } catch (err: unknown) {
     const e = err as { code?: string; message?: string };

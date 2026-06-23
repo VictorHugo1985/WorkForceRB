@@ -30,7 +30,12 @@ export default function Step2AreaSupervisor() {
         render={({ field }) => (
           <FormControl fullWidth>
             <InputLabel>Supervisor (opcional)</InputLabel>
-            <Select {...field} value={field.value ?? ''} label="Supervisor (opcional)">
+            <Select
+              {...field}
+              value={field.value ?? ''}
+              label="Supervisor (opcional)"
+              onChange={(e) => field.onChange(e.target.value || null)}
+            >
               <MenuItem value=""><em>Sin supervisor</em></MenuItem>
               {supervisores.map((s) => (
                 <MenuItem key={s.id} value={s.id}>{s.nombre} {s.apellido}</MenuItem>
