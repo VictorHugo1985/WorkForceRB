@@ -14,6 +14,7 @@ import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import BusinessIcon from '@mui/icons-material/Business';
 import PersonOffIcon from '@mui/icons-material/PersonOff';
 import SearchIcon from '@mui/icons-material/Search';
 import type { DispositivoOption } from './page';
@@ -78,6 +79,12 @@ function presenceColor(pct: number): 'success' | 'warning' | 'error' {
   if (pct >= 0.8) return 'success';
   if (pct >= 0.4) return 'warning';
   return 'error';
+}
+
+/** En oficina: marcó hoy y la última marcación es una entrada (cantidad impar de marcaciones). */
+function estaEnOficina(c: ColaboradorData, hoy: string): boolean {
+  const dia = c.dias.find((d) => d.fecha === hoy);
+  return !!dia && dia.marcaciones.length % 2 === 1;
 }
 
 const MUI_COLOR: Record<'success' | 'warning' | 'error', string> = {
@@ -176,17 +183,22 @@ function AreaCard({
   isMultiDay,
   totalDias,
   showAbsent,
+  totalArea,
+  enOficina = false,
 }: {
   area: AreaData;
   isMultiDay: boolean;
   totalDias: number;
   showAbsent: boolean;
+  /** Total de colaboradores del área cuando `area` viene filtrada. */
+  totalArea?: number;
+  enOficina?: boolean;
 }) {
   const [expanded, setExpanded] = useState(true);
 
   const presentes = area.colaboradores.filter((c) => c.dias.length > 0);
   const ausentes  = area.colaboradores.filter((c) => c.dias.length === 0);
-  const total     = area.colaboradores.length;
+  const total     = totalArea ?? area.colaboradores.length;
   const pct       = total > 0 ? presentes.length / total : 0;
   const color     = presenceColor(pct);
 
@@ -233,7 +245,7 @@ function AreaCard({
           sx={{ height: 6, borderRadius: 3 }}
         />
         <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.25 }}>
-          {Math.round(pct * 100)}% de asistencia
+          {Math.round(pct * 100)}% {enOficina ? 'en oficina' : 'de asistencia'}
         </Typography>
       </Box>
 
@@ -277,6 +289,7 @@ export function DashboardClient({ dispositivos }: Props) {
   const [colaborador, setColaborador] = useState('');
   const [dispositivoSerial, setDispositivoSerial] = useState<string | null>(null);
   const [showAbsent, setShowAbsent]   = useState(true);
+  const [enOficina, setEnOficina]     = useState(false);
 
   const [filter, setFilter] = useState({
     fechaDesde: today,
@@ -348,6 +361,21 @@ export function DashboardClient({ dispositivos }: Props) {
   const isMultiDay = filter.fechaDesde !== filter.fechaHasta;
   const totalDias  = isMultiDay ? diasEnRango(filter.fechaDesde, filter.fechaHasta) : 1;
 
+  // "En oficina" solo aplica a hoy: marcaron hoy y todavía no marcaron salida.
+  const filtroOficina = enOficina && quick === 'hoy';
+  const hoyData = data?.fechaHasta ?? today;
+  const areasVista = !data
+    ? []
+    : filtroOficina
+      ? data.areas
+          .map((a) => ({
+            area: { ...a, colaboradores: a.colaboradores.filter((c) => estaEnOficina(c, hoyData)) },
+            totalArea: a.colaboradores.length,
+          }))
+          .filter((x) => x.area.colaboradores.length > 0)
+      : data.areas.map((a) => ({ area: a, totalArea: undefined as number | undefined }));
+  const totalEnOficina = filtroOficina ? areasVista.reduce((s, x) => s + x.area.colaboradores.length, 0) : 0;
+
   return (
     <Box>
       <LinearProgress
@@ -363,7 +391,7 @@ export function DashboardClient({ dispositivos }: Props) {
             <Chip
               key={q}
               label={q === 'hoy' ? 'Hoy' : q === 'ayer' ? 'Ayer' : 'Esta semana'}
-              onClick={() => setQuick(q)}
+              onClick={() => { setQuick(q); if (q !== 'hoy') setEnOficina(false); }}
               color={quick === q ? 'primary' : 'default'}
               variant={quick === q ? 'filled' : 'outlined'}
               size="small"
@@ -413,6 +441,23 @@ export function DashboardClient({ dispositivos }: Props) {
             }}
           />
 
+          {/* En oficina: marcaron hoy y aún no marcaron salida */}
+          <Tooltip title="Personal con marcaciones de hoy que todavía no marcó salida">
+            <Chip
+              label={filtroOficina && data ? `En oficina (${totalEnOficina})` : 'En oficina'}
+              onClick={() => {
+                const v = !enOficina;
+                setEnOficina(v);
+                if (v && quick !== 'hoy') setQuick('hoy');
+              }}
+              color={filtroOficina ? 'primary' : 'default'}
+              variant={filtroOficina ? 'filled' : 'outlined'}
+              size="small"
+              icon={<BusinessIcon sx={{ fontSize: '14px !important' }} />}
+              sx={{ cursor: 'pointer', ml: 'auto' }}
+            />
+          </Tooltip>
+
           {/* Absent toggle */}
           <Chip
             label={showAbsent ? 'Ocultar ausentes' : 'Mostrar ausentes'}
@@ -420,7 +465,8 @@ export function DashboardClient({ dispositivos }: Props) {
             variant={showAbsent ? 'outlined' : 'filled'}
             size="small"
             icon={<PersonOffIcon sx={{ fontSize: '14px !important' }} />}
-            sx={{ cursor: 'pointer', ml: 'auto' }}
+            disabled={filtroOficina}
+            sx={{ cursor: 'pointer' }}
           />
         </Box>
       </Paper>
@@ -435,19 +481,21 @@ export function DashboardClient({ dispositivos }: Props) {
       )}
 
       {!loading && !error && data && (
-        data.areas.length === 0 ? (
+        areasVista.length === 0 ? (
           <Typography color="text.secondary" sx={{ py: 4, textAlign: 'center' }}>
-            No hay datos para el período seleccionado.
+            {filtroOficina ? 'No hay personal en oficina en este momento.' : 'No hay datos para el período seleccionado.'}
           </Typography>
         ) : (
           <Box sx={{ columns: '380px', columnGap: '12px' }}>
-            {data.areas.map((area) => (
+            {areasVista.map(({ area, totalArea }) => (
               <Box key={area.areaId ?? area.areaNombre} sx={{ breakInside: 'avoid', mb: 1.5, display: 'block' }}>
                 <AreaCard
                   area={area}
                   isMultiDay={isMultiDay}
                   totalDias={totalDias}
-                  showAbsent={showAbsent}
+                  showAbsent={showAbsent && !filtroOficina}
+                  totalArea={totalArea}
+                  enOficina={filtroOficina}
                 />
               </Box>
             ))}
