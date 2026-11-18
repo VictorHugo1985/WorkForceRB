@@ -159,14 +159,24 @@ por defecto → sus marcajes biométricos anteriores siguen visibles en la vista
 
 ---
 
+## Clarifications
+
+### Session 2026-05-26
+
+- Q: ¿Cuál es la estrategia para combinar búsqueda en tiempo real y paginación? → A: Cargar todos los colaboradores (~500 máx.) al inicio y filtrar client-side, sin paginación.
+- Q: ¿Cómo se presenta el formulario de edición al hacer clic en "Editar"? → A: Inline en la misma página (toggle vista ↔ edición), sin navegación extra.
+- Q: ¿Cómo se solicita la confirmación al dar de baja a un colaborador? → A: Dialog modal con botones "Confirmar" y "Cancelar" (patrón MUI `<Dialog>`).
+
+---
+
 ## Requirements *(mandatory)*
 
 ### Functional Requirements
 
 **Vista de lista / búsqueda:**
 
-- **FR-001**: El sistema DEBE mostrar una lista paginada de colaboradores accesible desde el sidebar, mostrando nombre completo, cédula, área y estado (activo/inactivo).
-- **FR-002**: La lista DEBE filtrar por nombre, apellido o cédula en tiempo real (sin botón "buscar" explícito) a medida que el usuario escribe.
+- **FR-001**: El sistema DEBE mostrar la lista completa de colaboradores (máx. 500) cargada de una sola vez al entrar a la sección, sin paginación. Mostrar: nombre completo, cédula, área y estado (activo/inactivo).
+- **FR-002**: El filtrado por nombre, apellido o cédula DEBE ser client-side en tiempo real sobre la lista ya cargada, sin llamadas adicionales al servidor a medida que el usuario escribe.
 - **FR-003**: Por defecto la lista DEBE mostrar solo colaboradores activos. Un control "Mostrar inactivos" DEBE permitir incluirlos en la vista.
 - **FR-004**: La lista DEBE incluir un botón "Nuevo colaborador" que navega al wizard de registro.
 - **FR-005**: Cada fila de la lista DEBE permitir navegar al perfil del colaborador.
@@ -178,14 +188,14 @@ por defecto → sus marcajes biométricos anteriores siguen visibles en la vista
 
 **Edición:**
 
-- **FR-008**: Desde el perfil de un colaborador, DEBE existir un botón "Editar" accesible solo para ADMINISTRADOR.
-- **FR-009**: El formulario de edición DEBE permitir modificar: nombre, apellido, cédula, área de trabajo y supervisor.
+- **FR-008**: Desde el perfil de un colaborador, DEBE existir un botón "Editar" accesible solo para ADMINISTRADOR. Al hacer clic, los campos editables (nombre, apellido, cédula, área, supervisor) se vuelven editables inline en la misma página sin navegación. Un botón "Cancelar" restaura la vista original.
+- **FR-009**: El formulario de edición inline DEBE permitir modificar: nombre, apellido, cédula, área de trabajo y supervisor.
 - **FR-010**: El sistema DEBE validar unicidad de cédula al editar, excluyendo al colaborador actual.
 - **FR-011**: Los campos tarifa, horario y código biométrico NO son editables desde este formulario.
 
 **Baja:**
 
-- **FR-012**: Desde el perfil, DEBE existir un botón "Dar de baja" para colaboradores activos, con una confirmación explícita antes de ejecutar la acción.
+- **FR-012**: Desde el perfil, DEBE existir un botón "Dar de baja" para colaboradores activos. Al hacer clic se abre un Dialog modal con mensaje de confirmación y botones "Confirmar" y "Cancelar". Solo al confirmar se ejecuta la baja.
 - **FR-013**: La baja DEBE ser un cambio de estado lógico (activo → inactivo), sin eliminar datos del colaborador ni su historial.
 - **FR-014**: DEBE existir la posibilidad de reactivar un colaborador inactivo desde su perfil.
 - **FR-015**: Un colaborador inactivo DEBE dejar de resolver nuevos eventos biométricos.

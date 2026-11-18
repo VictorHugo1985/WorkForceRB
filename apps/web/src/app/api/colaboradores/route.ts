@@ -2,6 +2,32 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { pool, checkAdminRole } from '@/lib/auth-server';
 
+export async function GET(req: NextRequest) {
+  const auth = await checkAdminRole(req);
+  if (auth instanceof NextResponse) return auth;
+
+  const client = await pool.connect();
+  try {
+    const result = await client.query(
+      `SELECT c.id, c.nombre, c.apellido, c.cedula, c.activo, c.fijo, c.tarifa_hora
+       FROM colaboradores c
+       ORDER BY c.apellido, c.nombre`,
+    );
+    const colaboradores = result.rows.map((r) => ({
+      id: r.id,
+      nombre: r.nombre,
+      apellido: r.apellido,
+      cedula: r.cedula,
+      activo: r.activo,
+      fijo: r.fijo,
+      tarifa_hora: r.tarifa_hora !== null ? Number(r.tarifa_hora) : null,
+    }));
+    return NextResponse.json({ colaboradores });
+  } finally {
+    client.release();
+  }
+}
+
 const CodigoBiometricoSchema = z.object({
   dispositivo_id: z.string().uuid(),
   workno: z.string().min(1),
@@ -11,10 +37,11 @@ const ColaboradorSchema = z.object({
   nombre: z.string().min(1).max(100),
   apellido: z.string().min(1).max(100),
   cedula: z.string().min(1),
-  area_id: z.string().uuid(),
+  telefono: z.string().max(30).nullable().optional(),
+  fecha_nacimiento: z.string().nullable().optional(),
   supervisor_id: z.string().uuid().nullable().optional(),
-  tarifa_hora: z.number().positive().nullable().optional(),
-  umbral_horas_extra: z.number().positive().nullable().optional(),
+  tarifa_hora: z.number().min(0).nullable().optional(),
+  fijo: z.boolean().optional().default(false),
   codigo_biometrico: CodigoBiometricoSchema.nullable().optional(),
 });
 
@@ -39,11 +66,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'VALIDATION_ERROR', fields }, { status: 400 });
   }
 
-  const { nombre, apellido, cedula, area_id, supervisor_id, tarifa_hora, umbral_horas_extra, codigo_biometrico } = parsed.data;
+  const { nombre, apellido, cedula, telefono, fecha_nacimiento, supervisor_id, tarifa_hora, fijo, codigo_biometrico } = parsed.data;
 
   const client = await pool.connect();
   try {
-    // US2: check cédula duplicada
     const dupCheck = await client.query(
       `SELECT id FROM colaboradores WHERE cedula = $1 LIMIT 1`,
       [cedula],
@@ -55,50 +81,20 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Insert colaborador (actualizado_en has no DB default — Prisma sets it at app layer)
     const colRes = await client.query<{ id: string }>(
-      `INSERT INTO colaboradores (nombre, apellido, cedula, area_id, supervisor_id, actualizado_en)
-       VALUES ($1, $2, $3, $4, $5, now())
+      `INSERT INTO colaboradores (nombre, apellido, cedula, telefono, fecha_nacimiento, supervisor_id, tarifa_hora, fijo, actualizado_en)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now())
        RETURNING id`,
-      [nombre, apellido, cedula, area_id, supervisor_id ?? null],
+      [nombre, apellido, cedula, telefono || null, fecha_nacimiento || null, supervisor_id || null, tarifa_hora ?? null, fijo ?? false],
     );
     const colaboradorId = colRes.rows[0].id;
 
     const warnings: string[] = [];
-    const configuracionesCreadas: string[] = [];
-    const today = new Date().toISOString().slice(0, 10);
 
-    // Best-effort: tarifa horaria
-    if (tarifa_hora) {
-      try {
-        await client.query(
-          `INSERT INTO configuraciones_reglas (tipo, clave, valor, unidad, aplica_a, colaborador_id, vigente_desde, creado_por)
-           VALUES ('TARIFA_HORA', 'Tarifa hora ordinaria', $1, 'COP', 'COLABORADOR', $2, $3, $4)`,
-          [tarifa_hora, colaboradorId, today, userId],
-        );
-        configuracionesCreadas.push('TARIFA_HORA');
-      } catch (err: any) {
-        warnings.push(`Tarifa no configurada: ${err.message}`);
-      }
-    } else {
-      warnings.push('Sin tarifa configurada: se usará la tarifa global vigente al momento de liquidar.');
+    if (tarifa_hora == null) {
+      warnings.push('Sin tarifa configurada: el colaborador no tendrá tarifa hasta que sea asignada desde su perfil.');
     }
 
-    // Best-effort: umbral horas extra
-    if (umbral_horas_extra) {
-      try {
-        await client.query(
-          `INSERT INTO configuraciones_reglas (tipo, clave, valor, unidad, aplica_a, colaborador_id, vigente_desde, creado_por)
-           VALUES ('UMBRAL_HORA_EXTRA', 'Umbral horas extra diarias', $1, 'horas', 'COLABORADOR', $2, $3, $4)`,
-          [umbral_horas_extra, colaboradorId, today, userId],
-        );
-        configuracionesCreadas.push('UMBRAL_HORA_EXTRA');
-      } catch (err: any) {
-        warnings.push(`Horario no configurado: ${err.message}`);
-      }
-    }
-
-    // Best-effort: código biométrico
     let codigoBiometricoCreado = false;
     if (codigo_biometrico) {
       try {
@@ -117,7 +113,6 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Best-effort: audit log
     try {
       const ip = req.headers.get('x-forwarded-for') ?? null;
       await client.query(
@@ -128,25 +123,34 @@ export async function POST(req: NextRequest) {
           userId,
           `Registro de nuevo colaborador: ${nombre} ${apellido}`,
           ip,
-          JSON.stringify({ nombre, apellido, cedula, area_id, supervisor_id, tarifa_hora, umbral_horas_extra, codigo_biometrico }),
+          JSON.stringify({ nombre, apellido, cedula, supervisor_id, tarifa_hora, fijo, codigo_biometrico }),
         ],
       );
     } catch { /* audit failure does not block response */ }
 
     const colaboradorRow = await client.query(
-      `SELECT id, nombre, apellido, cedula, area_id, supervisor_id, activo, creado_en FROM colaboradores WHERE id = $1`,
+      `SELECT id, nombre, apellido, cedula, supervisor_id, tarifa_hora, activo, creado_en FROM colaboradores WHERE id = $1`,
       [colaboradorId],
     );
 
     return NextResponse.json(
       {
-        colaborador: colaboradorRow.rows[0],
-        configuraciones_creadas: configuracionesCreadas,
+        colaborador: {
+          ...colaboradorRow.rows[0],
+          tarifa_hora: colaboradorRow.rows[0].tarifa_hora !== null ? Number(colaboradorRow.rows[0].tarifa_hora) : null,
+        },
         codigo_biometrico_creado: codigoBiometricoCreado,
         warnings,
       },
       { status: 201 },
     );
+  } catch (err: unknown) {
+    const e = err as { code?: string; message?: string };
+    if (e.code === '23505') {
+      return NextResponse.json({ error: 'DUPLICATE_CEDULA', message: 'Ya existe un colaborador con la cédula ingresada.' }, { status: 409 });
+    }
+    console.error('[colaboradores POST] unexpected error:', e);
+    return NextResponse.json({ error: 'INTERNAL_ERROR', message: 'Error interno del servidor.' }, { status: 500 });
   } finally {
     client.release();
   }

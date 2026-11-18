@@ -30,12 +30,11 @@ interface Dispositivo {
 
 interface Evento {
   id: string;
-  checktime: string;
+  checktime_local: string;
   tipo_evento: 'ENTRADA' | 'SALIDA' | 'DESCONOCIDO';
   device_name: string;
   employee_workno: string;
   display_nombre: string;
-  display_identificador: string;
   estado_resolucion: 'RESUELTO' | 'SIN_RESOLVER' | 'DISPOSITIVO_DESCONOCIDO';
 }
 
@@ -88,6 +87,7 @@ function todayGMTMinus4(): string {
 }
 
 function formatChecktime(iso: string): string {
+  // checktime_local is already in Bolivia local time (UTC-4 applied server-side)
   const d = new Date(iso);
   const pad = (n: number) => String(n).padStart(2, '0');
   return `${pad(d.getUTCDate())}/${pad(d.getUTCMonth() + 1)}/${d.getUTCFullYear()} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`;
@@ -284,7 +284,7 @@ export function EventosClient({ dispositivos }: { dispositivos: Dispositivo[] })
                 <TableRow>
                   <TableCell>Fecha y Hora</TableCell>
                   <TableCell>Colaborador</TableCell>
-                  <TableCell>ID / Cédula</TableCell>
+                  <TableCell>Workno</TableCell>
                   <TableCell>Tipo</TableCell>
                   <TableCell>Dispositivo</TableCell>
                   <TableCell>Estado</TableCell>
@@ -294,7 +294,7 @@ export function EventosClient({ dispositivos }: { dispositivos: Dispositivo[] })
                 {result.eventos.map((ev) => (
                   <TableRow key={ev.id} hover>
                     <TableCell sx={{ whiteSpace: 'nowrap' }}>
-                      {formatChecktime(ev.checktime)}
+                      {formatChecktime(ev.checktime_local)}
                     </TableCell>
                     <TableCell
                       sx={
@@ -305,7 +305,7 @@ export function EventosClient({ dispositivos }: { dispositivos: Dispositivo[] })
                     >
                       {ev.display_nombre || ev.employee_workno}
                     </TableCell>
-                    <TableCell>{ev.display_identificador}</TableCell>
+                    <TableCell>{ev.employee_workno}</TableCell>
                     <TableCell>
                       <Chip
                         label={TIPO_LABELS[ev.tipo_evento] ?? ev.tipo_evento}

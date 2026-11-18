@@ -22,12 +22,14 @@ export default async function EventosPage() {
   const token = cookieStore.get('access_token')?.value;
   if (!token) redirect('/login?reason=expired');
 
+  let payload: Awaited<ReturnType<typeof verifyToken>>;
   try {
-    const payload = await verifyToken(token);
-    if (isBlacklisted(payload.jti)) redirect('/login?reason=expired');
+    payload = await verifyToken(token!);
   } catch {
     redirect('/login?reason=expired');
   }
+
+  if (isBlacklisted(payload!.jti)) redirect('/login?reason=expired');
 
   const dispositivos = await getDispositivos();
 

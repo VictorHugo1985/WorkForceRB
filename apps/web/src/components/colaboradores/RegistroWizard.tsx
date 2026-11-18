@@ -16,15 +16,13 @@ import CircularProgress from '@mui/material/CircularProgress';
 import Step1DatosPersonales from './steps/Step1DatosPersonales';
 import Step2AreaSupervisor from './steps/Step2AreaSupervisor';
 import Step3Tarifa from './steps/Step3Tarifa';
-import Step4Horario from './steps/Step4Horario';
 import Step5CodigoBiometrico from './steps/Step5CodigoBiometrico';
 import Step6Confirmacion from './steps/Step6Confirmacion';
 
 const STEPS = [
   'Datos personales',
-  'Área y supervisor',
+  'Supervisor',
   'Tarifa salarial',
-  'Horario laboral',
   'Código biométrico',
   'Confirmación',
 ];
@@ -33,10 +31,11 @@ export const WizardSchema = z.object({
   nombre: z.string().min(1, 'Requerido').max(100),
   apellido: z.string().min(1, 'Requerido').max(100),
   cedula: z.string().min(1, 'Requerido'),
-  area_id: z.string().uuid('Seleccione un área'),
+  telefono: z.string().max(30).optional().or(z.literal('')),
+  fecha_nacimiento: z.string().optional().or(z.literal('')),
   supervisor_id: z.string().uuid().nullable().optional(),
-  tarifa_hora: z.number().positive().nullable().optional(),
-  umbral_horas_extra: z.number().positive().nullable().optional(),
+  tarifa_hora: z.number().min(0).nullable().optional(),
+  fijo: z.boolean(),
   codigo_biometrico: z
     .object({ dispositivo_id: z.string().uuid(), workno: z.string().min(1) })
     .nullable()
@@ -47,7 +46,6 @@ export type WizardFormValues = z.infer<typeof WizardSchema>;
 
 const stepSchemas = [
   WizardSchema.pick({ nombre: true, apellido: true, cedula: true }),
-  WizardSchema.pick({ area_id: true }),
   z.object({}),
   z.object({}),
   z.object({}),
@@ -58,7 +56,6 @@ const stepComponents = [
   Step1DatosPersonales,
   Step2AreaSupervisor,
   Step3Tarifa,
-  Step4Horario,
   Step5CodigoBiometrico,
   Step6Confirmacion,
 ];
@@ -77,10 +74,9 @@ export default function RegistroWizard() {
       nombre: '',
       apellido: '',
       cedula: '',
-      area_id: '',
       supervisor_id: null,
       tarifa_hora: null,
-      umbral_horas_extra: null,
+      fijo: false,
       codigo_biometrico: null,
     },
   });
@@ -122,11 +118,8 @@ export default function RegistroWizard() {
         return;
       }
 
-      if (json.warnings?.length) {
-        setWarnings(json.warnings);
-      } else {
-        router.push(`/colaboradores/${json.colaborador.id}`);
-      }
+      setWarnings(json.warnings ?? []);
+      router.push(`/colaboradores/${json.colaborador.id}`);
     } catch {
       setGlobalError('Error de red. Intente nuevamente.');
     } finally {

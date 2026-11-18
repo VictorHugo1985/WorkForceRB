@@ -10,6 +10,84 @@
 
 ---
 
+## GET /liquidaciones/resumen
+
+**Descripción**: Obtener resumen de todas las liquidaciones de la semana especificada (o semana activa si no se indica), con estado y total por colaborador. Usada por la página lista de `/liquidaciones`.
+
+### Request
+
+```http
+GET /liquidaciones/resumen?semana_id=<uuid>
+Cookie: access_token=<JWT>
+```
+
+| Parámetro | Tipo | Requerido | Descripción |
+|-----------|------|-----------|-------------|
+| `semana_id` | `UUID` (query) | No | Si se omite, usa la semana laboral activa (`estado = ABIERTA`) |
+
+### Responses
+
+**200 OK**
+
+```json
+{
+  "semana": {
+    "id": "550e8400-...-003",
+    "fechaInicio": "2026-05-23",
+    "fechaFin": "2026-05-29",
+    "estado": "ABIERTA"
+  },
+  "liquidaciones": [
+    {
+      "colaboradorId": "550e8400-...-002",
+      "nombre": "Juan",
+      "apellido": "Pérez",
+      "area": "Producción",
+      "estado": "BORRADOR",
+      "totalPago": 545.00
+    },
+    {
+      "colaboradorId": "550e8400-...-005",
+      "nombre": "María",
+      "apellido": "González",
+      "area": "Logística",
+      "estado": "SIN_LIQUIDACION",
+      "totalPago": null
+    }
+  ]
+}
+```
+
+**Notas**: El SUPERVISOR solo ve colaboradores asignados a su cargo. El ADMINISTRADOR ve todos. `estado` puede ser `BORRADOR`, `APROBADO`, o `SIN_LIQUIDACION` (sin marcajes esa semana).
+
+---
+
+## GET /semanas-laborales
+
+**Descripción**: Listar semanas laborales disponibles para el selector de semana en el frontend.
+
+### Request
+
+```http
+GET /semanas-laborales
+Cookie: access_token=<JWT>
+```
+
+### Responses
+
+**200 OK**
+
+```json
+{
+  "semanas": [
+    { "id": "...", "fechaInicio": "2026-05-23", "fechaFin": "2026-05-29", "estado": "ABIERTA" },
+    { "id": "...", "fechaInicio": "2026-05-16", "fechaFin": "2026-05-22", "estado": "CERRADA" }
+  ]
+}
+```
+
+---
+
 ## GET /liquidaciones
 
 **Descripción**: Obtener liquidación semanal de un colaborador para una semana específica, incluyendo todos los `DiaLiquidacion` del período y los bonos asignados.
@@ -78,7 +156,7 @@ Cookie: access_token=<JWT>
       "fechaDia": "2026-05-18",
       "tipo": "TRANSPORTE",
       "monto": 20.00,
-      "justificacion": null
+      "comentario": "Viaje de ida y vuelta zona industrial"
     }
   ]
 }
@@ -152,7 +230,7 @@ Cookie: access_token=<JWT>
     "horasCalculadas": 7.0,
     "horasAjustadasSupervisor": 7.0,
     "atrasoDetectado": true,
-    "estadoDia": "CON_DESCUENTO",
+    "estadoDia": "CON_AJUSTE_Y_DESCUENTO",
     "motivoAjuste": "Atraso de 60 minutos, se descuenta 1 hora",
     "descuentoTipo": "MONTO_FIJO",
     "descuentoValor": 50.00,
@@ -212,7 +290,7 @@ Cookie: access_token=<JWT>
   "fechaDia": "2026-05-18",
   "tipo": "TRANSPORTE",
   "monto": 20.00,
-  "justificacion": null
+  "comentario": "Viaje de ida y vuelta zona industrial"
 }
 ```
 
@@ -223,7 +301,7 @@ Cookie: access_token=<JWT>
 | `fechaDia` | `string (DATE)` | Sí | `YYYY-MM-DD`; dentro del período de `semanaId` |
 | `tipo` | `"TRANSPORTE" \| "ALIMENTACION" \| "GENERICO"` | Sí | — |
 | `monto` | `number` | Sí | > 0 |
-| `justificacion` | `string \| null` | Condicional | Requerido si `tipo = GENERICO`; maxLength 500 |
+| `comentario` | `string` | **Sí** | Requerido para **todos** los tipos; maxLength 500 |
 
 ### Responses
 
@@ -238,7 +316,7 @@ Cookie: access_token=<JWT>
     "fechaDia": "2026-05-18",
     "tipo": "TRANSPORTE",
     "monto": 20.00,
-    "justificacion": null,
+    "comentario": "Viaje de ida y vuelta zona industrial",
     "creadoEn": "2026-05-25T10:35:00Z"
   },
   "totales": {
@@ -287,14 +365,14 @@ Cookie: access_token=<JWT>
 ```json
 {
   "monto": 25.00,
-  "justificacion": "Ajuste por distancia recorrida"
+  "comentario": "Ajuste por distancia recorrida"
 }
 ```
 
 | Campo | Tipo | Requerido | Validación |
 |-------|------|-----------|------------|
 | `monto` | `number` | No | > 0 |
-| `justificacion` | `string \| null` | No | maxLength 500 |
+| `comentario` | `string` | No | maxLength 500; si se envía, no puede ser vacío |
 
 ### Responses
 
@@ -302,7 +380,7 @@ Cookie: access_token=<JWT>
 
 ```json
 {
-  "bono": { "id": "...", "monto": 25.00, "justificacion": "Ajuste por distancia recorrida" },
+  "bono": { "id": "...", "monto": 25.00, "comentario": "Ajuste por distancia recorrida" },
   "totales": { "totalBonos": 65.00, "totalPago": 555.00, "calculadoEn": "..." }
 }
 ```

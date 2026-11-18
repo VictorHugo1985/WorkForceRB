@@ -1,118 +1,97 @@
 # Tasks: Gestión de Liquidación Semanal
 
-**Feature**: 006-weekly-payroll | **Date**: 2026-05-25 | **Spec**: [spec.md](spec.md) | **Plan**: [plan.md](plan.md)
+**Feature**: 006-weekly-payroll | **Date**: 2026-05-28
+**Spec**: [spec.md](spec.md) | **Plan**: [plan.md](plan.md)
 
-**Input**: Design documents from `specs/006-weekly-payroll/`
+**Prerequisites**: spec 003 v2.0 migrations applied; spec 005 auth module active (`JwtAuthGuard` available in `apps/api/src/auth/`)
 
-**Prerequisites**: plan.md ✅ | spec.md ✅ | research.md ✅ | data-model.md ✅ | contracts/api.md ✅
+**No tests requested** — implementation only (TDD not specified in spec).
 
 ## Format: `[ID] [P?] [Story] Description`
 
-- **[P]**: Can run in parallel (different files, no dependencies on incomplete tasks)
-- **[Story]**: User story label — [US1], [US2], [US3]
-- Exact file paths included in each task description
+- **[P]**: Can run in parallel with other [P] tasks in same phase
+- **[Story]**: User story label (US1, US2, US3)
 
 ---
 
-## Phase 1: Setup (Shared Infrastructure)
+## Phase 1: Setup
 
-**Purpose**: Scaffold the `LiquidacionesModule` skeleton and register it so all subsequent phases compile.
+**Purpose**: Database migrations, module skeleton, install missing dependency
 
-- [ ] T001 Create `LiquidacionesModule` skeleton (empty providers/exports) in `apps/api/src/liquidaciones/liquidaciones.module.ts`; import `PrismaModule` and `PassportModule`
-- [ ] T002 [P] Create barrel files for subdirectories: `apps/api/src/liquidaciones/dto/index.ts`, `apps/api/src/liquidaciones/services/index.ts`
-- [ ] T003 Register `LiquidacionesModule` in `apps/api/src/app.module.ts` imports array
-- [ ] T004 [P] Create Zustand store skeleton with empty state shape in `apps/web/src/stores/liquidacion.store.ts` (import `create` from `zustand`; export `useLiquidacionStore`)
-
-**Checkpoint**: `npm run build` in `apps/api` passes — LiquidacionesModule compiles. No runtime errors on startup.
+- [X] T001 Apply 2 DB migrations via Prisma to `apps/api`: (1) add `CON_AJUSTE_Y_DESCUENTO` to `EstadoDia` enum in `dias_liquidacion`; (2) rename `bonos.justificacion` → `bonos.comentario` and set NOT NULL for all rows. Create migration files under `apps/api/prisma/migrations/`.
+- [X] T002 Install `zustand` in `apps/web` (`pnpm add zustand` from workspace root or `apps/web`), then create the NestJS `LiquidacionesModule` directory with empty stub files: `apps/api/src/liquidaciones/liquidaciones.module.ts`, `liquidaciones.controller.ts`, `liquidaciones.service.ts`, `dto/` folder, `services/` folder. Register `LiquidacionesModule` in `apps/api/src/app.module.ts`.
 
 ---
 
 ## Phase 2: Foundational (Blocking Prerequisites)
 
-**Purpose**: Core calculation engine, base service guards, and state management — MUST be complete before any user story can function end-to-end.
+**Purpose**: Core services, calculator, and navigation shell — required by all user stories
 
-**⚠️ CRITICAL**: No user story endpoint can be correctly tested until this phase is complete.
+**⚠️ CRITICAL**: No user story work can begin until this phase is complete
 
-- [ ] T005 Implement `LiquidacionCalculatorService.resolveTarifaEfectiva(colaboradorId, fechaDia, descuentoDia)` in `apps/api/src/liquidaciones/services/liquidacion-calculator.service.ts`: query `configuraciones_reglas` for `TARIFA_HORA` with `aplica_a = COLABORADOR` and `colaborador_id = colaboradorId` vigente in `fechaDia`; fallback to `aplica_a = GLOBAL`; if `descuentoDia.descuento_tipo = TARIFA_DIA` return `descuentoDia.descuento_valor` (overrides); returns `Decimal`
-- [ ] T006 Implement `LiquidacionCalculatorService.deriveEstadoDia(dia)` in same file: returns `CON_DESCUENTO` if `descuento_tipo IS NOT NULL`; else `CON_AJUSTE_HORAS` if `horas_ajustadas_supervisor IS NOT NULL`; else `APROBADO` if explicitly flagged; else `SIN_REVISION` (per Decision 3 in research.md)
-- [ ] T007 Implement `LiquidacionCalculatorService.calcularTotales(liquidacionId)` in same file: (a) load all `dias_liquidacion` for the liquidacion; (b) for each day apply FR-008 formula using `resolveTarifaEfectiva`; (c) load `bonos` for collaborator × semana; (d) compute `horas_ordinarias`, `horas_extra`, `valor_horas_ordinarias`, `valor_horas_extra`, `total_bonos`, `total_descuentos`, `total_pago`; (e) `prisma.liquidaciones_semanales.update({...totals, configuracion_reglas_ids: [...ids], calculado_en: new Date()})`; returns updated totals object
-- [ ] T008 Implement `LiquidacionesService.assertEditable(liquidacionId)` in `apps/api/src/liquidaciones/liquidaciones.service.ts`: query `liquidaciones_semanales.estado`; throw `HttpException(409, "La liquidación ya fue aprobada y no puede modificarse")` if `APROBADO`
-- [ ] T009 Implement `LiquidacionesService.assertScope(usuarioId, roles, colaboradorId)` in same file: if roles includes `ADMINISTRADOR` → pass; else query `colaboradores.supervisor_id`; if `supervisor_id !== usuarioId` → throw `ForbiddenException`
-- [ ] T010 Implement `LiquidacionesService.findOrCreateBorrador(colaboradorId, semanaId)` in same file: `prisma.liquidaciones_semanales.upsert({ where: { colaborador_id_semana_id: ... }, create: { estado: BORRADOR, ...zeros }, update: {} })`; returns the liquidacion record
-- [ ] T011 [P] Implement `AuditLiquidacionService.log(accion, entidadTipo, entidadId, datosAnteriores, datosNuevos, usuarioId, ipOrigen)` in `apps/api/src/liquidaciones/services/audit-liquidacion.service.ts`: `prisma.registros_auditoria.create({...})` with all fields from data-model.md audit section
-- [ ] T012 [P] Implement full Zustand store in `apps/web/src/stores/liquidacion.store.ts`: state shape `{liquidacion, dias, bonos, totales, estado}`; actions: `setLiquidacion(data)` (initial load), `applyOptimisticDia(dia)` (immediate UI update), `reconcileDia(dia)` (from server response), `applyOptimisticTotales(totales)`, `reconcileTotales(totales)`, `setAprobado(aprobadoPor, aprobadaEn)`
+- [X] T003 Implement `LiquidacionCalculatorService` in `apps/api/src/liquidaciones/services/liquidacion-calculator.service.ts`. Methods required: `calcularTotales(liquidacionId: string)` — reads all `DiaLiquidacion` rows + `bonos` for the period via Prisma; resolves `tarifa_efectiva_dia` (COLABORADOR rule via `configuraciones_reglas` first, GLOBAL fallback; override if `descuento_tipo=TARIFA_DIA` using `descuento_valor`); reads `MULTIPLICADOR_HORA_EXTRA` config rule (default 1.5 if none found); computes `tarifa_extra_dia = tarifa_efectiva_dia × multiplicador`; applies FR-008 formula per day (`horas_efectivas = horas_ajustadas_supervisor ?? horas_calculadas`, `pago_dia = (horas_ord × tarifa_eff) + (horas_extra × tarifa_extra) - descuento_fijo`); sums all totals; persists to `liquidaciones_semanales` (horas_ordinarias, horas_extra, valor_horas_ordinarias, valor_horas_extra, total_bonos, total_descuentos, total_pago, configuracion_reglas_ids as UUID[], calculado_en). Also implement `deriveEstadoDia(horas_ajustadas: number|null, descuento_tipo: string|null, aprobar: boolean): EstadoDia` returning `CON_AJUSTE_Y_DESCUENTO` when both non-null, `CON_DESCUENTO` when only descuento_tipo set, `CON_AJUSTE_HORAS` when only horas_ajustadas set, `APROBADO` when `aprobar=true`, else `SIN_REVISION`.
+- [X] T004 [P] Implement `LiquidacionesService` base methods in `apps/api/src/liquidaciones/liquidaciones.service.ts`: `getLiquidacion(colaboradorId: string, semanaId: string)` — Prisma `findFirst` with `include: { dias_liquidacion: { orderBy: { fecha: 'asc' } }, bonos: { orderBy: { fecha_dia: 'asc' } } }`; `assertEditable(liquidacionId: string)` — throws `ConflictException('La liquidación ya fue aprobada y no puede modificarse')` if `estado = APROBADO`; `assertScope(userId: string, roles: string[], colaboradorId: string)` — if SUPERVISOR role only, query `colaboradores.supervisor_id` and throw `ForbiddenException('No tiene acceso a este colaborador')` if mismatch; `findOrCreateBorrador(colaboradorId: string, semanaId: string)` — Prisma `upsert` on `UNIQUE(colaborador_id, semana_id)` with `estado=BORRADOR`. Inject `PrismaService` and `LiquidacionCalculatorService`.
+- [X] T005 [P] Create DTOs in `apps/api/src/liquidaciones/dto/`: `LiquidacionResponseDto` (full shape per contracts/api.md GET /liquidaciones — include nested `dias` array and `bonos` array with `comentario` field, not `justificacion`); `PatchDiaLiquidacionDto` with `class-validator`: `@IsOptional() @IsNumber() @Min(0) horasAjustadasSupervisor`, `@ValidateIf() @IsString() motivoAjuste`, `@IsOptional() @IsEnum(TipoDescuentoDia) descuentoTipo`, `@ValidateIf() @IsNumber() @IsPositive() descuentoValor`, `@ValidateIf() @IsString() descuentoMotivo`, `@IsOptional() @IsBoolean() aprobar`. Add `@ValidateIf` cross-field: motivoAjuste required if horasAjustadasSupervisor set; descuentoValor + descuentoMotivo required if descuentoTipo set.
+- [X] T006 Implement `GET /liquidaciones`, `GET /liquidaciones/resumen`, and `GET /semanas-laborales` in `apps/api/src/liquidaciones/liquidaciones.controller.ts`. Use `@UseGuards(JwtAuthGuard)` on the controller class with `@Roles('ADMINISTRADOR','SUPERVISOR')`. `GET /liquidaciones?colaborador_id&semana_id`: call `assertScope` then `getLiquidacion` → return `LiquidacionResponseDto`. `GET /liquidaciones/resumen?semana_id`: if `semana_id` absent, resolve active week from `semanas_laborales` where `estado=ABIERTA` (first result); query `colaboradores` in scope with left join `liquidaciones_semanales`; return shape per contracts/api.md. `GET /semanas-laborales`: return all rows ordered by `fecha_inicio DESC`.
+- [X] T007 [P] Create Next.js API proxy routes (these forward requests to NestJS at `process.env.API_URL`, attaching the `access_token` cookie as `Authorization: Bearer <token>`): `apps/web/src/app/api/liquidaciones/route.ts` (GET → NestJS GET /liquidaciones); `apps/web/src/app/api/liquidaciones/resumen/route.ts` (GET → NestJS GET /liquidaciones/resumen); `apps/web/src/app/api/semanas-laborales/route.ts` (GET → NestJS GET /semanas-laborales). All use `NextRequest`, read `cookies().get('access_token')`, and return the proxied JSON response.
+- [X] T008 Create `apps/web/src/components/liquidaciones/LiquidacionesListClient.tsx` (Client Component, `'use client'`): props `{ semanaActiva: SemanaLaboral; semanas: SemanaLaboral[]; liquidaciones: LiquidacionResumen[] }`. Renders: (1) MUI `Select` dropdown of semanas (label: `${fecha_inicio} – ${fecha_fin}`) bound to semanaActiva; on change call `router.push('/liquidaciones?semana_id=' + id)`; (2) MUI `Table` size="small" with columns: Colaborador (nombre + apellido), Área, Estado (Chip: success=APROBADO/warning=BORRADOR/default=SIN LIQUIDACIÓN), Total a Pagar (`${monto.toLocaleString('es-VE')} Bs.` or `—` if null); (3) Row onClick → `router.push(\`/liquidaciones/${semanaActiva.id}/${colaboradorId}\`)`. Then create `apps/web/src/app/(app)/liquidaciones/page.tsx` (Server Component): verify auth, read optional `?semana_id` from `searchParams`, call `GET /api/liquidaciones/resumen?semana_id` and `GET /api/semanas-laborales`, pass to `LiquidacionesListClient`.
+- [X] T009 [P] Create Zustand store `apps/web/src/stores/liquidacion.store.ts` with `create<LiquidacionStore>()`: state fields `liquidacion: LiquidacionData | null`; actions `setLiquidacion(data)`, `applyOptimisticDia(dia)` (replaces matching dia in `liquidacion.dias` by id), `reconcileDia(dia)` (same as apply), `applyOptimisticTotales(totales)` (merges totales fields), `reconcileTotales(totales)` (same), `setAprobado(aprobadoPor, aprobadaEn)` (sets `estado=APROBADO`). Then create `apps/web/src/app/(app)/liquidaciones/[semanaId]/[colaboradorId]/page.tsx` (Server Component): fetch `GET /api/liquidaciones?colaborador_id=<id>&semana_id=<id>`, pass data to `LiquidacionDetailClient` (client component that initializes the store via `setLiquidacion` on mount and renders empty `<DiaLiquidacionTable />`, `<BonoSectionPanel />`, `<LiquidacionSummaryCard />`, `<AprobarLiquidacionButton />` placeholder slots).
 
-**Checkpoint**: Unit test `LiquidacionCalculatorService.calcularTotales` with a seeded dataset — correct `total_pago` output. `assertEditable` throws on APROBADO liquidacion. `assertScope` passes for ADMINISTRADOR, rejects mismatched SUPERVISOR.
+**Checkpoint**: Lista de liquidaciones accessible at `/liquidaciones`, datos del período visibles in detail view, Zustand store initialized
 
 ---
 
-## Phase 3: User Story 1 — Revisión y Ajuste de Asistencias del Período (Priority: P1) 🎯 MVP
+## Phase 3: User Story 1 — Revisión y Ajuste de Asistencias (Priority: P1) 🎯 MVP
 
-**Goal**: Supervisor opens a collaborator's weekly view, sees all days with calculated hours and lateness indicators, adjusts hours or applies a daily discount (TARIFA_DIA or MONTO_FIJO) for any day, and sees the total update immediately.
+**Goal**: Supervisor can view each day's hours, detect tardiness, apply hour adjustments and daily discounts, and see totals update in real time.
 
-**Independent Test**: `GET /liquidaciones?colaborador_id=<uuid>&semana_id=<uuid>` returns 7 `dias` with `horas_calculadas` and `estado_dia = SIN_REVISION`. `PATCH /dias-liquidacion/<tuesday-id>` with `{horasAjustadasSupervisor: 7, motivoAjuste: "Atraso"}` → 200 with `dia.estadoDia = CON_AJUSTE_HORAS` and updated `totales.totalPago`. Navigate to `/liquidaciones/<semanaId>/<colaboradorId>` — DataGrid renders all days; click "Ajustar" → dialog opens; submit adjustment → summary card updates optimistically.
+**Independent Test**: Navigate to `/liquidaciones/<semana>/<colaborador>`, verify 7 days appear with `horas_calculadas` and `atraso_detectado` flags. Apply `horasAjustadasSupervisor=7` with motivo to a day → verify total recalculates. Apply `descuentoTipo=MONTO_FIJO` + `descuentoValor=50` to another day → verify `total_descuentos` and `total_pago` update. Apply `descuentoTipo=TARIFA_DIA` to another day → verify day's rate changes but not other days.
 
-### Implementation for User Story 1
+- [X] T010 [US1] Implement `LiquidacionesService.patchDiaLiquidacion(id, dto, userId, roles)` in `apps/api/src/liquidaciones/liquidaciones.service.ts`: fetch `DiaLiquidacion` with `include: { liquidacion: true }`; call `assertEditable(liquidacion.id)` and `assertScope(userId, roles, liquidacion.colaborador_id)`; Prisma update DiaLiquidacion fields (horasAjustadasSupervisor, motivoAjuste, descuentoTipo, descuentoValor, descuentoMotivo); compute and persist `estado_dia` via `deriveEstadoDia`; call `calcularTotales(liquidacion.id)`; return `{ dia: updated, totales: { horasOrdinarias, horasExtra, valorHorasOrdinarias, valorHorasExtra, totalBonos, totalDescuentos, totalPago, calculadoEn } }`. Add `PATCH /dias-liquidacion/:id` to `LiquidacionesController` using `PatchDiaLiquidacionDto`.
+- [X] T011 [P] [US1] Create Next.js API proxy route `apps/web/src/app/api/dias-liquidacion/[id]/route.ts` (PATCH → NestJS `PATCH /dias-liquidacion/:id` forwarding body and auth cookie, returning JSON response).
+- [X] T012 [US1] Create `apps/web/src/components/liquidaciones/DiaLiquidacionTable.tsx` (Client Component, reads from Zustand store): MUI `Table` size="small". Columns: Fecha (format DD/MM from YYYY-MM-DD), Entrada Registrada, Horas Calc., Horas Ajust. (`—` if null), Atraso (red `Chip` label="Atraso" if `atraso_detectado`, else empty), Tarifa Eff. (Bs./h), Descuento (tipo badge + value), Pago Día (Bs.), Estado (`Chip`: SIN_REVISION=default/"Sin rev.", APROBADO=success/"Aprobado", CON_AJUSTE_HORAS=info/"H. ajustadas", CON_DESCUENTO=warning/"Con descuento", CON_AJUSTE_Y_DESCUENTO=warning/"Ajuste + Desc."), Acciones (Button "Ajustar" — disabled if `liquidacion.estado=APROBADO`). Days with no `DiaLiquidacion` record show as "Ausente" row with 0 horas.
+- [X] T013 [US1] Create `apps/web/src/components/liquidaciones/DiaAjusteDialog.tsx`: MUI Dialog with title "Ajustar día — {DD/MM/YYYY}". React Hook Form + Zod (schema mirrors `PatchDiaLiquidacionDto`): NumberField horasAjustadasSupervisor (≥0, optional), TextField motivoAjuste (required if horas set), Select descuentoTipo (Sin descuento / Reducción de tarifa / Monto fijo), NumberField descuentoValor (>0, required if tipo set), TextField descuentoMotivo (required if tipo set), Checkbox "Aprobar día sin ajuste". On submit: (1) store.applyOptimisticDia with merged values (instant); (2) PATCH /api/dias-liquidacion/:id; (3) on success: store.reconcileDia(dia) + store.applyOptimisticTotales(totales); (4) on 409/422: rollback optimistic update, show error Alert. Create `apps/web/src/components/liquidaciones/LiquidacionSummaryCard.tsx` (Client Component): MUI Card reading from store — rows for horas ordinarias, horas extra, valor ord. (Bs.), valor extra (Bs.), total bonos (Bs.), total descuentos (Bs.), **Total a Pagar** (Typography variant="h6", bold), Estado Chip (warning=BORRADOR, success=APROBADO), `calculado_en` timestamp. Wire `DiaLiquidacionTable`, `DiaAjusteDialog`, and `LiquidacionSummaryCard` into `LiquidacionDetailClient`.
 
-- [ ] T013 [US1] Implement `LiquidacionesService.getLiquidacion(colaboradorId, semanaId)` in `apps/api/src/liquidaciones/liquidaciones.service.ts`: `prisma.liquidaciones_semanales.findFirst({ where: {...}, include: { dias_liquidacion: {orderBy: {fecha: 'asc'}}, bonos: {orderBy: {fecha_dia: 'asc'}} } })`; throw `NotFoundException` if not found
-- [ ] T014 [P] [US1] Create `LiquidacionResponseDto`, `DiaLiquidacionDto`, `BonoDto`, `TotalesDto` with camelCase fields in `apps/api/src/liquidaciones/dto/liquidacion-response.dto.ts`
-- [ ] T015 [US1] Implement `GET /liquidaciones` in `apps/api/src/liquidaciones/liquidaciones.controller.ts`: `@UseGuards(JwtAuthGuard)`, `@Query()` params `colaboradorId` + `semanaId`; calls `assertScope`, `getLiquidacion`; returns `LiquidacionResponseDto`
-- [ ] T016 [US1] Implement `LiquidacionesService.patchDiaLiquidacion(id, dto, usuarioId, ip)` in `apps/api/src/liquidaciones/liquidaciones.service.ts`: snapshot `datosAnteriores`; apply partial update fields; call `deriveEstadoDia`; persist updated `DiaLiquidacion`; call `calcularTotales(liquidacion_id)`; call `AuditLiquidacionService.log('DIA_HORAS_AJUSTADAS' | 'DIA_DESCUENTO_APLICADO' | 'DIA_APROBADO', ...)`; return `{dia, totales}`
-- [ ] T017 [P] [US1] Create `PatchDiaLiquidacionDto` in `apps/api/src/liquidaciones/dto/patch-dia-liquidacion.dto.ts`: all fields optional; cross-field validators: `@ValidateIf(o => o.horasAjustadasSupervisor !== undefined) @IsNotEmpty() motivoAjuste`; `@ValidateIf(o => o.descuentoTipo !== null) @IsNotEmpty() descuentoValor + descuentoMotivo`; `descuentoValor > 0`
-- [ ] T018 [US1] Implement `PATCH /dias-liquidacion/:id` in `apps/api/src/liquidaciones/liquidaciones.controller.ts`: resolve `liquidacion_id` from `dia.liquidacion_id`; call `assertEditable(liquidacion_id)`, `assertScope(req.user.sub, req.user.roles, colaboradorId)`; call `patchDiaLiquidacion(id, dto, usuarioId, ip)`; return 200 `{dia: DiaLiquidacionDto, totales: TotalesDto}`
-- [ ] T019 [P] [US1] Create `DiaLiquidacionTable` in `apps/web/src/components/liquidaciones/DiaLiquidacionTable.tsx`: MUI DataGrid with columns Fecha, Horas Calc., Horas Ajust., Atraso (`Chip` rojo si true), Tarifa Efectiva, Pago Día, Descuento (tipo + valor), Estado (`Chip` con color: SIN_REVISION=default, APROBADO=success, CON_AJUSTE_HORAS=warning, CON_DESCUENTO=info), Acciones (botón "Ajustar"); reads `dias` from `useLiquidacionStore`; emits `onAjustar(diaId)` callback
-- [ ] T020 [P] [US1] Create `DiaAjusteDialog` in `apps/web/src/components/liquidaciones/DiaAjusteDialog.tsx`: MUI Dialog + React Hook Form + Zod schema matching `PatchDiaLiquidacionDto` constraints; fields: horas ajustadas (NumberField, ≥ 0), motivo ajuste (TextField), descuentoTipo (Select: ninguno/TARIFA_DIA/MONTO_FIJO), descuentoValor (NumberField, conditional), descuentoMotivo (TextField, conditional), "Aprobar sin penalidad" (Checkbox); on submit: optimistic `applyOptimisticDia` + `applyOptimisticTotales`, then `PATCH /dias-liquidacion/:id` via Axios, then `reconcileDia` + `reconcileTotales`; on error: rollback
-- [ ] T021 [P] [US1] Create `LiquidacionSummaryCard` in `apps/web/src/components/liquidaciones/LiquidacionSummaryCard.tsx`: MUI Card with rows for horas ordinarias, horas extra, valor horas ordinarias, valor horas extra, total bonos, total descuentos, **total a pagar** (bold); MUI `Chip` for estado (BORRADOR=warning, APROBADO=success); subscribes to `useLiquidacionStore.totales` and `.estado`; amounts formatted as `Bs. X,XXX.XX`
-
-**Checkpoint**: Boot API + web. Seed a collaborator with biometric `dias_liquidacion` for a week. `GET /liquidaciones` → 200 with all days. Click "Ajustar" on a day with lateness → dialog → submit hour reduction → DataGrid row updates + summary card shows new total. Wrong SUPERVISOR scope → 403.
+**Checkpoint**: US1 fully functional — hour adjustments and daily discounts work with real-time total updates
 
 ---
 
 ## Phase 4: User Story 2 — Asignación de Bonos por Día (Priority: P2)
 
-**Goal**: Supervisor assigns TRANSPORTE, ALIMENTACION, or GENERICO bonus to a specific day within the period. The total updates immediately. Duplicate bonos (same type + day) are rejected with a pointer to the existing one.
+**Goal**: Supervisor can add, edit, and delete daily bonuses (TRANSPORTE/ALIMENTACION/GENERICO) with free-form amount and required comment. Totals update in real time.
 
-**Independent Test**: `POST /bonos` with `{colaboradorId, semanaId, fechaDia: "2026-05-18", tipo: "TRANSPORTE", monto: 20}` → 201 with `bono` + updated `totales.totalBonos`. Second `POST /bonos` with same type + day → 409 with `existingBonoId`. `DELETE /bonos/:id` → 200 with reduced `totalBonos`.
+**Independent Test**: On a BORRADOR week, POST TRANSPORTE bonus 20 Bs. + comment for Monday → `total_bonos` increases by 20. POST second TRANSPORTE for same day → 409 with suggestion to edit existing. PATCH bonus monto to 25 Bs. → total updates. DELETE bonus → total reverts.
 
-### Implementation for User Story 2
+- [X] T014 [US2] Implement `LiquidacionesService.createBono()`, `patchBono()`, `deleteBono()` in `apps/api/src/liquidaciones/liquidaciones.service.ts`. `createBono(dto, userId, roles)`: assertEditable + assertScope via parent liquidacion; check `UNIQUE(colaborador_id, fecha_dia, tipo)` → if exists, throw `ConflictException` with `{ message: "Ya existe un bono de tipo X para este día...", existingBonoId }`; Prisma create with `comentario` (required for all types); call `calcularTotales`; return `{ bono, totales }`. `patchBono(id, dto, userId, roles)`: assertEditable + assertScope; Prisma update; recalculate; return. `deleteBono(id, userId, roles)`: assertEditable + assertScope; Prisma delete; recalculate; return. Create `CreateBonoDto` (`tipo: TipoBono`, `monto: number`, `comentario: string` — required for all, `colaboradorId: UUID`, `semanaId: UUID`, `fechaDia: string`). Create `PatchBonoDto` (partial: `monto`, `comentario`). Add `POST /bonos`, `PATCH /bonos/:id`, `DELETE /bonos/:id` endpoints to `LiquidacionesController`.
+- [X] T015 [P] [US2] Create Next.js API proxy routes: `apps/web/src/app/api/bonos/route.ts` (POST → NestJS POST /bonos with body + auth) and `apps/web/src/app/api/bonos/[id]/route.ts` (PATCH → NestJS PATCH /bonos/:id; DELETE → NestJS DELETE /bonos/:id), all forwarding auth cookie.
+- [X] T016 [US2] Create `apps/web/src/components/liquidaciones/BonoSectionPanel.tsx` (Client Component): reads bonuses from Zustand store's `liquidacion.bonos`. Renders flat list sorted by `fechaDia` — each row: date (DD/MM), tipo `Chip` (color-coded), monto (`${monto.toLocaleString('es-VE')} Bs.`), comentario (truncated 40 chars), edit IconButton, delete IconButton (with confirm). "Agregar bono" `Button` opens inline MUI `Collapse` form: date input constrained to `[semana.fechaInicio, semana.fechaFin]`, tipo Select (TRANSPORTE/ALIMENTACION/GENERICO), monto NumberField, comentario TextField (required). On submit: store.applyOptimisticTotales (add monto); POST /api/bonos; on success reconcile; on 409 show inline `Alert` "Ya existe un bono de tipo {X} para este día — edite el existente" with link to scroll to that row. DELETE: optimistic remove → DELETE /api/bonos/:id → reconcile or rollback.
+- [X] T017 [US2] Integrate `BonoSectionPanel` into `LiquidacionDetailClient` in `apps/web/src/app/(app)/liquidaciones/[semanaId]/[colaboradorId]/page.tsx`, placed below `DiaLiquidacionTable`. Pass `semanaId` and `semanaFechas` (fechaInicio/fechaFin) as props for date constraints.
 
-- [ ] T022 [US2] Implement `LiquidacionesService.createBono(dto, usuarioId, ip)` in `apps/api/src/liquidaciones/liquidaciones.service.ts`: check `prisma.bonos.findFirst({ where: { colaborador_id, fecha_dia, tipo } })`; if exists → throw `HttpException(409, {message: "Ya existe...", existingBonoId: id})`; create bono with `aplicado_por_criterio: false`; call `calcularTotales(liquidacion_id)`; call `AuditLiquidacionService.log('BONO_CREADO', ...)`; return `{bono, totales}`
-- [ ] T023 [P] [US2] Create `CreateBonoDto` in `apps/api/src/liquidaciones/dto/create-bono.dto.ts`: `colaboradorId` (UUID), `semanaId` (UUID), `fechaDia` (date string `YYYY-MM-DD`), `tipo` (enum TipoBono), `monto` (number > 0), `justificacion` (string, `@ValidateIf(o => o.tipo === 'GENERICO') @IsNotEmpty()`)
-- [ ] T024 [US2] Implement `POST /bonos` in `apps/api/src/liquidaciones/liquidaciones.controller.ts`: resolve `liquidacion_id` from `(colaboradorId, semanaId)`; call `assertEditable`, `assertScope`; call `createBono`; return 201 `{bono, totales}`; on 409 propagate with `existingBonoId` field
-- [ ] T025 [US2] Implement `LiquidacionesService.patchBono(id, dto, usuarioId, ip)` and `deleteBono(id, usuarioId, ip)` in `apps/api/src/liquidaciones/liquidaciones.service.ts`: `patchBono` updates monto/justificacion, recalculates, logs `BONO_EDITADO`; `deleteBono` deletes, recalculates, logs `BONO_ELIMINADO`; both return `{totales}`
-- [ ] T026 [P] [US2] Create `PatchBonoDto` in `apps/api/src/liquidaciones/dto/patch-bono.dto.ts`: optional `monto` (number > 0) and `justificacion` (string); at least one field required
-- [ ] T027 [US2] Implement `PATCH /bonos/:id` and `DELETE /bonos/:id` in `apps/api/src/liquidaciones/liquidaciones.controller.ts`: both call `assertEditable` (resolve `liquidacion_id` from bono), `assertScope`; PATCH calls `patchBono`, DELETE calls `deleteBono`; both return `{totales}` on 200
-- [ ] T028 [US2] Create `BonoSectionPanel` in `apps/web/src/components/liquidaciones/BonoSectionPanel.tsx`: MUI Accordion or Card listing bonos grouped by day; "Agregar bono" button reveals inline form (MUI DatePicker within `[semana.fecha_inicio, semana.fecha_fin]`, Select tipo, NumberField monto, conditional TextField justificacion); Edit icon → inline edit form; Delete icon → confirmation `Dialog`; each mutation calls Axios, updates store optimistically, reconciles on response; on 409 shows "Ya existe un bono de TRANSPORTE para este día. Editar el existente?" with link to edit
-
-**Checkpoint**: Add TRANSPORTE bono for Monday → summary total increases. Add second TRANSPORTE for same day → 409 toast with edit link. Delete bono → total decreases. GENERICO bono without justificacion → validation error (frontend + backend).
+**Checkpoint**: US1 + US2 fully functional — bonuses add to totals, duplicates rejected with clear messaging
 
 ---
 
-## Phase 5: User Story 3 — Aprobación de la Liquidación Semanal (Priority: P3)
+## Phase 5: User Story 3 — Aprobación de Liquidación Semanal (Priority: P3)
 
-**Goal**: Supervisor approves the weekly liquidation after reviewing all days and assigning all bonos. The liquidation transitions to APROBADO and all edit controls are disabled. Any subsequent mutation attempt returns 409.
+**Goal**: Supervisor approves the weekly payroll, locking all further modifications.
 
-**Independent Test**: `POST /liquidaciones/:id/aprobar` → 200 `{estado: "APROBADO", totalPago, aprobadoPor, aprobadaEn}`. Subsequent `PATCH /dias-liquidacion/<any-id>` → 409. Subsequent `POST /bonos` → 409. Navigate to the page after approval → all controls disabled, estado chip shows "APROBADO".
+**Independent Test**: After reviewing days, click "Aprobar liquidación" → confirm in Dialog → estado = APROBADO (green Chip). Try PATCH dia-liquidacion → 409. Try POST bono → 409. Reload page → all edit controls still disabled.
 
-### Implementation for User Story 3
+- [X] T018 [US3] Implement `LiquidacionesService.aprobarLiquidacion(id, userId, roles)` in `apps/api/src/liquidaciones/liquidaciones.service.ts`: fetch liquidacion; `assertEditable(id)` (throws 409 if already APROBADO); `assertScope(userId, roles, liquidacion.colaborador_id)`; Prisma update `{ estado: 'APROBADO', aprobado_por: userId, aprobada_en: new Date() }`; return `{ id, estado, totalPago, aprobadoPor, aprobadaEn }`. Add `POST /liquidaciones/:id/aprobar` to `LiquidacionesController`.
+- [X] T019 [P] [US3] Create Next.js API proxy route `apps/web/src/app/api/liquidaciones/[id]/aprobar/route.ts` (POST → NestJS POST /liquidaciones/:id/aprobar with auth cookie; no body needed).
+- [X] T020 [US3] Create `apps/web/src/components/liquidaciones/AprobarLiquidacionButton.tsx` (Client Component): MUI `Button` variant="contained" color="success" label="Aprobar liquidación"; disabled when `store.liquidacion.estado === 'APROBADO'`. On click: MUI `Dialog` "¿Desea aprobar la liquidación de {nombre} para la semana {fechaInicio}–{fechaFin}? Esta acción es irreversible." On confirm: POST /api/liquidaciones/:id/aprobar → store.setAprobado(aprobadoPor, aprobadaEn) → all DiaAjusteDialog Ajustar buttons disabled (read `store.liquidacion.estado` from store), all BonoSectionPanel add/edit/delete controls disabled, AprobarLiquidacionButton itself disabled. On 409: show `Alert` inline. Integrate into `LiquidacionDetailClient`.
 
-- [ ] T029 [US3] Implement `LiquidacionesService.aprobarLiquidacion(id, usuarioId, ip)` in `apps/api/src/liquidaciones/liquidaciones.service.ts`: call `assertEditable(id)` (409 if already APROBADO); `prisma.liquidaciones_semanales.update({ where: {id}, data: { estado: APROBADO, aprobado_por: usuarioId, aprobada_en: new Date() } })`; call `AuditLiquidacionService.log('LIQUIDACION_APROBADA', 'LiquidacionSemanal', id, {estado: BORRADOR}, {estado: APROBADO}, ...)`; return updated liquidacion
-- [ ] T030 [US3] Implement `POST /liquidaciones/:id/aprobar` in `apps/api/src/liquidaciones/liquidaciones.controller.ts`: call `assertScope`; call `aprobarLiquidacion(id, req.user.sub, ip)`; return 200 `{id, estado: 'APROBADO', totalPago, aprobadoPor, aprobadaEn}`
-- [ ] T031 [US3] Create `AprobarLiquidacionButton` in `apps/web/src/components/liquidaciones/AprobarLiquidacionButton.tsx`: MUI Button (disabled if `estado === APROBADO`); on click: open MUI `Dialog` with "¿Confirmar aprobación? Esta acción es irreversible."; on confirm: call `POST /liquidaciones/:id/aprobar` via Axios; on 200: call `useLiquidacionStore.setAprobado(aprobadoPor, aprobadaEn)`; the store state change causes `DiaLiquidacionTable` and `BonoSectionPanel` to render all controls as `disabled` (read `estado === APROBADO` from store)
-- [ ] T032 [US3] Create `apps/web/src/app/(app)/liquidaciones/[semanaId]/[colaboradorId]/page.tsx`: Next.js server component; calls `GET /liquidaciones?colaborador_id=<param>&semana_id=<param>` with server-side cookie; on 404 → `notFound()`; on 403 → `redirect('/dashboard')`; wraps client components in a `LiquidacionProvider` that initializes the Zustand store with fetched data; renders `DiaLiquidacionTable`, `BonoSectionPanel`, `LiquidacionSummaryCard`, `AprobarLiquidacionButton`
-
-**Checkpoint**: Approve liquidation → `estado` chip changes to APROBADO (green), all table action buttons and bono form disappear. Attempt PATCH via Postman → 409. Reload page → still APROBADO.
+**Checkpoint**: All 3 user stories complete — approved liquidación is immutable across reloads
 
 ---
 
 ## Phase 6: Polish & Cross-Cutting Concerns
 
-**Purpose**: API documentation, unit tests, and integration tests.
+**Purpose**: Audit logging compliance, module wiring validation, acceptance scenario verification
 
-- [ ] T033 [P] Add `@ApiTags('liquidaciones')`, `@ApiOperation`, `@ApiResponse(200)`, `@ApiResponse(409)`, `@ApiResponse(403)` decorators to all 6 endpoints in `apps/api/src/liquidaciones/liquidaciones.controller.ts`
-- [ ] T034 [P] Write unit tests for `LiquidacionCalculatorService` in `apps/api/src/liquidaciones/services/liquidacion-calculator.service.spec.ts`: test cases: (1) day with TARIFA_DIA discount uses discount rate not configured rate; (2) day with MONTO_FIJO subtracts from pago_dia; (3) day with both hour adjustment AND discount: uses adjusted hours + derived estado = CON_DESCUENTO; (4) day with no adjustments uses horas_calculadas + configured rate; (5) extra hours above UMBRAL_HORA_EXTRA billed at TARIFA_HORA_EXTRA; (6) absent day (0 hours) contributes 0 to totals; (7) weekly sum of all days + bonos = correct totalPago
-- [ ] T035 Write supertest integration test for US1 flow in `apps/api/src/liquidaciones/liquidaciones.controller.spec.ts`: seed collaborator + week + dias_liquidacion; GET → PATCH dia with hour adjustment → assert totales updated; PATCH same dia with MONTO_FIJO discount → assert estado = CON_DESCUENTO, totales updated again; PATCH with wrong supervisor scope → 403
-- [ ] T036 [P] Write supertest integration test for US3 approval lock: seed + approve via `POST /liquidaciones/:id/aprobar`; then `PATCH /dias-liquidacion/:id` → 409; `POST /bonos` → 409; `POST /liquidaciones/:id/aprobar` again → 409
+- [X] T021 Create `apps/api/src/liquidaciones/services/audit-liquidacion.service.ts` with method `log(accion, entidadTipo, entidadId, datosAnteriores, datosNuevos, userId, ip)` that inserts into `registros_auditoria` via Prisma. Inject into `LiquidacionesService` and add audit calls (wrapped in try/catch — failure must not block response) for: `patchDiaLiquidacion` → `DIA_HORAS_AJUSTADAS` or `DIA_DESCUENTO_APLICADO` or `DIA_APROBADO`; `createBono` → `BONO_CREADO`; `patchBono` → `BONO_EDITADO`; `deleteBono` → `BONO_ELIMINADO`; `aprobarLiquidacion` → `LIQUIDACION_APROBADA`. Include `datos_anteriores` snapshot (Prisma state before update) and `datos_nuevos` (state after).
+- [X] T022 [P] Verify `apps/api/src/liquidaciones/liquidaciones.module.ts` exports and `apps/api/src/app.module.ts` registration are correct. Run `pnpm --filter api build` to confirm TypeScript compiles with zero errors. Fix any import/type issues.
+- [X] T023 [P] Validate all acceptance scenarios from `specs/006-weekly-payroll/spec.md` User Scenarios section: US1 scenarios 1–4, US2 scenarios 1–3, US3 scenarios 1–3, plus all 6 Edge Cases. Document discrepancies and fix any found issues.
 
 ---
 
@@ -121,88 +100,79 @@
 ### Phase Dependencies
 
 - **Setup (Phase 1)**: No dependencies — start immediately
-- **Foundational (Phase 2)**: Requires Phase 1 — BLOCKS all user stories (calculator + guards needed everywhere)
-- **User Story 1 (Phase 3)**: Requires Phase 2 — delivers MVP (view + adjust days)
-- **User Story 2 (Phase 4)**: Requires Phase 2 + `calcularTotales` from Phase 2 (T007); can run in parallel with US1 after Phase 2
-- **User Story 3 (Phase 5)**: Requires Phase 2 + `assertEditable` (T008); needs US1 page (T032 renders all child components)
-- **Polish (Phase 6)**: Requires all story phases complete
+- **Foundational (Phase 2)**: Requires Phase 1 — **BLOCKS all user stories**
+- **US1 (Phase 3)**: Requires Phase 2 — **MVP stop point**
+- **US2 (Phase 4)**: Requires Phase 2 — independent of US1, can run in parallel with Phase 3 if staffed
+- **US3 (Phase 5)**: Requires Phase 2 — `assertEditable` already in place
+- **Polish (Phase 6)**: Requires all desired phases complete
 
-### User Story Dependencies (within Phases)
+### Within Each Phase
 
-- **US1**: `getLiquidacion` (T013) → `GET /liquidaciones` (T015) → `patchDiaLiquidacion` (T016) → `PATCH /dias-liquidacion/:id` (T018) → frontend (T019, T020, T021)
-- **US2**: `createBono` (T022) → `POST /bonos` (T024); `patchBono+deleteBono` (T025) → `PATCH/DELETE /bonos/:id` (T027); frontend panel (T028) needs all endpoints
-- **US3**: `aprobarLiquidacion` (T029) → `POST /liquidaciones/:id/aprobar` (T030) → `AprobarLiquidacionButton` (T031) → `page.tsx` (T032)
-
-### Parallel Opportunities
-
-- T001 || T002 || T004 (Setup — different files)
-- T005, T006, T007 are sequential within `LiquidacionCalculatorService` (each builds on prior)
-- T008, T009, T010 can run in parallel with T011 and T012 (different files)
-- T014 [P] || T017 [P] || T019 [P] || T020 [P] || T021 [P] can run together once T007 + T013 exist
-- T023 [P] || T026 [P] can run in parallel once Phase 2 is complete
-- T033 [P] || T034 [P] || T036 [P] all run in parallel in Polish phase
+- Tasks marked `[P]` within the same phase can run in parallel (operate on different files)
+- Sequential tasks must run in order listed
 
 ---
 
-## Parallel Example: User Story 1
+## Parallel Execution Examples
 
-```bash
-# After T013 (getLiquidacion) and T007 (calcularTotales) are complete:
+### Phase 2 Foundational
 
-# Stage 1 — Backend DTOs + Frontend components run together:
-Task T014: "Create LiquidacionResponseDto in apps/api/src/liquidaciones/dto/liquidacion-response.dto.ts"
-Task T017: "Create PatchDiaLiquidacionDto in apps/api/src/liquidaciones/dto/patch-dia-liquidacion.dto.ts"
-Task T019: "Create DiaLiquidacionTable in apps/web/src/components/liquidaciones/DiaLiquidacionTable.tsx"
-Task T020: "Create DiaAjusteDialog in apps/web/src/components/liquidaciones/DiaAjusteDialog.tsx"
-Task T021: "Create LiquidacionSummaryCard in apps/web/src/components/liquidaciones/LiquidacionSummaryCard.tsx"
+```
+# Parallel batch:
+T003 LiquidacionCalculatorService
+T004 LiquidacionesService base methods
+T005 DTOs
+T007 Next.js proxy routes
 
-# Stage 2 — after DTOs + T015 (GET controller) done:
-Task T018: "Implement PATCH /dias-liquidacion/:id in apps/api/src/liquidaciones/liquidaciones.controller.ts"
+# After T003+T004+T005 complete:
+T006 Controller GET endpoints (needs service + DTOs)
+T008 List page + LiquidacionesListClient (needs T007 proxy routes)
+T009 Zustand store + detail page shell
+```
+
+### Phase 3 US1
+
+```
+# Sequential:
+T010 patchDiaLiquidacion service + PATCH endpoint
+
+# Parallel after T010:
+T011 Next.js PATCH proxy route
+T012 DiaLiquidacionTable component
+
+# After T011 + T012:
+T013 DiaAjusteDialog + LiquidacionSummaryCard + page integration
 ```
 
 ---
 
 ## Implementation Strategy
 
-### MVP First (User Story 1 Only)
+### MVP First (US1 Only)
 
-1. Complete Phase 1: Setup (scaffold module)
-2. Complete Phase 2: Foundational (`LiquidacionCalculatorService` + guards + store)
-3. Complete Phase 3: User Story 1 (view + adjust days + summary)
-4. **STOP and VALIDATE**: Supervisor can open a week, see all days, adjust hours or apply discount, see total update
-5. Deliver: Payroll review is functional — the most critical workflow
+1. Phase 1: Setup (T001–T002)
+2. Phase 2: Foundational (T003–T009)
+3. Phase 3: US1 (T010–T013)
+4. **STOP and VALIDATE**: Supervisor reviews attendance, adjusts hours/discounts, totals update
 
 ### Incremental Delivery
 
-1. Phase 1 + 2 → Foundation ready
-2. Phase 3 → Day-level review + adjustment → MVP (supervisor can work with it)
-3. Phase 4 → Bonus assignment → Week payout is complete
-4. Phase 5 → Approval + lock → Formal sign-off, ready for payment queue (spec 007)
-5. Phase 6 → Tests + docs → Production-ready
-
----
-
-## Task Summary
-
-| Phase | Tasks | User Story | Parallelizable |
-|-------|-------|------------|----------------|
-| Phase 1: Setup | T001–T004 | — | T001, T002, T004 |
-| Phase 2: Foundational | T005–T012 | — | T011, T012 (with T008–T010) |
-| Phase 3: US1 Ajuste | T013–T021 | US1 | T014, T017, T019, T020, T021 |
-| Phase 4: US2 Bonos | T022–T028 | US2 | T023, T026 |
-| Phase 5: US3 Aprobación | T029–T032 | US3 | — |
-| Phase 6: Polish | T033–T036 | — | T033, T034, T036 |
-
-**Total tasks**: 36 | **MVP scope**: T001–T021 (Phases 1–3) | **Parallel opportunities**: 15 tasks
+1. Phase 1 + 2 → Foundation: list and detail pages load data
+2. + Phase 3 (US1) → Attendance adjustment ✓ **MVP**
+3. + Phase 4 (US2) → Daily bonuses ✓
+4. + Phase 5 (US3) → Payroll approval lock ✓
+5. + Phase 6 → Audit trails ✓
 
 ---
 
 ## Notes
 
-- `[P]` tasks operate on different files with no dependency on incomplete tasks
-- `[US1]/[US2]/[US3]` labels map each task to its user story for independent traceability
-- **Prerequisito de datos**: Spec 001 pipeline crea los `DiaLiquidacion` al procesar marcajes. Para desarrollar sin spec 001 implementado, usar seeds de `DiaLiquidacion` directamente en DB
-- `LiquidacionCalculatorService.calcularTotales` es llamado después de CADA mutación; si el rendimiento degrada con más días/bonos, considerar optimizar en fases futuras (actualmente ~10 usuarios, aceptable)
-- `findOrCreateBorrador` (T010) NO tiene endpoint HTTP; es llamado por el pipeline de spec 001 vía inyección de dependencias
-- Commit after each phase checkpoint to preserve incremental progress
-- Run `npm run test` in `apps/api` after Phase 6 to validate all tests pass
+- Backend: NestJS + Prisma at `apps/api/`; auth via `JwtAuthGuard` from `apps/api/src/auth/`
+- Frontend: Next.js 16 + MUI v9 at `apps/web/`; state via Zustand (must install: `pnpm add zustand`)
+- All monetary values in Bs. (`toLocaleString('es-VE')`)
+- Dates displayed DD/MM/YYYY; stored YYYY-MM-DD in DB
+- `comentario` required for ALL bono types (not just GENERICO)
+- `estado_dia` derived by backend only; frontend never sends it
+- `tarifa_extra = tarifa_efectiva_dia × MULTIPLICADOR_HORA_EXTRA` (config rule, default 1.5)
+- Audit logging is best-effort (try/catch — never blocks response)
+- `CON_AJUSTE_Y_DESCUENTO` is the correct state when both hour adjustment AND discount coexist on the same day

@@ -8,7 +8,7 @@
 //   spec 011     — evento_referencia_id, EstadoResolucion += POTENCIAL_DUPLICADO/DUPLICADO
 //                  tipo_evento on desglosados, TipoConfiguracion += DEDUP_WINDOW_MINUTES
 //   spec 006     — fecha_dia on bonos, TipoBono += GENERICO, dias_liquidacion table
-//                  EstadoDia + TipoDescuentoDia enums
+//                  EstadoDia + TipoAjusteDia enums
 //
 // Append-only enforcement (application layer, not DB triggers):
 //   - eventos_biometricos          → no UPDATE / DELETE in service layer
@@ -61,23 +61,6 @@ enum EstadoSemana {
   CERRADA
 }
 
-// v2.0: added DEDUP_WINDOW_MINUTES (spec 011), ASISTENCIA_MINIMA (spec 006)
-enum TipoConfiguracion {
-  TARIFA_HORA
-  TARIFA_HORA_EXTRA
-  UMBRAL_HORA_EXTRA
-  BONO_TRANSPORTE_CRITERIO
-  BONO_ALIMENTACION_CRITERIO
-  DESCUENTO
-  DEDUP_WINDOW_MINUTES
-  ASISTENCIA_MINIMA
-}
-
-enum AplicaA {
-  GLOBAL
-  COLABORADOR
-}
-
 // v2.0: added GENERICO (spec 006)
 enum TipoBono {
   TRANSPORTE
@@ -93,17 +76,27 @@ enum EstadoLiquidacion {
 }
 
 // v2.0: new enum for DiaLiquidacion.estado_dia (spec 006)
+// spec 006 clarification 2026-05-27: CON_AJUSTE_Y_DESCUENTO for days with both adjustments
 enum EstadoDia {
   SIN_REVISION
   APROBADO
   CON_AJUSTE_HORAS
   CON_DESCUENTO
+  CON_AJUSTE_Y_DESCUENTO
 }
 
-// v2.0: new enum for DiaLiquidacion.descuento_tipo (spec 006)
-enum TipoDescuentoDia {
-  TARIFA_DIA
-  MONTO_FIJO
+// v2.0: new enum for DiaLiquidacion.ajuste_tipo (spec 006); renamed descuento→ajuste
+enum TipoAjusteDia {
+  BONO_HORAS_EXTRAS
+  BONO_TRANSPORTE
+  ESTIPENDIO
+  DESCUENTO
+}
+
+enum TipoPeriodoPago {
+  SEMANAL
+  QUINCENAL
+  MENSUAL
 }
 
 // ─── Models ───────────────────────────────────────────────────────────────────
@@ -125,11 +118,13 @@ model Usuario {
   roles                          UsuarioRol[]
   colaboradores_supervisados     Colaborador[]        @relation("SupervisorColaborador")
   semanas_cerradas               SemanaLaboral[]      @relation("SemanaCerradaPor")
+  semanas_creadas                SemanaLaboral[]      @relation("SemanaCreadorPor")
   bonos_aprobados                Bono[]               @relation("BonoAprobadoPor")
   liquidaciones_aprobadas        LiquidacionSemanal[] @relation("LiquidacionAprobadaPor")
   liquidaciones_pagadas          LiquidacionSemanal[] @relation("LiquidacionPagadaPor")
-  configuraciones_creadas        ConfiguracionRegla[] @relation("ConfiguracionCreadaPor")
+  plantillas_horario_creadas     PlantillaHorario[]   @relation("PlantillaCreadaPor")
   registros_auditoria            RegistroAuditoria[]
+  tarifas_registradas            HistoricoTarifaHora[] @relation("TarifaHistoricoCreador")
 
   @@map("usuarios")
 }
@@ -146,23 +141,45 @@ model UsuarioRol {
 }
 
 model Colaborador {
-  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  nombre         String
-  apellido       String
-  cedula         String   @unique
-  activo         Boolean  @default(true)
-  supervisor_id  String?  @db.Uuid
-  creado_en      DateTime @default(now()) @db.Timestamptz
-  actualizado_en DateTime @updatedAt @db.Timestamptz
+  id                    String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  nombre                String
+  apellido              String
+  cedula                String    @unique
+  telefono              String?   @db.VarChar(30)
+  fecha_nacimiento      DateTime? @db.Date
+  activo                Boolean   @default(true)
+  fijo                  Boolean   @default(false)
+  supervisor_id         String?   @db.Uuid
+  tarifa_hora           Decimal?  @db.Decimal(15, 4)
+  tipo_pago             TipoPeriodoPago?
+  plantilla_horario_id  String?   @db.Uuid
+  creado_en             DateTime  @default(now()) @db.Timestamptz
+  actualizado_en        DateTime  @updatedAt @db.Timestamptz
 
-  supervisor             Usuario?             @relation("SupervisorColaborador", fields: [supervisor_id], references: [id])
-  codigos                CodigoColaborador[]
-  eventos_biometricos    EventoBiometrico[]
-  bonos                  Bono[]
-  liquidaciones          LiquidacionSemanal[]
-  configuraciones_reglas ConfiguracionRegla[] @relation("ConfiguracionAplicaA")
+  supervisor         Usuario?          @relation("SupervisorColaborador", fields: [supervisor_id], references: [id])
+  plantilla_horario  PlantillaHorario? @relation(fields: [plantilla_horario_id], references: [id])
+  codigos            CodigoColaborador[]
+  eventos_biometricos EventoBiometrico[]
+  bonos              Bono[]
+  liquidaciones      LiquidacionSemanal[]
+  historico_tarifas  HistoricoTarifaHora[]
 
   @@map("colaboradores")
+}
+
+model HistoricoTarifaHora {
+  id             String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  colaborador_id String      @db.Uuid
+  tarifa_hora    Decimal     @db.Decimal(15, 4)
+  vigente_desde  DateTime    @db.Date
+  creado_por     String?     @db.Uuid
+  creado_en      DateTime    @default(now()) @db.Timestamptz
+
+  colaborador Colaborador @relation(fields: [colaborador_id], references: [id], onDelete: Cascade)
+  usuario     Usuario?    @relation("TarifaHistoricoCreador", fields: [creado_por], references: [id], onDelete: SetNull)
+
+  @@index([colaborador_id, vigente_desde(sort: Desc), creado_en(sort: Desc)])
+  @@map("historico_tarifas_hora")
 }
 
 model CodigoColaborador {
@@ -247,12 +264,15 @@ model SemanaLaboral {
   id           String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   fecha_inicio DateTime     @unique @db.Date
   fecha_fin    DateTime     @db.Date
-  estado       EstadoSemana @default(ABIERTA)
-  cerrada_por  String?      @db.Uuid
-  cerrada_en   DateTime?    @db.Timestamptz
-  creado_en    DateTime     @default(now()) @db.Timestamptz
+  estado       EstadoSemana    @default(ABIERTA)
+  tipo_periodo TipoPeriodoPago?
+  cerrada_por  String?         @db.Uuid
+  cerrada_en   DateTime?       @db.Timestamptz
+  creado_por   String?         @db.Uuid
+  creado_en    DateTime        @default(now()) @db.Timestamptz
 
   cerrado_por_usuario Usuario?             @relation("SemanaCerradaPor", fields: [cerrada_por], references: [id])
+  creado_por_usuario  Usuario?             @relation("SemanaCreadorPor", fields: [creado_por], references: [id])
   bonos               Bono[]
   liquidaciones       LiquidacionSemanal[]
 
@@ -260,30 +280,25 @@ model SemanaLaboral {
   @@map("semanas_laborales")
 }
 
-// Effective Dating pattern — query: tipo AND vigente_desde <= date AND (vigente_hasta IS NULL OR vigente_hasta >= date)
-// v2.0: TipoConfiguracion expanded with DEDUP_WINDOW_MINUTES, ASISTENCIA_MINIMA
-model ConfiguracionRegla {
-  id             String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tipo           TipoConfiguracion
-  clave          String
-  valor          Decimal           @db.Decimal(15, 4)
-  unidad         String
-  aplica_a       AplicaA           @default(GLOBAL)
-  colaborador_id String?           @db.Uuid
-  vigente_desde  DateTime          @db.Date
-  vigente_hasta  DateTime?         @db.Date
-  creado_por     String            @db.Uuid
-  creado_en      DateTime          @default(now()) @db.Timestamptz
+// spec 008: schedule templates for automated lateness detection
+model PlantillaHorario {
+  id                    String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  nombre                String   @unique
+  dias_laborables       String[]
+  hora_entrada_esperada String   @db.Time
+  creado_por            String   @db.Uuid
+  creado_en             DateTime @default(now()) @db.Timestamptz
+  actualizado_en        DateTime @updatedAt @db.Timestamptz
 
-  colaborador        Colaborador? @relation("ConfiguracionAplicaA", fields: [colaborador_id], references: [id])
-  creado_por_usuario Usuario      @relation("ConfiguracionCreadaPor", fields: [creado_por], references: [id])
+  creado_por_usuario Usuario       @relation("PlantillaCreadaPor", fields: [creado_por], references: [id])
+  colaboradores      Colaborador[]
 
-  @@index([tipo, vigente_desde, vigente_hasta])
-  @@map("configuraciones_reglas")
+  @@map("plantillas_horario")
 }
 
 // v2.0: added fecha_dia (spec 006); unique constraint updated to (colaborador_id, fecha_dia, tipo)
 // v2.0: TipoBono += GENERICO (spec 006)
+// spec 006 clarification 2026-05-27: justificacion renamed to comentario, required for all types
 model Bono {
   id                    String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   colaborador_id        String   @db.Uuid
@@ -292,7 +307,7 @@ model Bono {
   tipo                  TipoBono
   monto                 Decimal  @db.Decimal(15, 2)
   aplicado_por_criterio Boolean  @default(false)
-  justificacion         String?
+  comentario            String
   aprobado_por          String   @db.Uuid
   creado_en             DateTime @default(now()) @db.Timestamptz
 
@@ -344,9 +359,10 @@ model DiaLiquidacion {
   atraso_detectado          Boolean          @default(false)
   estado_dia                EstadoDia        @default(SIN_REVISION)
   motivo_ajuste             String?
-  descuento_tipo            TipoDescuentoDia?
-  descuento_valor           Decimal?         @db.Decimal(15, 2)
-  descuento_motivo          String?
+  ajuste_tipo               TipoAjusteDia?
+  ajuste_valor              Decimal?         @db.Decimal(15, 2)
+  ajuste_descripcion        String?
+  marcaciones_manuales      Json?
 
   liquidacion LiquidacionSemanal @relation(fields: [liquidacion_id], references: [id], onDelete: Cascade)
 
@@ -372,4 +388,54 @@ model RegistroAuditoria {
   @@index([entidad_tipo, entidad_id])
   @@index([accion, creado_en])
   @@map("registros_auditoria")
+}
+
+// ── 024-staff-evaluations (aplicado vía specs/024-staff-evaluations/migration.sql) ──
+
+model CriterioEvaluacion {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  nombre         String   @db.VarChar(100)
+  descripcion    String?
+  peso           Decimal  @db.Decimal(5, 2)
+  activo         Boolean  @default(true)
+  creado_en      DateTime @default(now()) @db.Timestamptz
+  actualizado_en DateTime @default(now()) @db.Timestamptz
+
+  detalles EvaluacionDetalle[]
+
+  @@map("criterios_evaluacion")
+}
+
+model Evaluacion {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  colaborador_id   String    @db.Uuid
+  evaluador_id     String    @db.Uuid
+  fecha_evaluacion DateTime  @db.Date
+  puntaje_final    Decimal   @db.Decimal(4, 2)
+  comentario       String?
+  estado           String    @default("VIGENTE") @db.VarChar(10)
+  motivo_anulacion String?
+  anulada_por      String?   @db.Uuid
+  anulada_en       DateTime? @db.Timestamptz
+  creado_en        DateTime  @default(now()) @db.Timestamptz
+
+  detalles EvaluacionDetalle[]
+
+  @@index([colaborador_id, fecha_evaluacion(sort: Desc), creado_en(sort: Desc)], map: "ix_evaluaciones_colaborador_fecha")
+  @@map("evaluaciones")
+}
+
+model EvaluacionDetalle {
+  id              String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  evaluacion_id   String  @db.Uuid
+  criterio_id     String  @db.Uuid
+  criterio_nombre String  @db.VarChar(100)
+  peso            Decimal @db.Decimal(5, 2)
+  puntaje         Int     @db.SmallInt
+
+  evaluacion Evaluacion         @relation(fields: [evaluacion_id], references: [id], onDelete: Cascade)
+  criterio   CriterioEvaluacion @relation(fields: [criterio_id], references: [id], onDelete: Restrict)
+
+  @@unique([evaluacion_id, criterio_id], map: "ux_evaluacion_detalles_criterio")
+  @@map("evaluacion_detalles")
 }

@@ -31,10 +31,11 @@ export class WebhooksController {
 
     const effectiveRequestId = requestId ?? body?.requestId ?? crypto.randomUUID();
 
-    // Respond immediately so CrossChex doesn't retry; process async
-    void this.webhooksService.processCrossChex(effectiveRequestId, body).catch((err) =>
-      this.logger.error(`processCrossChex failed for ${effectiveRequestId}: ${(err as Error).message}`),
-    );
+    try {
+      await this.webhooksService.processCrossChex(effectiveRequestId, body);
+    } catch (err) {
+      this.logger.error(`processCrossChex failed for ${effectiveRequestId}: ${(err as Error).message}`);
+    }
 
     return { code: '200', msg: 'success' };
   }

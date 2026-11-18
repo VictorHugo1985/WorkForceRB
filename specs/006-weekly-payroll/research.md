@@ -30,12 +30,12 @@
 
 ## Decision 3 — Handling `estado_dia` When Both Adjustments Coexist
 
-**Decision**: `estado_dia` is derived by the backend from the presence of modifications, not set directly by the client. Priority rule: if `descuento_tipo IS NOT NULL` → `CON_DESCUENTO`; else if `horas_ajustadas_supervisor IS NOT NULL` → `CON_AJUSTE_HORAS`; else if supervisor explicitly approves with no adjustments → `APROBADO`; else → `SIN_REVISION`. When a day has both an hour adjustment and a discount (allowed per edge case), the backend sets `CON_DESCUENTO` (most restrictive/visible state). The motivo_ajuste field documents the hour reason; descuento_motivo documents the discount reason — both are preserved.
+**Decision**: `estado_dia` is derived by the backend from the presence of modifications, not set directly by the client. Derivation rule: if both `horas_ajustadas_supervisor IS NOT NULL` AND `descuento_tipo IS NOT NULL` → `CON_AJUSTE_Y_DESCUENTO`; else if `descuento_tipo IS NOT NULL` → `CON_DESCUENTO`; else if `horas_ajustadas_supervisor IS NOT NULL` → `CON_AJUSTE_HORAS`; else if supervisor explicitly approves with no adjustments → `APROBADO`; else → `SIN_REVISION`. Both `motivo_ajuste` and `descuento_motivo` are preserved for the combined case.
 
-**Rationale**: The enum `estado_dia` is a display state, not a bitfield. Two independent modifications on the same day are captured in their respective fields; the single state value reflects the most significant change for the supervisor's summary view. This is the simplest approach without requiring a compound enum or bitfield that would complicate queries and UI rendering.
+**Rationale**: Clarification session 2026-05-27 confirmed that `CON_AJUSTE_Y_DESCUENTO` is the correct representation. It preserves full information in the display state, avoids ambiguity when the supervisor views the day summary, and is consistent with the spec's statement that both adjustments are independent and can coexist.
 
 **Alternatives considered**:
-- Add `CON_AJUSTE_Y_DESCUENTO` compound state: explicit but adds complexity to the enum and every switch/case in the codebase. Not worth it for MVP with ~10 users.
+- `CON_DESCUENTO` takes precedence (prior approach): loses the information that hours were also adjusted, potentially confusing supervisors who applied both corrections.
 - Two separate boolean flags (`tiene_ajuste_horas`, `tiene_descuento`): more expressive but requires both UI and queries to combine them — more complex than a derived single state.
 
 ---
@@ -85,3 +85,27 @@
 **Alternatives considered**:
 - Separate audit table per entity: would require schema changes and complex joins for audit views. Single `registros_auditoria` table is already defined in spec 003.
 - Event sourcing for all changes: far too complex for MVP with ~10 users and low mutation volume.
+
+---
+
+## Decision 8 — Overtime Rate: Multiplier vs. Fixed Rate
+
+**Decision**: Overtime hours are remunerated at `tarifa_extra = tarifa_efectiva_dia × multiplicador_hora_extra`, where `multiplicador_hora_extra` is read from `ConfiguracionRegla` of type `MULTIPLICADOR_HORA_EXTRA` (aplica_a COLABORADOR if exists, GLOBAL otherwise). Default value if no rule exists: 1.5. This replaces the earlier plan of a separate `TARIFA_HORA_EXTRA` fixed-rate rule.
+
+**Rationale**: Clarification session 2026-05-27 confirmed that overtime is a multiplier of the effective day rate, not a separate absolute rate. This is standard labor practice and avoids the inconsistency of a fixed overtime rate becoming misaligned with the regular rate when the regular rate changes (e.g., due to daily discount). The multiplier approach is also simpler to configure: a single number (1.5) covers all collaborators by default.
+
+**Alternatives considered**:
+- Separate `TARIFA_HORA_EXTRA` fixed rate: rejected — a supervisor who reduces a day's rate via discount would still have overtime calculated at the original fixed rate, which is inconsistent with the spirit of the daily rate override.
+- Hardcoded 1.5 multiplier: simpler but removes the configurability required by Principle V.
+
+---
+
+## Decision 9 — Payroll List View and Navigation
+
+**Decision**: The sidebar "Liquidaciones" link (already in `nav-config.ts`) leads to `GET /api/liquidaciones/resumen?semana_id=<uuid>`, which returns all collaborators visible to the authenticated user with their liquidation status for that week. The page renders a table with collaborator name, week status chip (BORRADOR/APROBADO/SIN LIQUIDACIÓN), and total to pay. Clicking a row navigates to `/liquidaciones/[semanaId]/[colaboradorId]`. A week-selector dropdown at the top fetches available weeks from `GET /api/semanas-laborales` and defaults to the active week.
+
+**Rationale**: The supervisor needs an aggregated view to see who still needs review before approving. The active-week default covers the primary workflow; the dropdown enables retroactive corrections on BORRADOR weeks.
+
+**Alternatives considered**:
+- Entry from collaborator profile only (per-collaborator navigation): requires knowing which collaborator to check; no overview of team status.
+- Calendar date picker: more flexible but adds UI complexity; the week boundaries are fixed (Sat–Fri) so a dropdown of week entities is simpler and always correct.

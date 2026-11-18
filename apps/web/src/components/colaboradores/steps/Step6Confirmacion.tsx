@@ -13,10 +13,8 @@ export default function Step6Confirmacion() {
   const rows: { label: string; value: string }[] = [
     { label: 'Nombre', value: `${values.nombre} ${values.apellido}` },
     { label: 'Cédula', value: values.cedula },
-    { label: 'Área', value: values.area_id ? '(seleccionada)' : '—' },
     { label: 'Supervisor', value: values.supervisor_id ? '(seleccionado)' : 'Sin supervisor' },
-    { label: 'Tarifa por hora', value: values.tarifa_hora ? `${values.tarifa_hora.toLocaleString()} COP` : 'Hereda global' },
-    { label: 'Umbral horas extra', value: values.umbral_horas_extra ? `${values.umbral_horas_extra} h/día` : 'Hereda global' },
+    { label: 'Tarifa por hora', value: values.tarifa_hora ? `${values.tarifa_hora.toLocaleString()} Bs./h` : 'Sin tarifa (asignar desde perfil)' },
     { label: 'Código biométrico', value: values.codigo_biometrico?.workno ? `Workno: ${values.codigo_biometrico.workno}` : 'Sin asignar' },
   ];
 

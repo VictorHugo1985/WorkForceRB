@@ -17,9 +17,11 @@ import DashboardIcon from '@mui/icons-material/Dashboard';
 import PeopleIcon from '@mui/icons-material/People';
 import SettingsIcon from '@mui/icons-material/Settings';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
-import PaymentsIcon from '@mui/icons-material/Payments';
 import FingerprintIcon from '@mui/icons-material/Fingerprint';
 import ManageAccountsIcon from '@mui/icons-material/ManageAccounts';
+import AccessTimeIcon from '@mui/icons-material/AccessTime';
+import HistoryIcon from '@mui/icons-material/History';
+import AssignmentTurnedInIcon from '@mui/icons-material/AssignmentTurnedIn';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import LogoutIcon from '@mui/icons-material/Logout';
@@ -33,11 +35,13 @@ export const DRAWER_COLLAPSED_WIDTH = 56;
 const NAV_ICONS: Record<string, React.ReactNode> = {
   '/dashboard':     <DashboardIcon fontSize="small" />,
   '/colaboradores': <PeopleIcon fontSize="small" />,
+  '/evaluaciones':  <AssignmentTurnedInIcon fontSize="small" />,
   '/configuracion': <SettingsIcon fontSize="small" />,
   '/liquidaciones': <ReceiptLongIcon fontSize="small" />,
-  '/pagos':         <PaymentsIcon fontSize="small" />,
   '/eventos':       <FingerprintIcon fontSize="small" />,
+  '/relojes':       <AccessTimeIcon fontSize="small" />,
   '/usuarios':      <ManageAccountsIcon fontSize="small" />,
+  '/accesos':       <HistoryIcon fontSize="small" />,
 };
 
 export interface AppSidebarProps {

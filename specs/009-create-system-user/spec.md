@@ -6,6 +6,14 @@
 
 **Status**: Draft
 
+## Clarifications
+
+### Session 2026-06-18
+
+- Q: ¿Cómo recibe el nuevo usuario su contraseña inicial? → A: El administrador ingresa la contraseña manualmente; tras guardar, el sistema la muestra una única vez en pantalla con opción de copiar al portapapeles. El administrador es responsable de comunicarla al usuario por un canal seguro.
+- Q: ¿Está en scope el reseteo de contraseña para usuarios que la olvidan? → A: Sí, en scope. El administrador puede resetear la contraseña de cualquier cuenta activa; el sistema muestra la nueva contraseña una única vez con copia al portapapeles, igual que en la creación.
+- Q: ¿Cuándo toma efecto un cambio de rol en una sesión ya abierta? → A: La sesión activa se invalida inmediatamente; el usuario debe volver a iniciar sesión para obtener un token con los roles actualizados.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Crear Cuenta de Acceso con Rol(es) (Priority: P1)
@@ -109,8 +117,8 @@ sistema para fines de auditoría.
 
 2. **Given** una cuenta de usuario activa,
    **When** el administrador edita sus roles asignados,
-   **Then** los cambios de rol tienen efecto en el próximo inicio de sesión del
-   usuario (o en la sesión activa, si ya hay una abierta).
+   **Then** la sesión activa del usuario se invalida inmediatamente; el usuario
+   debe volver a iniciar sesión para obtener un token con los roles actualizados.
 
 3. **Given** un integrante deja la organización,
    **When** el administrador desactiva su cuenta,
@@ -130,7 +138,7 @@ sistema para fines de auditoría.
 - ¿Puede un administrador modificar su propia cuenta? → Puede cambiar su nombre. No puede quitarse a sí mismo el rol ADMINISTRADOR si es la única cuenta con ese rol activo, para evitar quedar sin administrador en el sistema.
 - ¿Qué pasa si una cuenta desactivada tiene sesión abierta en ese momento? → La sesión se invalida inmediatamente; el usuario es desconectado en su próxima acción en el sistema.
 - ¿Puede el mismo correo electrónico usarse en más de una cuenta? → No; el correo es el identificador único de la cuenta y el sistema rechaza duplicados.
-- ¿El administrador puede ver o cambiar contraseñas de otros usuarios? → No puede ver contraseñas (nunca se muestran en texto claro). Puede generar una nueva contraseña temporal para otro usuario si este la olvida (operación distinta a la creación inicial).
+- ¿El administrador puede ver o cambiar contraseñas de otros usuarios? → No puede ver contraseñas (nunca se muestran en texto claro). Puede resetear la contraseña de cualquier cuenta activa (FR-012); el sistema muestra la nueva contraseña una única vez tras el reset.
 - ¿Qué combinaciones de roles son válidas? → Todas; no hay restricciones en la combinación de roles. Un usuario puede tener todos los roles simultáneamente si el negocio lo requiere.
 - ¿Qué pasa si se intenta vincular una ficha de colaborador que ya está vinculada a otra cuenta? → El sistema rechaza el vínculo duplicado; cada ficha de colaborador puede estar vinculada a una sola cuenta de sistema.
 
@@ -141,14 +149,15 @@ sistema para fines de auditoría.
 - **FR-001**: Solo el ADMINISTRADOR puede crear, editar y desactivar cuentas de usuario del sistema.
 - **FR-002**: El sistema DEBE permitir crear una cuenta con los campos obligatorios: nombre completo, correo electrónico (único en el sistema) y al menos un rol asignado.
 - **FR-003**: Los roles disponibles son: ADMINISTRADOR, SUPERVISOR, CAJERO y COLABORADOR. Un usuario puede tener cualquier combinación de roles sin restricciones.
-- **FR-004**: El administrador DEBE definir una contraseña inicial al crear la cuenta. La contraseña debe cumplir la política de seguridad del sistema (mínimo 8 caracteres, al menos una letra mayúscula, una minúscula y un número). El sistema almacena la contraseña de forma segura; nunca se guarda ni muestra en texto claro.
+- **FR-004**: El administrador DEBE definir una contraseña inicial al crear la cuenta. La contraseña debe cumplir la política de seguridad del sistema (mínimo 8 caracteres, al menos una letra mayúscula, una minúscula y un número). El sistema almacena la contraseña de forma segura; nunca se guarda ni muestra en texto claro. Tras guardar la cuenta, el sistema muestra la contraseña ingresada **una única vez** con opción de copiar al portapapeles; el administrador es responsable de comunicarla al nuevo usuario por un canal seguro.
 - **FR-005**: La cuenta recién creada DEBE requerir que el usuario cambie su contraseña en el primer inicio de sesión. La contraseña inicial es de un solo uso.
 - **FR-006**: El administrador PUEDE vincular la cuenta al registro de un colaborador (empleado) existente en la base de personal. La vinculación es opcional. Cada ficha de colaborador puede estar vinculada a una sola cuenta de usuario.
-- **FR-007**: El administrador DEBE poder editar los roles asignados y el nombre de una cuenta existente. El correo electrónico no puede modificarse una vez creada la cuenta.
+- **FR-007**: El administrador DEBE poder editar los roles asignados y el nombre de una cuenta existente. El correo electrónico no puede modificarse una vez creada la cuenta. Al guardar cambios de rol, cualquier sesión activa del usuario afectado se invalida inmediatamente; el usuario debe volver a iniciar sesión.
 - **FR-008**: El administrador DEBE poder desactivar una cuenta. Una cuenta desactivada no puede iniciar sesión y cualquier sesión activa se invalida. Las cuentas no pueden eliminarse permanentemente.
 - **FR-009**: El sistema DEBE rechazar la desactivación de la última cuenta con rol ADMINISTRADOR activo, para garantizar que siempre haya al menos un administrador operativo.
 - **FR-010**: El sistema DEBE mostrar la lista de cuentas con: nombre, correo, roles, estado (activa / inactiva) y fecha de creación. La lista debe ser filtrable por nombre o correo.
 - **FR-011**: Toda creación, edición de roles y desactivación de cuenta DEBE quedar registrada en el log de auditoría con el usuario que realizó la acción y el timestamp.
+- **FR-012**: El administrador DEBE poder resetear la contraseña de cualquier cuenta activa. El sistema genera o acepta una nueva contraseña que cumple la política de seguridad, la muestra una única vez con opción de copiar al portapapeles, y activa el flag de cambio obligatorio en el próximo inicio de sesión del usuario afectado. El reset queda registrado en el log de auditoría.
 
 ### Key Entities
 
