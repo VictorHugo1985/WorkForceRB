@@ -289,7 +289,7 @@ export function DashboardClient({ dispositivos }: Props) {
   const [colaborador, setColaborador] = useState('');
   const [dispositivoSerial, setDispositivoSerial] = useState<string | null>(null);
   const [showAbsent, setShowAbsent]   = useState(true);
-  const [enOficina, setEnOficina]     = useState(false);
+  const [enOficina, setEnOficina]     = useState(true);
 
   const [filter, setFilter] = useState({
     fechaDesde: today,
