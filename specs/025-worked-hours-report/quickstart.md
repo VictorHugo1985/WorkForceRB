@@ -6,25 +6,15 @@ No requiere migración.
 cd apps/web && npm run dev
 ```
 
-## Validación manual
+## Validación manual (rediseño con gráficos)
 
-**US1 – Por mes**
-1. Entrar como ADMINISTRADOR → "Horas trabajadas": por defecto "Último trimestre" + "Por mes" → 3 columnas (sep, oct, nov) + Total; noviembre marcado como parcial.
-2. "Último año" → 12 columnas; los meses anteriores a jun 2026 muestran "sin datos" (no 0 h).
-3. Un colaborador activo sin marcaciones en un mes → 0.0 h.
-
-**US2 – Por semana**
-1. "Por semana" → columnas lunes a domingo con rango de fechas; la primera recortada al día 1 del período, la última parcial.
-2. Para 3 colaboradores, el Total coincide entre "Por mes" y "Por semana".
-
-**US3 – Filtros**
-1. Filtrar un área → solo sus colaboradores; las filas Total y Promedio se recalculan.
-2. Ordenar por Total (desc/asc); buscar por cédula.
-3. "Incluir inactivos" → aparecen los dados de baja con horas en el período.
-
-**US4 – Detalle**
-1. Abrir una celda → la suma de las horas diarias = valor de la celda.
-2. Una celda con "⚠2" → el detalle muestra 2 días "Incompleto" con su marcación suelta.
+1. Entrar como ADMINISTRADOR → "Horas trabajadas": abre **siempre** en "Último trimestre" con "Promedio de todos los colaboradores"; se ven dos gráficos (semanas y meses) y 4 indicadores.
+2. Elegir un colaborador en el selector (buscar por nombre o cédula) → las columnas pasan a sus horas y aparece la línea "Promedio de todos" con leyenda.
+3. Pasar el mouse sobre una columna → tooltip con el rango, las horas, el promedio y los días incompletos.
+4. Clic en una columna (con colaborador) → detalle diario cuya suma = valor de la columna.
+5. "Último año" → los meses o semanas previos a jun 2026 aparecen como una franja "sin datos"; la columna del período en curso se ve más clara (parcial).
+6. "Ver tabla" en cada gráfico → mismos valores en forma de tabla.
+7. Recargar la página tras elegir "Último año" → vuelve a abrir en trimestre.
 
 **Coherencia del cálculo (SC-005)**
 - Elegir un día de un colaborador y comparar con el cálculo manual de sus marcaciones en "Eventos Biométricos" (pares consecutivos).

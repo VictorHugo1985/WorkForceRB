@@ -10,7 +10,7 @@ export default async function HorasTrabajadasPage() {
   const client = await pool.connect();
   let reporte;
   try {
-    reporte = await generarReporte(client, 'trimestre', 'mes');
+    reporte = await generarReporte(client, 'trimestre');
   } finally {
     client.release();
   }

@@ -244,42 +244,48 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 
 // ── Reporte ──────────────────────────────────────────────────────────────────
 
-export async function generarReporte(
-  client: PoolClient,
-  periodo: Periodo,
-  agrupacion: Agrupacion,
-): Promise<ReporteHorasResponse> {
+function agregar(
+  jornadas: Map<string, JornadaDia>,
+  tramos: Tramo[],
+): { horas: number; incompletos: number }[] {
+  const celdas = tramos.map(() => ({ horas: 0, incompletos: 0 }));
+  for (const [fecha, j] of jornadas) {
+    const idx = tramos.findIndex((t) => fecha >= t.desde && fecha <= t.hasta); // ≤ 53 tramos
+    if (idx < 0) continue;
+    celdas[idx].horas += j.horas;
+    if (j.incompleta) celdas[idx].incompletos += 1;
+  }
+  for (const c of celdas) c.horas = round2(c.horas);
+  return celdas;
+}
+
+/** Horas por colaborador agrupadas por mes y por semana (una sola lectura de marcaciones). */
+export async function generarReporte(client: PoolClient, periodo: Periodo): Promise<ReporteHorasResponse> {
   const hoy = todayGMTMinus4();
   const { desde, hasta } = calcularPeriodo(periodo, hoy);
 
   // Secuencial: un mismo PoolClient no debe ejecutar consultas concurrentes (deprecado en pg@9).
   const primeraMarcacion = await obtenerPrimeraMarcacion(client);
   const colRes = await client.query(
-    `SELECT c.id, c.nombre, c.apellido, c.cedula, c.activo, c.area_id, a.nombre AS area_nombre
+    `SELECT c.id, c.nombre, c.apellido, c.cedula, c.activo, a.nombre AS area_nombre
        FROM colaboradores c
        LEFT JOIN areas a ON a.id = c.area_id
       ORDER BY c.apellido, c.nombre`,
   );
-  const areasRes = await client.query(`SELECT id, nombre, activo FROM areas ORDER BY nombre`);
   const marcaciones = await fetchMarcacionesLote(client, desde, hasta);
 
-  const tramos = construirTramos(agrupacion, desde, hasta, primeraMarcacion);
+  const tramos_mes = construirTramos('mes', desde, hasta, primeraMarcacion);
+  const tramos_semana = construirTramos('semana', desde, hasta, primeraMarcacion);
 
   const colaboradores: FilaColaborador[] = [];
   for (const c of colRes.rows) {
     const jornadas = calcularJornadas(marcaciones.get(c.id) ?? new Map());
-    const celdas = tramos.map(() => ({ horas: 0, incompletos: 0 }));
-    for (const [fecha, j] of jornadas) {
-      // Búsqueda lineal: ≤ 53 tramos.
-      const idx = tramos.findIndex((t) => fecha >= t.desde && fecha <= t.hasta);
-      if (idx < 0) continue;
-      celdas[idx].horas += j.horas;
-      if (j.incompleta) celdas[idx].incompletos += 1;
-    }
-    for (const cel of celdas) cel.horas = round2(cel.horas);
-    const total_horas = round2(celdas.reduce((s, x) => s + x.horas, 0));
-    const total_incompletos = celdas.reduce((s, x) => s + x.incompletos, 0);
+    const mes = agregar(jornadas, tramos_mes);
+    const semana = agregar(jornadas, tramos_semana);
+    const total_horas = round2(mes.reduce((s, x) => s + x.horas, 0));
+    const total_incompletos = mes.reduce((s, x) => s + x.incompletos, 0);
 
+    // Inactivos solo si registran marcaciones en el período.
     if (!c.activo && total_horas === 0 && total_incompletos === 0) continue;
 
     colaboradores.push({
@@ -288,29 +294,15 @@ export async function generarReporte(
       apellido: c.apellido,
       cedula: c.cedula,
       activo: c.activo,
-      area_id: c.area_id,
       area_nombre: c.area_nombre,
-      celdas,
+      mes,
+      semana,
       total_horas,
       total_incompletos,
     });
   }
 
-  const areasUsadas = new Set(colaboradores.map((c) => c.area_id).filter(Boolean));
-  const areas = areasRes.rows
-    .filter((a) => a.activo || areasUsadas.has(a.id))
-    .map((a) => ({ id: a.id as string, nombre: a.nombre as string }));
-
-  return {
-    periodo,
-    agrupacion,
-    desde,
-    hasta,
-    primera_marcacion: primeraMarcacion,
-    tramos,
-    areas,
-    colaboradores,
-  };
+  return { periodo, desde, hasta, primera_marcacion: primeraMarcacion, tramos_mes, tramos_semana, colaboradores };
 }
 
 // ── Detalle diario ───────────────────────────────────────────────────────────

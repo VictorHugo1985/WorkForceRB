@@ -18,6 +18,15 @@
 - Q: ¿El SUPERVISOR ve a todos los colaboradores o solo a su equipo asignado? → A: A todos, igual que el ADMINISTRADOR (coherente con Evaluaciones y Eventos Biométricos).
 - Q: ¿Cómo se señalan en la tabla general los días con marcaciones incompletas? → A: Cada celda muestra un indicador de advertencia con la cantidad de días incompletos de ese tramo (ej. "38.5 h ⚠2"); el detalle diario los identifica.
 
+### Rediseño 2026-11-18 (feedback del usuario tras la primera versión)
+
+- La tabla colaboradores × tramos se reemplaza por **gráficos de columnas**: "Horas por semana" y "Horas por mes" del período elegido, uno debajo del otro.
+- Se elige primero el **colaborador** en un selector; **por defecto se muestra el promedio de todos los colaboradores** (activos con al menos una marcación en el período). Al seleccionar un colaborador, los gráficos muestran sus horas y el promedio queda como línea de referencia.
+- La vista **siempre abre en el último trimestre** (no se recuerda la última elección).
+- Indicadores: horas del período, promedio semanal y mensual (solo tramos completos) y días con marcación incompleta (colaborador) o colaboradores considerados (promedio).
+- Se mantienen: fuente solo marcaciones, períodos móviles, tramos parciales y "sin datos", detalle diario al hacer clic en una columna (con un colaborador seleccionado) y una vista de tabla por gráfico para accesibilidad.
+- Quedan sin efecto los requisitos de la tabla: FR-009, FR-009a (el ⚠ pasa al tooltip y al detalle), FR-010, FR-011 (los inactivos con horas figuran en el selector), FR-012 (búsqueda en el selector; sin filtro por área ni ordenamiento).
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Vista general de horas por mes (Priority: P1)

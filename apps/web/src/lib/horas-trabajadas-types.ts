@@ -24,21 +24,22 @@ export interface FilaColaborador {
   apellido: string;
   cedula: string;
   activo: boolean;
-  area_id: string | null;
   area_nombre: string | null;
-  celdas: Celda[];
+  /** Celdas alineadas con `tramos_mes`. */
+  mes: Celda[];
+  /** Celdas alineadas con `tramos_semana`. */
+  semana: Celda[];
   total_horas: number;
   total_incompletos: number;
 }
 
 export interface ReporteHorasResponse {
   periodo: Periodo;
-  agrupacion: Agrupacion;
   desde: string;
   hasta: string;
   primera_marcacion: string | null;
-  tramos: Tramo[];
-  areas: { id: string; nombre: string }[];
+  tramos_mes: Tramo[];
+  tramos_semana: Tramo[];
   colaboradores: FilaColaborador[];
 }
 

@@ -14,27 +14,23 @@ Roles: **ADMINISTRADOR** o **SUPERVISOR** (`checkRoles`). Solo lectura.
 
 ## GET `/api/horas-trabajadas`
 
-**Query**: `periodo` = `trimestre` \| `semestre` \| `anio` (default `trimestre`); `agrupacion` = `mes` \| `semana` (default `mes`).
+**Query**: `periodo` = `trimestre` \| `semestre` \| `anio` (default `trimestre`). Devuelve **ambas** agrupaciones en una sola respuesta (rediseño 2026-11-18).
 
 **200**
 ```json
 {
   "periodo": "trimestre",
-  "agrupacion": "mes",
   "desde": "2026-09-01",
   "hasta": "2026-11-18",
   "primera_marcacion": "2026-06-08",
-  "tramos": [
-    { "key": "2026-09", "desde": "2026-09-01", "hasta": "2026-09-30", "etiqueta": "Sep 2026", "parcial": false, "sin_datos": false },
-    { "key": "2026-10", "desde": "2026-10-01", "hasta": "2026-10-31", "etiqueta": "Oct 2026", "parcial": false, "sin_datos": false },
-    { "key": "2026-11", "desde": "2026-11-01", "hasta": "2026-11-18", "etiqueta": "Nov 2026", "parcial": true,  "sin_datos": false }
-  ],
-  "areas": [ { "id": "uuid", "nombre": "Cocina" } ],
+  "tramos_mes":    [ { "key": "2026-09", "desde": "2026-09-01", "hasta": "2026-09-30", "etiqueta": "Sep 2026", "parcial": false, "sin_datos": false } ],
+  "tramos_semana": [ { "key": "2026-W36", "desde": "2026-09-01", "hasta": "2026-09-06", "etiqueta": "01/09 – 06/09", "parcial": false, "sin_datos": false } ],
   "colaboradores": [
     {
       "id": "uuid", "nombre": "Juan", "apellido": "Pérez", "cedula": "1234567",
-      "activo": true, "area_id": "uuid", "area_nombre": "Cocina",
-      "celdas": [ { "horas": 182.5, "incompletos": 0 }, { "horas": 176.0, "incompletos": 2 }, { "horas": 98.25, "incompletos": 0 } ],
+      "activo": true, "area_nombre": "Cocina",
+      "mes":    [ { "horas": 182.5, "incompletos": 0 } ],
+      "semana": [ { "horas": 41.25, "incompletos": 1 } ],
       "total_horas": 456.75,
       "total_incompletos": 2
     }
@@ -42,10 +38,8 @@ Roles: **ADMINISTRADOR** o **SUPERVISOR** (`checkRoles`). Solo lectura.
 }
 ```
 
-- `celdas[i]` corresponde a `tramos[i]`. En tramos `sin_datos`, `horas = 0` y el cliente muestra "sin datos".
-- `horas` es un número con 2 decimales (el cliente lo muestra con 1).
-- Incluye **todos** los colaboradores activos (aunque tengan 0 h) **y** los inactivos con horas > 0 en el período (se marcan `activo: false`); el filtro "Incluir inactivos" se aplica en el cliente.
-- Orden por defecto: `apellido, nombre`.
+- `mes[i]` ↔ `tramos_mes[i]`; `semana[i]` ↔ `tramos_semana[i]`; Σ `mes` = Σ `semana` = `total_horas`.
+- Incluye todos los activos e inactivos con marcaciones en el período. El **promedio** se calcula en el cliente sobre los activos con `total_horas > 0`.
 
 ---
 
