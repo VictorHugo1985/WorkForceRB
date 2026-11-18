@@ -389,3 +389,53 @@ model RegistroAuditoria {
   @@index([accion, creado_en])
   @@map("registros_auditoria")
 }
+
+// ── 024-staff-evaluations (aplicado vía specs/024-staff-evaluations/migration.sql) ──
+
+model CriterioEvaluacion {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  nombre         String   @db.VarChar(100)
+  descripcion    String?
+  peso           Decimal  @db.Decimal(5, 2)
+  activo         Boolean  @default(true)
+  creado_en      DateTime @default(now()) @db.Timestamptz
+  actualizado_en DateTime @default(now()) @db.Timestamptz
+
+  detalles EvaluacionDetalle[]
+
+  @@map("criterios_evaluacion")
+}
+
+model Evaluacion {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  colaborador_id   String    @db.Uuid
+  evaluador_id     String    @db.Uuid
+  fecha_evaluacion DateTime  @db.Date
+  puntaje_final    Decimal   @db.Decimal(4, 2)
+  comentario       String?
+  estado           String    @default("VIGENTE") @db.VarChar(10)
+  motivo_anulacion String?
+  anulada_por      String?   @db.Uuid
+  anulada_en       DateTime? @db.Timestamptz
+  creado_en        DateTime  @default(now()) @db.Timestamptz
+
+  detalles EvaluacionDetalle[]
+
+  @@index([colaborador_id, fecha_evaluacion(sort: Desc), creado_en(sort: Desc)], map: "ix_evaluaciones_colaborador_fecha")
+  @@map("evaluaciones")
+}
+
+model EvaluacionDetalle {
+  id              String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  evaluacion_id   String  @db.Uuid
+  criterio_id     String  @db.Uuid
+  criterio_nombre String  @db.VarChar(100)
+  peso            Decimal @db.Decimal(5, 2)
+  puntaje         Int     @db.SmallInt
+
+  evaluacion Evaluacion         @relation(fields: [evaluacion_id], references: [id], onDelete: Cascade)
+  criterio   CriterioEvaluacion @relation(fields: [criterio_id], references: [id], onDelete: Restrict)
+
+  @@unique([evaluacion_id, criterio_id], map: "ux_evaluacion_detalles_criterio")
+  @@map("evaluacion_detalles")
+}

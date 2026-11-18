@@ -104,9 +104,14 @@ export async function checkSessionValidity(userId: string, iat: number): Promise
   }
 }
 
-export async function checkAdminRole(
+/**
+ * Verifica token, revocación, rol (al menos uno de `roles`) y validez de sesión.
+ * Devuelve el usuario autenticado o la respuesta de error lista para retornar.
+ */
+export async function checkRoles(
   req: NextRequest,
-): Promise<{ userId: string } | NextResponse> {
+  roles: string[],
+): Promise<{ userId: string; roles: string[] } | NextResponse> {
   const token = req.cookies.get(COOKIE_NAME)?.value;
   if (!token) {
     return NextResponse.json({ error: 'UNAUTHORIZED' }, { status: 401 });
@@ -120,9 +125,10 @@ export async function checkAdminRole(
   if (isBlacklisted(payload.jti)) {
     return NextResponse.json({ error: 'UNAUTHORIZED' }, { status: 401 });
   }
-  if (!payload.roles.includes('ADMINISTRADOR')) {
+  const userRoles = payload.roles ?? [];
+  if (!userRoles.some((r) => roles.includes(r))) {
     return NextResponse.json(
-      { error: 'FORBIDDEN', required_role: 'ADMINISTRADOR' },
+      { error: 'FORBIDDEN', required_roles: roles },
       { status: 403 },
     );
   }
@@ -135,5 +141,41 @@ export async function checkAdminRole(
   if (!sessionValid) {
     return NextResponse.json({ error: 'UNAUTHORIZED' }, { status: 401 });
   }
-  return { userId: payload.sub };
+  return { userId: payload.sub, roles: userRoles };
+}
+
+export async function checkAdminRole(
+  req: NextRequest,
+): Promise<{ userId: string } | NextResponse> {
+  const result = await checkRoles(req, ['ADMINISTRADOR']);
+  if (result instanceof NextResponse) {
+    if (result.status === 403) {
+      return NextResponse.json(
+        { error: 'FORBIDDEN', required_role: 'ADMINISTRADOR' },
+        { status: 403 },
+      );
+    }
+    return result;
+  }
+  return { userId: result.userId };
+}
+
+/**
+ * Guard para server components: valida la cookie de sesión y que el usuario tenga
+ * al menos uno de los roles permitidos. Redirige a /login o /dashboard si no.
+ */
+export async function requirePageRoles(allowed: string[]): Promise<AuthPayload> {
+  const { cookies } = await import('next/headers');
+  const { redirect } = await import('next/navigation');
+  const token = (await cookies()).get(COOKIE_NAME)?.value;
+  if (!token) redirect('/login?reason=expired');
+  let payload: AuthPayload;
+  try {
+    payload = await verifyToken(token!);
+  } catch {
+    redirect('/login?reason=expired');
+  }
+  if (isBlacklisted(payload!.jti)) redirect('/login?reason=expired');
+  if (!payload!.roles.some((r) => allowed.includes(r))) redirect('/dashboard');
+  return payload!;
 }

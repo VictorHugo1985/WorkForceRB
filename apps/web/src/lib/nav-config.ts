@@ -7,6 +7,7 @@ export interface NavItem {
 export const NAV_ITEMS: NavItem[] = [
   { label: 'Inicio',               href: '/dashboard',     roles: ['ADMINISTRADOR', 'SUPERVISOR', 'CAJERO', 'COLABORADOR'] },
   { label: 'Colaboradores',        href: '/colaboradores', roles: ['ADMINISTRADOR'] },
+  { label: 'Evaluaciones',         href: '/evaluaciones',  roles: ['ADMINISTRADOR', 'SUPERVISOR'] },
   { label: 'Configuración',        href: '/configuracion', roles: ['ADMINISTRADOR'] },
   { label: 'Liquidaciones',        href: '/liquidaciones', roles: ['ADMINISTRADOR', 'SUPERVISOR'] },
   { label: 'Eventos Biométricos',  href: '/eventos',       roles: ['ADMINISTRADOR', 'SUPERVISOR'] },
@@ -18,6 +19,7 @@ export const NAV_ITEMS: NavItem[] = [
 export const ROUTE_ROLES: Record<string, string[]> = {
   '/dashboard':     ['ADMINISTRADOR', 'SUPERVISOR', 'CAJERO', 'COLABORADOR'],
   '/colaboradores': ['ADMINISTRADOR'],
+  '/evaluaciones':  ['ADMINISTRADOR', 'SUPERVISOR'],
   '/configuracion': ['ADMINISTRADOR'],
   '/semanas-laborales': ['ADMINISTRADOR', 'SUPERVISOR'],
   '/liquidaciones': ['ADMINISTRADOR', 'SUPERVISOR'],

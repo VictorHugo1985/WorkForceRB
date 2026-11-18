@@ -21,6 +21,7 @@ import FingerprintIcon from '@mui/icons-material/Fingerprint';
 import ManageAccountsIcon from '@mui/icons-material/ManageAccounts';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import HistoryIcon from '@mui/icons-material/History';
+import AssignmentTurnedInIcon from '@mui/icons-material/AssignmentTurnedIn';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import LogoutIcon from '@mui/icons-material/Logout';
@@ -34,6 +35,7 @@ export const DRAWER_COLLAPSED_WIDTH = 56;
 const NAV_ICONS: Record<string, React.ReactNode> = {
   '/dashboard':     <DashboardIcon fontSize="small" />,
   '/colaboradores': <PeopleIcon fontSize="small" />,
+  '/evaluaciones':  <AssignmentTurnedInIcon fontSize="small" />,
   '/configuracion': <SettingsIcon fontSize="small" />,
   '/liquidaciones': <ReceiptLongIcon fontSize="small" />,
   '/eventos':       <FingerprintIcon fontSize="small" />,
